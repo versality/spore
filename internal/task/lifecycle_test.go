@@ -66,6 +66,18 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		t.Errorf("branch wt/%s missing after Start", slug)
 	}
 
+	// The brief must be present inside the worktree. The source-branch
+	// HEAD has no tasks/ dir at this point (init was an empty commit
+	// and the brief is uncommitted), so without the in-kernel copy the
+	// worker would spawn into a worktree with no prompt.
+	briefInWt := filepath.Join(repo, ".worktrees", slug, "tasks", slug+".md")
+	got, err := os.ReadFile(briefInWt)
+	if err != nil {
+		t.Errorf("brief missing in worktree: %v", err)
+	} else if string(got) == "" {
+		t.Errorf("brief in worktree is empty")
+	}
+
 	out, err := exec.Command("tmux", "has-session", "-t", session).CombinedOutput()
 	if err != nil {
 		t.Errorf("tmux has-session: %v: %s", err, out)

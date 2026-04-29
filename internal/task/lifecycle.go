@@ -57,7 +57,7 @@ func Start(tasksDir, slug string) (string, error) {
 	// replaces it so a resume gets a fresh agent and new-session
 	// does not collide on the name.
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
-	if _, err := ensureSession(projectRoot, slug); err != nil {
+	if _, err := ensureSession(tasksDir, slug); err != nil {
 		return "", err
 	}
 	return session, nil
@@ -69,11 +69,7 @@ func Start(tasksDir, slug string) (string, error) {
 // reconciler to bring an active task into the running state without
 // flipping its status.
 func Ensure(tasksDir, slug string) (string, error) {
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
-	if err != nil {
-		return "", err
-	}
-	return ensureSession(projectRoot, slug)
+	return ensureSession(tasksDir, slug)
 }
 
 // Reap kills the tmux session for slug. Status, worktree, and branch
@@ -159,7 +155,11 @@ func Done(tasksDir, slug string) error {
 // It creates the worktree + branch when missing (re-attaching to an
 // existing branch when the worktree was removed) and (re)spawns the
 // tmux session when not already alive.
-func ensureSession(projectRoot, slug string) (string, error) {
+func ensureSession(tasksDir, slug string) (string, error) {
+	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return "", err
+	}
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
 	branch := "wt/" + slug
 
@@ -173,6 +173,16 @@ func ensureSession(projectRoot, slug string) (string, error) {
 		out, err := gitCmd(projectRoot, args...).CombinedOutput()
 		if err != nil {
 			return "", fmt.Errorf("git worktree add: %v: %s", err, strings.TrimSpace(string(out)))
+		}
+		// Copy the brief into the new worktree so headless workers
+		// can read it. The worktree forks from the source branch's
+		// HEAD which often does not yet include this brief: Start
+		// rewrites it just before this call (status flip), and the
+		// operator may not have committed it on the source branch
+		// either. Soft-fails on a missing source brief; the worker
+		// falls back to interactive mode there.
+		if err := copyBriefToWorktree(tasksDir, worktree, slug); err != nil {
+			return "", fmt.Errorf("copy brief: %w", err)
 		}
 	}
 
@@ -220,6 +230,23 @@ func projectRootFromTasksDir(tasksDir string) (string, error) {
 		return "", err
 	}
 	return filepath.Dir(abs), nil
+}
+
+func copyBriefToWorktree(tasksDir, worktree, slug string) error {
+	src := filepath.Join(tasksDir, slug+".md")
+	body, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	rel := filepath.Base(filepath.Clean(tasksDir))
+	dst := filepath.Join(worktree, rel, slug+".md")
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, body, 0o644)
 }
 
 func tmuxSessionName(projectRoot, slug string) string {
