@@ -1,0 +1,11 @@
+# spore's own root CLAUDE.md - composed at build time.
+# target: CLAUDE.md
+core/header
+core/roles
+core/source-map
+core/tier-policy
+core/writing-style
+core/tldr-first
+core/validation
+core/worker-etiquette
+?align core/alignment-mode

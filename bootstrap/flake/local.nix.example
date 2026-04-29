@@ -1,0 +1,6 @@
+{
+  networking.hostName = "nixos";
+  users.users.root.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAA... operator@workstation"
+  ];
+}

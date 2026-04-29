@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "reddit": {
+      "command": "npx",
+      "args": ["-y", "reddit-mcp-server"],
+      "env": {
+        "REDDIT_AUTH_MODE": "${REDDIT_AUTH_MODE}",
+        "REDDIT_CLIENT_ID": "${REDDIT_CLIENT_ID}",
+        "REDDIT_CLIENT_SECRET": "${REDDIT_CLIENT_SECRET}"
+      }
+    },
+    "kagi": {
+      "command": "npx",
+      "args": ["-y", "github:czottmann/kagi-ken-mcp"],
+      "env": {
+        "KAGI_SESSION_TOKEN": "${KAGI_SESSION_TOKEN}"
+      }
+    },
+    "hackernews": {
+      "command": "npx",
+      "args": ["-y", "mcp-hacker-news"],
+      "env": {}
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

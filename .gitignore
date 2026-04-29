@@ -1,0 +1,16 @@
+/bin/
+/build/
+/dist/
+/vendor/
+!/.envrc
+*.log
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/
+*~
+.env
+.env.local
+.env.*.local
+/coverage/

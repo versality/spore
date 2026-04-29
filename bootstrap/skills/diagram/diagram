@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# diagram: append a titled entry (note + optional rendered DSL) to a
+# per-session tmux side-pane. Entries also persist under
+# $DIAGRAM_HOME/sessions/<sid>/entries/.
+#
+# This is the spore drop-in port: POSIX bash + coreutils + tmux + an
+# optional graph-easy on PATH for layout. No label preprocessing -
+# escape `| # < >` yourself, and use `\n` for hard line breaks.
+#
+# Usage:
+#   diagram <title> [file]         DSL from file or stdin
+#   diagram <title> <file> --raw   pass through verbatim (pre-rendered)
+set -eu
+
+usage() {
+  cat <<'EOF'
+diagram <title> [file]         DSL from file or stdin
+diagram <title> <file> --raw   copy verbatim (pre-rendered)
+
+Input shapes:
+  DSL only                              -> rendered as boxart
+  note\n---\nDSL                        -> note above, diagram below
+  prose (no ---, no leading [)          -> note-only entry
+
+Environment:
+  DIAGRAM_SESSION   session id override (default: $TMUX_PANE)
+  DIAGRAM_HOME      state dir (default: ~/.local/share/diagram)
+EOF
+}
+
+if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+TITLE="$1"
+shift
+
+RAW_MODE=0
+FILE_ARG=""
+for arg in "$@"; do
+  case "$arg" in
+    --raw) RAW_MODE=1 ;;
+    *)     FILE_ARG="$arg" ;;
+  esac
+done
+
+if [ -n "$FILE_ARG" ]; then
+  RAW_INPUT="$(cat -- "$FILE_ARG")"
+else
+  RAW_INPUT="$(cat)"
+fi
+
+# Split note vs DSL on a bare `---` line. If absent, classify by the
+# first non-blank line: leading `[`, `graph `, `graph{`, `digraph `,
+# `digraph{`, or `node ` is DSL; otherwise the whole input is a note.
+NOTE=""
+DSL=""
+if printf '%s\n' "$RAW_INPUT" | grep -qx -- '---'; then
+  NOTE="$(printf '%s\n' "$RAW_INPUT" | awk 'BEGIN{p=1} /^---$/{p=0; next} p{print}')"
+  DSL="$(printf '%s\n' "$RAW_INPUT" | awk 'BEGIN{p=0} p{print} /^---$/{p=1}')"
+else
+  FIRST_REAL="$(printf '%s\n' "$RAW_INPUT" | awk 'NF{print; exit}')"
+  case "$FIRST_REAL" in
+    "["*|"graph "*|"graph{"*|"digraph "*|"digraph{"*|"node "*)
+      DSL="$RAW_INPUT" ;;
+    *)
+      NOTE="$RAW_INPUT" ;;
+  esac
+fi
+
+# Render. Three paths: empty DSL (note-only), --raw (verbatim),
+# default (graph-easy if on PATH; verbatim with an stderr warning if
+# not, or if graph-easy fails).
+RENDERED=""
+RENDER_ERR=""
+RENDER_OK=1
+if [ -z "$(printf '%s' "$DSL" | tr -d '[:space:]')" ]; then
+  RENDERED=""
+elif [ "$RAW_MODE" -eq 1 ]; then
+  RENDERED="$DSL"
+elif command -v graph-easy >/dev/null 2>&1; then
+  TMP_OUT="$(mktemp)"
+  TMP_ERR="$(mktemp)"
+  if printf '%s' "$DSL" | graph-easy --as_boxart >"$TMP_OUT" 2>"$TMP_ERR"; then
+    if [ -s "$TMP_OUT" ]; then
+      RENDERED="$(cat "$TMP_OUT")"
+    else
+      RENDER_OK=0
+      RENDER_ERR="graph-easy produced empty output"
+      RENDERED="$DSL"
+    fi
+  else
+    RENDER_OK=0
+    RENDER_ERR="$(cat "$TMP_ERR")"
+    RENDERED="$DSL"
+  fi
+  rm -f "$TMP_OUT" "$TMP_ERR"
+else
+  RENDER_OK=0
+  RENDER_ERR="graph-easy not on PATH"
+  RENDERED="$DSL"
+fi
+
+# Session state. Sanitize $TMUX_PANE (strip leading %) for filesystem use.
+RAW_SID="${DIAGRAM_SESSION:-${TMUX_PANE:-}}"
+if [ -z "$RAW_SID" ]; then
+  RAW_SID="$(printf '%s:%s' "${HOSTNAME:-host}" "${PWD:-}" | cksum | awk '{print $1}')"
+fi
+SID="${RAW_SID#%}"
+[ -n "$SID" ] || SID="default"
+
+HOME_DIR="${DIAGRAM_HOME:-${HOME}/.local/share/diagram}"
+DIR="$HOME_DIR/sessions/$SID"
+ENTRIES="$DIR/entries"
+FIFO="$DIR/pipe"
+PANE_TITLE="diagram-$SID"
+
+mkdir -p "$ENTRIES"
+
+TS="$(date +%s)"
+HMS="$(date -d "@$TS" +'%H:%M:%S' 2>/dev/null || date -r "$TS" +'%H:%M:%S')"
+SLUG="$(printf '%s' "$TITLE" | tr ' ' '_' | tr -dc 'A-Za-z0-9_.-')"
+ENTRY_PATH="$ENTRIES/$TS-$SLUG.txt"
+
+ENTRY_BODY=""
+if [ "$RENDER_OK" -eq 0 ] && [ -n "$RENDER_ERR" ]; then
+  ENTRY_BODY="(!) graph-easy failed:
+$RENDER_ERR
+
+"
+fi
+ENTRY_BODY="$ENTRY_BODY$RENDERED"
+
+{
+  if [ -n "$NOTE" ]; then
+    printf '%s\n\n' "$NOTE"
+  fi
+  printf '%s' "$ENTRY_BODY"
+} > "$ENTRY_PATH"
+
+# tmux side: create the side-pane on first call, append via FIFO.
+in_tmux() { [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; }
+
+pane_exists() {
+  tmux list-panes -a -F '#{pane_title}' 2>/dev/null \
+    | grep -Fxq -- "$PANE_TITLE"
+}
+
+ensure_fifo() {
+  [ -p "$FIFO" ] || mkfifo -m 600 "$FIFO"
+}
+
+ensure_pane() {
+  if ! pane_exists; then
+    PID="$(tmux split-window -h -l 50% -P -F '#{pane_id}' \
+      "bash -c 'while cat \"$FIFO\"; do :; done'" 2>/dev/null || true)"
+    if [ -n "$PID" ]; then
+      tmux select-pane -t "$PID" -T "$PANE_TITLE" 2>/dev/null || true
+    fi
+    sleep 0.1
+  fi
+}
+
+append_to_pane() {
+  SEP="$(printf '%*s' 72 '' | tr ' ' -)"
+  PAYLOAD="$(printf '\n  %s\n\n  %s   %s\n\n' "$SEP" "$HMS" "$TITLE")"
+  if [ -n "$NOTE" ]; then
+    PAYLOAD="$PAYLOAD$(printf '%s\n\n' "$NOTE" | sed 's/^/  /')"
+  fi
+  PAYLOAD="$PAYLOAD$(printf '%s\n' "$ENTRY_BODY" | sed 's/^/  /')"
+  timeout 2 sh -c 'printf "%s" "$1" > "$2"' diagram "$PAYLOAD" "$FIFO" || true
+}
+
+if in_tmux; then
+  ensure_fifo
+  ensure_pane
+  append_to_pane
+fi
+
+if [ "$RENDER_OK" -eq 0 ] && [ -n "$DSL" ]; then
+  printf '(!) diagram: %s. Pane shows verbatim DSL.\n' "$RENDER_ERR" >&2
+fi
+
+printf 'entry: %s\n' "$ENTRY_PATH"

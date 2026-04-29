@@ -1,0 +1,239 @@
+package task
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/versality/spore/internal/task/frontmatter"
+)
+
+// AgentBinaryEnv is the env var used to override the binary spawned in
+// the per-task tmux session. Defaults to defaultAgentBinary when unset.
+const AgentBinaryEnv = "SPORE_AGENT_BINARY"
+
+const defaultAgentBinary = "claude-code"
+
+// Start flips status to active and (when starting from draft) creates
+// the worktree and wt/<slug> branch under <projectRoot>/.worktrees/.
+// In every case it spawns a detached tmux session named
+// "spore/<project>/<slug>" running ${SPORE_AGENT_BINARY:-claude-code}
+// in the worktree, with SPORE_TASK_SLUG=<slug> in the session env.
+// Returns the tmux session name on success.
+func Start(tasksDir, slug string) (string, error) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	m, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("parse %s: %w", path, err)
+	}
+	prev := m.Status
+	switch prev {
+	case "draft", "paused", "blocked":
+	case "active":
+		return "", fmt.Errorf("task %s: already active", slug)
+	case "done":
+		return "", fmt.Errorf("task %s: already done", slug)
+	default:
+		return "", fmt.Errorf("task %s: unexpected status %q", slug, prev)
+	}
+	m.Status = "active"
+	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
+		return "", err
+	}
+
+	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return "", err
+	}
+	session := tmuxSessionName(projectRoot, slug)
+	// Pause leaves the session alive for the operator; Start
+	// replaces it so a resume gets a fresh agent and new-session
+	// does not collide on the name.
+	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+	if _, err := ensureSession(projectRoot, slug); err != nil {
+		return "", err
+	}
+	return session, nil
+}
+
+// Ensure makes sure the wt/<slug> branch, worktree, and tmux session
+// for slug exist. Idempotent: missing pieces get created, present
+// ones are left alone. Status is not touched. Used by the fleet
+// reconciler to bring an active task into the running state without
+// flipping its status.
+func Ensure(tasksDir, slug string) (string, error) {
+	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return "", err
+	}
+	return ensureSession(projectRoot, slug)
+}
+
+// Reap kills the tmux session for slug. Status, worktree, and branch
+// are left untouched. Used by the fleet reconciler when a task
+// leaves active.
+func Reap(projectRoot, slug string) error {
+	session := tmuxSessionName(projectRoot, slug)
+	return exec.Command("tmux", "kill-session", "-t", session).Run()
+}
+
+// SpawnedSlugs lists slugs of every tmux session that matches the
+// "spore/<project>/<slug>" pattern. Returns an empty slice (and a
+// nil error) when no tmux server is running.
+func SpawnedSlugs(projectRoot string) ([]string, error) {
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		// tmux exits non-zero with "no server running" or no
+		// sessions; treat both as empty.
+		return nil, nil
+	}
+	prefix := tmuxSessionPrefix(projectRoot)
+	var slugs []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		slugs = append(slugs, strings.TrimPrefix(line, prefix))
+	}
+	sort.Strings(slugs)
+	return slugs, nil
+}
+
+// Pause flips an active task to paused. The worktree and tmux session
+// are left in place so the operator can stay attached.
+func Pause(tasksDir, slug string) error {
+	return flipStatus(tasksDir, slug, "active", "paused")
+}
+
+// Block flips an active task to blocked. Same teardown semantics as
+// Pause: the worktree and tmux session are left in place.
+func Block(tasksDir, slug string) error {
+	return flipStatus(tasksDir, slug, "active", "blocked")
+}
+
+// Done flips a task to done and best-effort cleans up the tmux
+// session, worktree, and wt/<slug> branch. Errors from cleanup are
+// swallowed; the status flip is the source of truth. Calling Done on
+// an already-done task is a no-op.
+func Done(tasksDir, slug string) error {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	m, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if m.Status == "done" {
+		return nil
+	}
+	m.Status = "done"
+	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
+		return err
+	}
+
+	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return err
+	}
+	worktree := filepath.Join(projectRoot, ".worktrees", slug)
+	branch := "wt/" + slug
+	session := tmuxSessionName(projectRoot, slug)
+
+	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+	_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", worktree).Run()
+	_ = exec.Command("git", "-C", projectRoot, "branch", "-D", branch).Run()
+	return nil
+}
+
+// ensureSession is the shared idempotent path for Start and Ensure.
+// It creates the worktree + branch when missing (re-attaching to an
+// existing branch when the worktree was removed) and (re)spawns the
+// tmux session when not already alive.
+func ensureSession(projectRoot, slug string) (string, error) {
+	worktree := filepath.Join(projectRoot, ".worktrees", slug)
+	branch := "wt/" + slug
+
+	if _, err := os.Stat(worktree); os.IsNotExist(err) {
+		args := []string{"-C", projectRoot, "worktree", "add", worktree}
+		if branchExists(projectRoot, branch) {
+			args = append(args, branch)
+		} else {
+			args = append(args, "-b", branch)
+		}
+		out, err := exec.Command("git", args...).CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("git worktree add: %v: %s", err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	session := tmuxSessionName(projectRoot, slug)
+	if hasSession(session) {
+		return session, nil
+	}
+	agent := os.Getenv(AgentBinaryEnv)
+	if agent == "" {
+		agent = defaultAgentBinary
+	}
+	out, err := exec.Command(
+		"tmux", "new-session", "-d",
+		"-s", session,
+		"-c", worktree,
+		"-e", "SPORE_TASK_SLUG="+slug,
+		agent,
+	).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	return session, nil
+}
+
+func flipStatus(tasksDir, slug, from, to string) error {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	m, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if m.Status != from {
+		return fmt.Errorf("task %s: status %q (want %q)", slug, m.Status, from)
+	}
+	m.Status = to
+	return os.WriteFile(path, frontmatter.Write(m, body), 0o644)
+}
+
+func projectRootFromTasksDir(tasksDir string) (string, error) {
+	abs, err := filepath.Abs(tasksDir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(abs), nil
+}
+
+func tmuxSessionName(projectRoot, slug string) string {
+	return tmuxSessionPrefix(projectRoot) + slug
+}
+
+func tmuxSessionPrefix(projectRoot string) string {
+	return fmt.Sprintf("spore/%s/", filepath.Base(projectRoot))
+}
+
+func hasSession(name string) bool {
+	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
+}
+
+func branchExists(projectRoot, branch string) bool {
+	return exec.Command("git", "-C", projectRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run() == nil
+}
