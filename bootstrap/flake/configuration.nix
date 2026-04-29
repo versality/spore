@@ -1,4 +1,4 @@
-{ lib, modulesPath, ... }:
+{ lib, modulesPath, pkgs, ... }:
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
@@ -17,6 +17,16 @@
     settings.KbdInteractiveAuthentication = false;
     settings.PermitRootLogin = "prohibit-password";
   };
+
+  environment.systemPackages = with pkgs; [
+    git
+    rsync
+    curl
+    gnumake
+    htop
+    tmux
+    vim
+  ];
 
   system.stateVersion = "24.05";
 }
