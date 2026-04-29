@@ -150,8 +150,8 @@ func Done(tasksDir, slug string) error {
 	session := tmuxSessionName(projectRoot, slug)
 
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
-	_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", worktree).Run()
-	_ = exec.Command("git", "-C", projectRoot, "branch", "-D", branch).Run()
+	_ = gitCmd(projectRoot, "worktree", "remove", "--force", worktree).Run()
+	_ = gitCmd(projectRoot, "branch", "-D", branch).Run()
 	return nil
 }
 
@@ -164,13 +164,13 @@ func ensureSession(projectRoot, slug string) (string, error) {
 	branch := "wt/" + slug
 
 	if _, err := os.Stat(worktree); os.IsNotExist(err) {
-		args := []string{"-C", projectRoot, "worktree", "add", worktree}
+		args := []string{"worktree", "add", worktree}
 		if branchExists(projectRoot, branch) {
 			args = append(args, branch)
 		} else {
 			args = append(args, "-b", branch)
 		}
-		out, err := exec.Command("git", args...).CombinedOutput()
+		out, err := gitCmd(projectRoot, args...).CombinedOutput()
 		if err != nil {
 			return "", fmt.Errorf("git worktree add: %v: %s", err, strings.TrimSpace(string(out)))
 		}
@@ -235,5 +235,5 @@ func hasSession(name string) bool {
 }
 
 func branchExists(projectRoot, branch string) bool {
-	return exec.Command("git", "-C", projectRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run() == nil
+	return gitCmd(projectRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run() == nil
 }

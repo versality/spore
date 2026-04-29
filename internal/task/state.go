@@ -47,12 +47,25 @@ func ProjectName(projectRoot string) (string, error) {
 		}
 		projectRoot = wd
 	}
-	cmd := exec.Command("git", "-C", projectRoot, "rev-parse", "--show-toplevel")
-	if out, err := cmd.Output(); err == nil {
+	if out, err := gitCmd(projectRoot, "rev-parse", "--show-toplevel").Output(); err == nil {
 		root := strings.TrimSpace(string(out))
 		if root != "" {
 			return filepath.Base(root), nil
 		}
 	}
 	return filepath.Base(projectRoot), nil
+}
+
+// gitCmd returns `git -c safe.directory=<abs(projectRoot)> -C
+// <projectRoot> <args...>`. safe.directory shields against repos
+// imported via rsync, which preserves the source uid and trips git's
+// dubious-ownership guard. The narrower form (one explicit path) is
+// used instead of `*` so we only trust the project being acted on.
+func gitCmd(projectRoot string, args ...string) *exec.Cmd {
+	abs, err := filepath.Abs(projectRoot)
+	if err != nil {
+		abs = projectRoot
+	}
+	full := append([]string{"-c", "safe.directory=" + abs, "-C", projectRoot}, args...)
+	return exec.Command("git", full...)
 }

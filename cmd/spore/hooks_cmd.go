@@ -114,7 +114,11 @@ func writeHookResponse(resp hooks.Response) int {
 }
 
 func repoRoot() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command("git", "-c", "safe.directory="+wd, "rev-parse", "--show-toplevel")
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
