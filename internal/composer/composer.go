@@ -1,5 +1,12 @@
 // Package composer renders a CLAUDE.md by concatenating named rule
 // fragments listed in a consumer file. Pure stdlib.
+//
+// The rules pool has ONE source dir, no override layering. Compose
+// reads only the rulesDir argument it is given: no env-var redirects,
+// no ~/.config/ overlays, no per-user shadow paths. A render is a
+// pure function of (rulesDir contents, consumer file, predicate map).
+// If a future change wants per-user overrides, it must change this
+// signature, not slip in via an environment side channel.
 package composer
 
 import (

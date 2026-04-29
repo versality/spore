@@ -1,0 +1,13 @@
+# Test fixture: every rule shipped in Round 1's generic pool.
+# Used by TestCompose_Round1Pool to assert each ID renders.
+core/role
+core/validate-before-report
+core/commits
+core/search-kagi
+core/fetch-files
+core/no-emdash
+core/tldr-first
+core/code-comments
+core/tmux-api
+core/ask-via-tool
+core/commit-no-attrib

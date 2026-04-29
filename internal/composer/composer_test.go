@@ -121,3 +121,36 @@ func TestCompose_PredicateMalformed(t *testing.T) {
 		t.Fatal("Compose: expected error on malformed predicate line, got nil")
 	}
 }
+
+// TestCompose_Round1Pool renders every rule shipped in Round 1's
+// generic core pool against the real rules/ tree and asserts each
+// rule's top-level heading appears once in the rendered output. If a
+// rule is renamed or deleted, this test fails.
+func TestCompose_Round1Pool(t *testing.T) {
+	rulesDir := filepath.Join("..", "..", "rules")
+	consumer := filepath.Join("testdata", "round1-pool.txt")
+
+	got, err := Compose(rulesDir, consumer, Options{})
+	if err != nil {
+		t.Fatalf("Compose round1-pool: %v", err)
+	}
+
+	wantHeadings := []string{
+		"# Role and verification",
+		"# Validate before reporting",
+		"# Commits",
+		"# Search",
+		"# Fetching files",
+		"# Writing style",
+		"# Reply shape",
+		"# Code comments",
+		"# tmux",
+		"# Asking the operator",
+		"# Commit messages",
+	}
+	for _, h := range wantHeadings {
+		if strings.Count(got, h+"\n") != 1 {
+			t.Errorf("Compose round1-pool: heading %q not found exactly once in render", h)
+		}
+	}
+}
