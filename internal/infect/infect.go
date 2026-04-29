@@ -168,16 +168,21 @@ func copyEmbedTree(src fs.FS, root, dst string) error {
 }
 
 // RenderLocalNix returns the text of the local.nix module the bundled
-// flake imports. Pure function.
+// flake imports. Pure function. The same key list authorises both
+// root (emergency / admin) and the spore operator user (whose login
+// shell attaches to the coordinator tmux session and does nothing
+// else).
 func RenderLocalNix(hostname string, authorizedKeys []string) string {
 	var sb strings.Builder
 	sb.WriteString("{\n")
 	fmt.Fprintf(&sb, "  networking.hostName = %q;\n", hostname)
-	sb.WriteString("  users.users.root.openssh.authorizedKeys.keys = [\n")
-	for _, k := range authorizedKeys {
-		fmt.Fprintf(&sb, "    %q\n", k)
+	for _, user := range []string{"root", "spore"} {
+		fmt.Fprintf(&sb, "  users.users.%s.openssh.authorizedKeys.keys = [\n", user)
+		for _, k := range authorizedKeys {
+			fmt.Fprintf(&sb, "    %q\n", k)
+		}
+		sb.WriteString("  ];\n")
 	}
-	sb.WriteString("  ];\n")
 	sb.WriteString("}\n")
 	return sb.String()
 }

@@ -88,6 +88,10 @@ func TestRenderLocalNix(t *testing.T) {
     "ssh-ed25519 AAAA op@host"
     "ssh-rsa BBBB op2@host"
   ];
+  users.users.spore.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAA op@host"
+    "ssh-rsa BBBB op2@host"
+  ];
 }
 `
 	if got != want {
@@ -97,7 +101,7 @@ func TestRenderLocalNix(t *testing.T) {
 
 func TestRenderLocalNixEmptyKeys(t *testing.T) {
 	got := RenderLocalNix("nixos", nil)
-	want := "{\n  networking.hostName = \"nixos\";\n  users.users.root.openssh.authorizedKeys.keys = [\n  ];\n}\n"
+	want := "{\n  networking.hostName = \"nixos\";\n  users.users.root.openssh.authorizedKeys.keys = [\n  ];\n  users.users.spore.openssh.authorizedKeys.keys = [\n  ];\n}\n"
 	if got != want {
 		t.Fatalf("empty keys mismatch:\n got %q\nwant %q", got, want)
 	}

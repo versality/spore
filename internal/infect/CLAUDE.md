@@ -17,16 +17,33 @@ The agent produces this end state. The operator confirms only the
 IP. They do not need to confirm wipe-and-reinstall; that is the
 whole job.
 
+## two users, by design
+
+- `root`: only used during infect (nixos-anywhere SSHes here, the
+  agent rsyncs and runs `spore bootstrap` here) and for emergency
+  admin. Operator-facing tooling never logs in as root.
+- `spore`: declared by the bundled flake. Login shell is
+  `/usr/local/bin/spore-attach` (in `bootstrap/handover/`); it
+  attaches to the project's coordinator tmux session and exits
+  when the operator detaches. No sudo, no wheel, no shell prompt.
+  This is what the local `coord` window connects to:
+  `ssh -t spore@<ip>` is enough; the forced login shell does the
+  attach. Tmux sessions live in spore's tmux server, not root's.
+
 ## defaults the agent applies without asking
 
 When the operator hands you `<ip>` and (optionally) a target repo:
 
-- SSH user: `root`. SSH key: `~/.ssh/id_ed25519`.
+- SSH user during infect: `root`. SSH key: `~/.ssh/id_ed25519`.
+  Post-infect operator SSH: `spore` (forced into coord pane).
 - Hostname: `nixos` (the bundled flake default; survives
   reinstall).
 - Disk: `/dev/sda` (`bootstrap/flake/disk-config.nix`). The infect
   command exists to wipe this. Do not ask.
-- Repo destination on box: `/root/<basename of source>`.
+- Repo destination on box: `/home/spore/<basename of source>`.
+  Owned by `spore:users`. Rsync from local goes to root, then
+  the agent moves and chowns; spore has no sshd write access
+  beyond what spore-attach allows.
 - Stages to `--skip` on `spore bootstrap`: `tests-pass`,
   `creds-wired`, `readme-followed`, `validation-green`,
   `pilot-aligned`. Each fails on consumer-side state the agent
@@ -70,21 +87,29 @@ Only when an action is operator-bound or genuinely ambiguous:
    `info-gathered.json` with the defaults above.
 7. Run `spore bootstrap` with the five `--skip` flags listed
    above. It walks the rest and lands at `worker-fleet-ready`.
-8. `scp bootstrap/handover/greet-*.sh root@<ip>:/usr/local/bin/`
-   then on the box: `chmod +x /usr/local/bin/spore-greet-*`,
-   `mv /usr/local/bin/greet-coordinator.sh
-   /usr/local/bin/spore-greet-coordinator` (and worker).
-   Append to `/root/.bashrc`:
-   `export SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-greet-coordinator`
-   `export SPORE_AGENT_BINARY=/usr/local/bin/spore-greet-worker`
-9. `bash -lc "spore fleet enable && spore fleet reconcile"`.
-   Verify `tmux ls` on box shows
-   `spore/<project>/coordinator`.
-10. Locally, open the handover window:
+8. Install the handover scripts to `/usr/local/bin/` (NixOS does
+   not put `/usr/local/bin` on the default PATH; see step 10):
+   `scp bootstrap/handover/greet-coordinator.sh root@<ip>:/usr/local/bin/spore-greet-coordinator`,
+   same for `greet-worker.sh` -> `spore-greet-worker` and
+   `spore-attach.sh` -> `spore-attach`. `chmod +x` all three.
+9. Move the repo to spore's home and chown:
+   `mv /root/<basename> /home/spore/<basename>`,
+   `mv /root/.local/state/spore /home/spore/.local/state/spore`,
+   `chown -R spore:users /home/spore`.
+10. Write `/home/spore/.bashrc` (used by spore-greet-* shells):
+    `export SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-greet-coordinator`
+    `export SPORE_AGENT_BINARY=/usr/local/bin/spore-greet-worker`
+    plus a PATH stanza prepending `/usr/local/bin`. `chown spore:users`.
+11. As spore (`sudo -u spore bash -lc '...'` from root or
+    `runuser -l spore -c '...'`):
+    `cd ~/<basename> && spore fleet enable && spore fleet reconcile`.
+    The tmux server now belongs to spore; root cannot see it via
+    `tmux ls` and that is intentional.
+12. Locally, open the handover window:
     `tmux new-window -d -n coord "ssh -t -o
-    ServerAliveInterval=30 root@<ip> 'tmux attach -t
-    spore/<project>/coordinator'"`. Tell the operator the
-    window is named `coord`.
+    ServerAliveInterval=30 spore@<ip>"`. The forced login shell
+    (`spore-attach`) does the tmux attach itself; do not pass an
+    explicit attach command.
 
 ## known gaps
 

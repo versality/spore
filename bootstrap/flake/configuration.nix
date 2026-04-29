@@ -18,6 +18,17 @@
     settings.PermitRootLogin = "prohibit-password";
   };
 
+  # Operator-facing account. Lives only to attach the operator to the
+  # coordinator tmux session; no shell prompt, no sudo, no wheel. SSH
+  # in as spore -> the login shell (spore-attach) wires you straight
+  # into the coordinator pane and exits when you detach. Authorized
+  # keys come from local.nix. Root SSH stays open for emergency.
+  users.users.spore = {
+    isNormalUser = true;
+    home = "/home/spore";
+    shell = "/usr/local/bin/spore-attach";
+  };
+
   environment.systemPackages = with pkgs; [
     git
     rsync
