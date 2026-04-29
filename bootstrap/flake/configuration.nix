@@ -6,6 +6,9 @@
     ./disk-config.nix
   ] ++ lib.optional (builtins.pathExists ./local.nix) ./local.nix;
 
+  nixpkgs.config.allowUnfreePredicate =
+    pkg: builtins.elem (lib.getName pkg) [ "claude-code" ];
+
   boot.loader.grub = {
     efiSupport = true;
     efiInstallAsRemovable = true;
@@ -30,6 +33,7 @@
   };
 
   environment.systemPackages = with pkgs; [
+    claude-code
     git
     rsync
     curl

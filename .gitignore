@@ -14,3 +14,4 @@
 .env.local
 .env.*.local
 /coverage/
+/bootstrap/flake/local.nix
