@@ -1,0 +1,10 @@
+[Unit]
+Description=spore fleet reconcile (worker + coordinator sweep)
+Documentation=https://github.com/versality/spore
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/spore-fleet-tick
+# Reconcile is idempotent and short. A failure should not block the
+# next tick - the timer will fire again and try once more.
+SuccessExitStatus=0

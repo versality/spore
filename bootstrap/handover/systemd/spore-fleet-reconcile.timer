@@ -1,0 +1,15 @@
+[Unit]
+Description=spore fleet reconcile, every minute
+Documentation=https://github.com/versality/spore
+
+[Timer]
+# Fire once a minute after boot. Reconcile is idempotent and finishes
+# in well under a second, so an aggressive cadence is fine and keeps
+# the coordinator's recovery window short when it crashes.
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=spore-fleet-reconcile.service
+
+[Install]
+WantedBy=timers.target

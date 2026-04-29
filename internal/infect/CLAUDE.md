@@ -104,12 +104,17 @@ Only when an action is operator-bound or genuinely ambiguous:
    - `scp bootstrap/handover/greet-worker.sh root@<ip>:/usr/local/bin/spore-greet-worker`
    - `scp bootstrap/handover/spore-coordinator-launch.sh root@<ip>:/usr/local/bin/spore-coordinator-launch`
    - `scp bootstrap/handover/spore-worker-brief.sh root@<ip>:/usr/local/bin/spore-worker-brief`
-   `chmod +x` all five.
+   - `scp bootstrap/handover/spore-fleet-tick.sh root@<ip>:/usr/local/bin/spore-fleet-tick`
+   `chmod +x` all six.
    Then `mkdir -p /home/spore/.claude/hooks` and
    `scp bootstrap/handover/hooks/{block-bg-bash,load-state-md}.pl
    root@<ip>:/home/spore/.claude/hooks/`, `chmod +x` both. Drop the
    user-scope settings template:
    `scp bootstrap/handover/settings.json root@<ip>:/home/spore/.claude/settings.json`.
+   Drop the systemd user units that drive the periodic reconcile:
+   `mkdir -p /home/spore/.config/systemd/user`,
+   `scp bootstrap/handover/systemd/spore-fleet-reconcile.{service,timer}
+   root@<ip>:/home/spore/.config/systemd/user/`.
 9. Move the repo to spore's home and chown:
    `mv /root/<basename> /home/spore/<basename>`,
    `mv /root/.local/state/spore /home/spore/.local/state/spore`,
@@ -123,11 +128,18 @@ Only when an action is operator-bound or genuinely ambiguous:
     `chown spore:users` it. To swap in the greet stand-ins (when
     claude is not yet authed), the operator overrides those two vars
     in their own shell before `spore fleet reconcile`.
-11. As spore (`sudo -u spore bash -lc '...'` from root or
-    `runuser -l spore -c '...'`):
-    `cd ~/<basename> && spore fleet enable && spore fleet reconcile`.
-    The tmux server now belongs to spore; root cannot see it via
-    `tmux ls` and that is intentional.
+11. As root, enable lingering for the spore user so the systemd user
+    manager runs without an active SSH session:
+    `loginctl enable-linger spore`. Then, as spore
+    (`runuser -l spore -c '...'`):
+    `cd ~/<basename> && spore fleet enable && spore fleet reconcile
+    && systemctl --user daemon-reload
+    && systemctl --user enable --now spore-fleet-reconcile.timer`.
+    The tmux server and the user systemd instance now belong to spore;
+    root cannot see them via `tmux ls` / `systemctl --user list-units`,
+    and that is intentional. The timer fires every minute and respawns
+    the coordinator (and any worker whose task is still active) when
+    it dies.
 12. Locally, open the handover window:
     `tmux new-window -d -n coord "ssh -t -o
     ServerAliveInterval=30 spore@<ip>"`. The forced login shell
