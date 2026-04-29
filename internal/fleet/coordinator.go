@@ -20,6 +20,12 @@ const CoordinatorSlug = "coordinator"
 // <projectRoot>/bootstrap/coordinator/role.md.
 const CoordinatorRoleEnv = "SPORE_COORDINATOR_ROLE_FILE"
 
+// CoordinatorAgentEnv selects the binary the coordinator session
+// execs. Read before SPORE_AGENT_BINARY so operators can run a
+// different agent (or a greet-and-shell wrapper) for the singleton
+// coordinator without affecting per-task workers.
+const CoordinatorAgentEnv = "SPORE_COORDINATOR_AGENT"
+
 // CoordinatorSessionName returns the tmux session for the singleton
 // coordinator: "spore/<project>/coordinator", parallel to worker
 // session names.
@@ -55,10 +61,7 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		return session, false, nil
 	}
 
-	agent := os.Getenv(task.AgentBinaryEnv)
-	if agent == "" {
-		agent = "claude-code"
-	}
+	agent := coordinatorAgent()
 	rolePath := CoordinatorRolePath(projectRoot)
 
 	cmd := coordinatorShellCommand(agent, rolePath)
@@ -75,6 +78,20 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		return "", false, fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return session, true, nil
+}
+
+// coordinatorAgent picks the binary the coordinator session execs.
+// Precedence: SPORE_COORDINATOR_AGENT (lets operators run a different
+// agent for the singleton coordinator) > SPORE_AGENT_BINARY (the same
+// var workers honour) > "claude-code" (the kernel default).
+func coordinatorAgent() string {
+	if a := os.Getenv(CoordinatorAgentEnv); a != "" {
+		return a
+	}
+	if a := os.Getenv(task.AgentBinaryEnv); a != "" {
+		return a
+	}
+	return "claude-code"
 }
 
 // coordinatorShellCommand builds the shell snippet tmux runs for the

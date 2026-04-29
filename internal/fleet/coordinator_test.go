@@ -120,6 +120,28 @@ func TestReconcileCoordinatorDoesNotCountTowardCap(t *testing.T) {
 	}
 }
 
+func TestCoordinatorAgentPrecedence(t *testing.T) {
+	cases := []struct {
+		name      string
+		coordEnv  string
+		workerEnv string
+		want      string
+	}{
+		{name: "coord_wins", coordEnv: "agent-A", workerEnv: "agent-B", want: "agent-A"},
+		{name: "worker_fallback", coordEnv: "", workerEnv: "agent-B", want: "agent-B"},
+		{name: "default", coordEnv: "", workerEnv: "", want: "claude-code"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SPORE_COORDINATOR_AGENT", tc.coordEnv)
+			t.Setenv("SPORE_AGENT_BINARY", tc.workerEnv)
+			if got := coordinatorAgent(); got != tc.want {
+				t.Errorf("coordinatorAgent() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // sessionCreated returns the tmux #{session_created} for name. Used by
 // the idempotency check to detect a respawn.
 func sessionCreated(name string) (string, error) {
