@@ -52,3 +52,17 @@ func TestEmDash_RunInRepo(t *testing.T) {
 		t.Fatalf("expected one dirty.go:2 issue, got %v", issues)
 	}
 }
+
+func TestEmDash_AllowlistSkipsRule(t *testing.T) {
+	root := newTestRepo(t, map[string]string{
+		"rules/core/no-emdash.md": "Don't use " + em + " or " + en + ".\n",
+		"other.md":                "stray " + em + " here\n",
+	})
+	issues, err := EmDash{}.Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(issues) != 1 || issues[0].Path != "other.md" {
+		t.Fatalf("expected one other.md issue (allowlist skips rules/core/no-emdash.md), got %v", issues)
+	}
+}

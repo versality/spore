@@ -14,6 +14,15 @@ import (
 // source itself does not contain the bytes the lint hunts for.
 const emDashEnDash = "\u2014\u2013"
 
+// emDashAllowlist exempts files that legitimately need the literal
+// em-dash or en-dash bytes. The only entry is the rule that defines
+// the prohibition: it has to name the characters in backticks for the
+// agent to recognize them. New entries are a design smell; flag in
+// review.
+var emDashAllowlist = map[string]bool{
+	"rules/core/no-emdash.md": true,
+}
+
 // EmDash flags U+2014 (em-dash) and U+2013 (en-dash) anywhere in
 // tracked text files. Replace with a regular hyphen, colon,
 // parentheses, or a new sentence. Binary files and obvious data
@@ -29,6 +38,9 @@ func (EmDash) Run(root string) ([]Issue, error) {
 	}
 	var issues []Issue
 	for _, rel := range files {
+		if emDashAllowlist[rel] {
+			continue
+		}
 		ext := strings.ToLower(filepath.Ext(rel))
 		if isBinaryExt(ext) {
 			continue
