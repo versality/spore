@@ -52,10 +52,20 @@ When the operator hands you `<ip>` and (optionally) a target repo:
 - `info-gathered.json`: write
   `{"tickets":{"tool":"none"},"knowledge":{"tool":"none"}}` unless
   the operator named a real ticketing or wiki tool.
-- Greet wrappers: install `bootstrap/handover/greet-*.sh` to
-  `/usr/local/bin/spore-greet-{coordinator,worker}` on the box.
-  Persist `SPORE_COORDINATOR_AGENT` and `SPORE_AGENT_BINARY` in
-  `/root/.bashrc`. NixOS has no `/etc/profile.d`.
+- Handover artifacts: install `bootstrap/handover/*.sh` to
+  `/usr/local/bin/`, `bootstrap/handover/hooks/*.pl` to
+  `/home/spore/.claude/hooks/`, and `bootstrap/handover/settings.json`
+  to `/home/spore/.claude/settings.json`. Persist
+  `SPORE_COORDINATOR_AGENT` and `SPORE_AGENT_BINARY` in
+  `/home/spore/.bashrc` (NixOS sshd does not source `/root/.bashrc`
+  and has no `/etc/profile.d`). Default
+  `SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief` and
+  `SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch`:
+  the wrappers exec the bundled `claude` with
+  `--dangerously-skip-permissions` and pipe `tasks/<slug>.md` /
+  `bootstrap/coordinator/role.md` in as headless prompt / interactive
+  seed respectively. The greet wrappers stay installed as a manual
+  fallback when claude is not yet authed.
 
 ## when to ask
 
@@ -87,19 +97,32 @@ Only when an action is operator-bound or genuinely ambiguous:
    `info-gathered.json` with the defaults above.
 7. Run `spore bootstrap` with the five `--skip` flags listed
    above. It walks the rest and lands at `worker-fleet-ready`.
-8. Install the handover scripts to `/usr/local/bin/` (NixOS does
-   not put `/usr/local/bin` on the default PATH; see step 10):
-   `scp bootstrap/handover/greet-coordinator.sh root@<ip>:/usr/local/bin/spore-greet-coordinator`,
-   same for `greet-worker.sh` -> `spore-greet-worker` and
-   `spore-attach.sh` -> `spore-attach`. `chmod +x` all three.
+8. Install the handover artifacts (NixOS does not put
+   `/usr/local/bin` on the default PATH; see step 10):
+   - `scp bootstrap/handover/spore-attach.sh root@<ip>:/usr/local/bin/spore-attach`
+   - `scp bootstrap/handover/greet-coordinator.sh root@<ip>:/usr/local/bin/spore-greet-coordinator`
+   - `scp bootstrap/handover/greet-worker.sh root@<ip>:/usr/local/bin/spore-greet-worker`
+   - `scp bootstrap/handover/spore-coordinator-launch.sh root@<ip>:/usr/local/bin/spore-coordinator-launch`
+   - `scp bootstrap/handover/spore-worker-brief.sh root@<ip>:/usr/local/bin/spore-worker-brief`
+   `chmod +x` all five.
+   Then `mkdir -p /home/spore/.claude/hooks` and
+   `scp bootstrap/handover/hooks/{block-bg-bash,load-state-md}.pl
+   root@<ip>:/home/spore/.claude/hooks/`, `chmod +x` both. Drop the
+   user-scope settings template:
+   `scp bootstrap/handover/settings.json root@<ip>:/home/spore/.claude/settings.json`.
 9. Move the repo to spore's home and chown:
    `mv /root/<basename> /home/spore/<basename>`,
    `mv /root/.local/state/spore /home/spore/.local/state/spore`,
    `chown -R spore:users /home/spore`.
-10. Write `/home/spore/.bashrc` (used by spore-greet-* shells):
-    `export SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-greet-coordinator`
-    `export SPORE_AGENT_BINARY=/usr/local/bin/spore-greet-worker`
-    plus a PATH stanza prepending `/usr/local/bin`. `chown spore:users`.
+10. Write `/home/spore/.bashrc`. Point both agent vars at the
+    handover wrappers (which exec `claude` with the right flags and
+    pipe brief / role files in):
+    `export PATH=/usr/local/bin:$PATH`
+    `export SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch`
+    `export SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief`
+    `chown spore:users` it. To swap in the greet stand-ins (when
+    claude is not yet authed), the operator overrides those two vars
+    in their own shell before `spore fleet reconcile`.
 11. As spore (`sudo -u spore bash -lc '...'` from root or
     `runuser -l spore -c '...'`):
     `cd ~/<basename> && spore fleet enable && spore fleet reconcile`.
@@ -113,10 +136,10 @@ Only when an action is operator-bound or genuinely ambiguous:
 
 ## known gaps
 
-- The bundled flake does not include `claude-code`. Real Claude
-  agents in coordinator + worker panes require a separate install
-  pass with auth. Until then the greet wrappers above act as
-  stand-ins.
+- The bundled flake includes `claude-code` but not its OAuth
+  credential. First operator login on the box still needs an
+  interactive `claude /login` once; the greet wrappers stand in
+  until that lands.
 - `creds-wired`, `readme-followed`, `validation-green` skip with
   warnings. Consumer projects that want clean stages must
   document the secret surface in their CLAUDE.md, ship a README
