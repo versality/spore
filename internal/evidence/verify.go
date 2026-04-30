@@ -180,13 +180,18 @@ func isHex(c rune) bool {
 // isCrossRepoRest detects references that point outside the current
 // repo. Heuristics:
 //
-//   - leading `<repo>:<rest>` where <repo> contains a hyphen or slash
-//     (basecamp, nix-config, foo/bar);
+//   - leading `<repo>:<rest>` where <repo> looks like a bare repo
+//     identifier (alnum, dot, hyphen, slash, underscore) and contains
+//     at least one hyphen or slash so plain words like "ok:" don't
+//     trip it;
 //   - presence of a github.com / gitlab.com / codeberg.org URL.
+//
+// The bare-token check is deliberately strict: prose with embedded
+// colons (e.g. a backtick example like `` `slug: real-impl` ``) does
+// not look like a leading repo identifier and stays in-repo.
 func isCrossRepoRest(r string) bool {
 	if i := strings.IndexByte(r, ':'); i > 0 {
-		head := r[:i]
-		if strings.ContainsAny(head, "-/") && !strings.HasPrefix(head, "/") {
+		if isRepoToken(r[:i]) {
 			return true
 		}
 	}
@@ -196,4 +201,21 @@ func isCrossRepoRest(r string) bool {
 		}
 	}
 	return false
+}
+
+func isRepoToken(s string) bool {
+	if s == "" || !strings.ContainsAny(s, "-/") {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '/', c == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
