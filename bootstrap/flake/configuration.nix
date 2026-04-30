@@ -21,11 +21,21 @@
     settings.PermitRootLogin = "prohibit-password";
   };
 
-  # Operator-facing account. Lives only to attach the operator to the
-  # coordinator tmux session; no shell prompt, no sudo, no wheel. SSH
-  # in as spore -> the login shell (spore-attach) wires you straight
-  # into the coordinator pane and exits when you detach. Authorized
-  # keys come from local.nix. Root SSH stays open for emergency.
+  # Operator-facing account. No shell prompt, no sudo, no wheel. SSH
+  # in as spore -> the login shell (spore-attach) attaches you to a
+  # tmux session and exits when you detach.
+  #
+  # Two landing modes, picked by the per-key authorized_keys command:
+  # - bare key (no command=): primary-operator path. Attaches to the
+  #   singleton coordinator session; falls back to a default pilot
+  #   session if the coordinator is down (so SSH never bounces).
+  # - command="/usr/local/bin/spore-attach pilot <name>": gives that
+  #   key its own private session at spore/pilot/<name>. Use this for
+  #   secondary pilots so they neither share a pane with the
+  #   coordinator nor with each other.
+  #
+  # Authorized keys come from local.nix. Root SSH stays open for
+  # emergency reconcile.
   users.users.spore = {
     isNormalUser = true;
     home = "/home/spore";
