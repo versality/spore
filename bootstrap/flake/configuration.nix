@@ -53,5 +53,47 @@
     vim
   ];
 
+  # Coordinator watchdog. /usr/local/bin/spore-fleet-tick is the
+  # idempotent reconciler the infect handover drops on the box: it
+  # walks /home/spore/* and runs `spore fleet reconcile` in any
+  # project that looks like a spore harness. `reconcile` spawns the
+  # coordinator tmux session when missing and is a no-op when alive.
+  # Pair a oneshot with a minute timer; if the session dies (operator
+  # kill, crash) it comes back within 60s, and after a reboot it is
+  # up 30s after multi-user.target.
+  #
+  # Run as user spore, so the tmux server lives in spore's UID
+  # namespace (/tmp/tmux-<uid>/default) and is visible from later
+  # interactive ssh-ins. Environment is set explicitly because system
+  # services do not source /home/spore/.bashrc.
+  systemd.services.spore-coordinator = {
+    description = "spore coordinator tmux watchdog";
+    after = [ "network.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "spore";
+      Group = "users";
+      KillMode = "process";
+      Environment = [
+        "HOME=/home/spore"
+        "PATH=/run/current-system/sw/bin:/run/wrappers/bin:/usr/local/bin"
+        "SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch"
+        "SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief"
+      ];
+      ExecStart = "/usr/local/bin/spore-fleet-tick";
+    };
+  };
+
+  systemd.timers.spore-coordinator = {
+    description = "spore coordinator watchdog (1 min)";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "30s";
+      OnUnitInactiveSec = "1min";
+      AccuracySec = "5s";
+      Unit = "spore-coordinator.service";
+    };
+  };
+
   system.stateVersion = "24.05";
 }
