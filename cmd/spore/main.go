@@ -98,6 +98,7 @@ Subcommands:
   block <slug>                 Flip active task to blocked (no teardown).
   done <slug>                  Flip to done, kill tmux + remove worktree.
   tell <slug> <message>        Append a message to the slug's inbox dir.
+  verify <slug>                Print the evidence verdict for slug.
 `
 
 func main() {
@@ -205,6 +206,8 @@ func runTask(args []string) error {
 		return runTaskDone(rest)
 	case "tell":
 		return runTaskTell(rest)
+	case "verify":
+		return runTaskVerify(rest)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\n%s", sub, taskUsage)
 	}
@@ -248,6 +251,21 @@ func runTaskTell(args []string) error {
 		return fmt.Errorf("usage: spore task tell <slug> <message>")
 	}
 	return task.Tell(args[0], args[1])
+}
+
+func runTaskVerify(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spore task verify <slug>")
+	}
+	verdict, diags, err := task.Verify("tasks", args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s: %s\n", args[0], verdict)
+	for _, d := range diags {
+		fmt.Printf("  %s\n", d)
+	}
+	return nil
 }
 
 func runTaskNew(args []string) error {

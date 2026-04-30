@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/versality/spore/internal/evidence"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -205,6 +207,71 @@ func TestPauseRequiresActive(t *testing.T) {
 	}
 	if err := Pause(tasksDir, "x"); err == nil {
 		t.Fatal("Pause on draft task should error, got nil")
+	}
+}
+
+func TestDoneRefusesBogusEvidence(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	body := "---\nstatus: active\nslug: x\ntitle: X\nevidence_required: [commit]\n---\n" +
+		"## Evidence\n- commit: hello world not a sha\n"
+	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPORE_EVIDENCE_WARN_ONLY", "0")
+	// Force the gate out of the soak window so the verdict hard-fails
+	// regardless of clock drift in CI.
+	origStart := evidence.ContractStart
+	evidence.ContractStart = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	t.Cleanup(func() { evidence.ContractStart = origStart })
+
+	if err := Done(tasksDir, "x"); err == nil {
+		t.Fatal("Done with bogus evidence should error, got nil")
+	}
+	if status := readStatus(t, taskPath); status != "active" {
+		t.Errorf("status flipped despite refusal: got %q want active", status)
+	}
+}
+
+func TestDoneAllowsRealImpl(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	body := "---\nstatus: active\nslug: x\ntitle: X\nevidence_required: [commit, file]\n---\n" +
+		"## Evidence\n- commit: a1b2c3d4 shipped it\n- file: internal/x.go added X\n"
+	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPORE_EVIDENCE_WARN_ONLY", "0")
+	origStart := evidence.ContractStart
+	evidence.ContractStart = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	t.Cleanup(func() { evidence.ContractStart = origStart })
+
+	if err := Done(tasksDir, "x"); err != nil {
+		t.Fatalf("Done with real-impl evidence: %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("status = %q want done", status)
+	}
+}
+
+func TestDoneWarnOnlyAllowsBlockedVerdict(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	body := "---\nstatus: active\nslug: x\ntitle: X\nevidence_required: [commit]\n---\n" +
+		"## Evidence\n- commit:\n"
+	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPORE_EVIDENCE_WARN_ONLY", "1")
+	origStart := evidence.ContractStart
+	evidence.ContractStart = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	t.Cleanup(func() { evidence.ContractStart = origStart })
+
+	if err := Done(tasksDir, "x"); err != nil {
+		t.Fatalf("Done in warn-only mode should pass, got %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("status = %q want done (warn-only)", status)
 	}
 }
 

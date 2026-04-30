@@ -41,6 +41,7 @@ func Default() []Lint {
 		FileSize{Limit: 500},
 		CommentNoise{},
 		ClaudeDrift{ConsumersDir: "rules/consumers", RulesDir: "rules"},
+		TaskEvidence{TasksDir: "tasks"},
 	}
 }
 

@@ -7,9 +7,17 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/versality/spore/internal/evidence"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
+
+// EvidenceWarnOnlyEnv forces the evidence done-gate into warn-only
+// mode regardless of the soak window. The soak window already gates
+// warn-only behavior for the first 7 days after evidence.ContractStart;
+// the env var stays as a permanent rollback override per the brief.
+const EvidenceWarnOnlyEnv = "SPORE_EVIDENCE_WARN_ONLY"
 
 // AgentBinaryEnv is the env var used to override the binary spawned in
 // the per-task tmux session. Defaults to defaultAgentBinary when unset.
@@ -115,6 +123,24 @@ func Block(tasksDir, slug string) error {
 	return flipStatus(tasksDir, slug, "active", "blocked")
 }
 
+// Verify reads tasks/<slug>.md and runs the structural evidence
+// verifier. Returns the verdict plus diagnostic lines. Used by
+// `spore task verify` so the operator can preview the gate's decision
+// without touching status.
+func Verify(tasksDir, slug string) (evidence.Verdict, []string, error) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", nil, err
+	}
+	m, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	verdict, diags := evidence.Verify(metaToAny(m), string(body))
+	return verdict, diags, nil
+}
+
 // Done flips a task to done and best-effort cleans up the tmux
 // session, worktree, and wt/<slug> branch. Errors from cleanup are
 // swallowed; the status flip is the source of truth. Calling Done on
@@ -132,6 +158,11 @@ func Done(tasksDir, slug string) error {
 	if m.Status == "done" {
 		return nil
 	}
+
+	if err := evidenceGate(slug, m, body, os.Stderr); err != nil {
+		return err
+	}
+
 	m.Status = "done"
 	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return err
@@ -149,6 +180,60 @@ func Done(tasksDir, slug string) error {
 	_ = gitCmd(projectRoot, "worktree", "remove", "--force", worktree).Run()
 	_ = gitCmd(projectRoot, "branch", "-D", branch).Run()
 	return nil
+}
+
+// evidenceGate runs the structural evidence verifier on the task body
+// and refuses the done flip when the verdict blocks. Pre-contract
+// tasks (no evidence_required declared) are skipped silently. During
+// the soak window or when SPORE_EVIDENCE_WARN_ONLY=1 is set, blocking
+// verdicts are reduced to a stderr warning.
+func evidenceGate(slug string, m frontmatter.Meta, body []byte, warnOut *os.File) error {
+	meta := metaToAny(m)
+	if len(evidence.Required(meta)) == 0 {
+		return nil
+	}
+	verdict, diags := evidence.Verify(meta, string(body))
+	if !evidence.Blocks(verdict) {
+		return nil
+	}
+	msg := fmt.Sprintf("evidence verdict: %s", verdict)
+	for _, d := range diags {
+		msg += "\n  " + d
+	}
+	warnOnly := os.Getenv(EvidenceWarnOnlyEnv) == "1" || evidence.InSoakWindow(time.Now())
+	if !warnOnly {
+		return fmt.Errorf("done refused for %s: %s", slug, msg)
+	}
+	if warnOut != nil {
+		fmt.Fprintf(warnOut, "spore task done %s: warn-only: %s\n", slug, msg)
+	}
+	return nil
+}
+
+// metaToAny lifts frontmatter.Meta into the map[string]any shape
+// evidence.Required and evidence.Verify accept. Spore's parser only
+// stores strings, so this is just a key-by-key copy.
+func metaToAny(m frontmatter.Meta) map[string]any {
+	out := map[string]any{}
+	if m.Status != "" {
+		out["status"] = m.Status
+	}
+	if m.Slug != "" {
+		out["slug"] = m.Slug
+	}
+	if m.Title != "" {
+		out["title"] = m.Title
+	}
+	if m.Created != "" {
+		out["created"] = m.Created
+	}
+	if m.Project != "" {
+		out["project"] = m.Project
+	}
+	for k, v := range m.Extra {
+		out[k] = v
+	}
+	return out
 }
 
 // ensureSession is the shared idempotent path for Start and Ensure.
