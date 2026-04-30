@@ -1,0 +1,76 @@
+# Pricing table for spore budget. Per-million-token rates in USD.
+# Sourced from LiteLLM's anthropic.* table (the same source ccusage uses)
+# so `spore budget summary` lines up with `ccusage` within rounding.
+# Update this file in-tree when Anthropic publishes new model rates;
+# spore re-reads it via go:embed at compile time, no Go change needed.
+
+# Unknown models fall back to the pricing entry named here. A new model
+# id should overshoot (operator sees pressure) rather than silently
+# zero-cost.
+fallback = "claude-sonnet-4-6"
+
+[claude-opus-4-7]
+input        = 5.00
+output       = 25.00
+cache_read   = 0.50
+cache_create = 6.25
+
+[claude-opus-4-6]
+input        = 5.00
+output       = 25.00
+cache_read   = 0.50
+cache_create = 6.25
+
+[claude-opus-4-5]
+input        = 5.00
+output       = 25.00
+cache_read   = 0.50
+cache_create = 6.25
+
+[claude-opus-4-1]
+input        = 15.00
+output       = 75.00
+cache_read   = 1.50
+cache_create = 18.75
+
+[claude-opus-4-0]
+input        = 15.00
+output       = 75.00
+cache_read   = 1.50
+cache_create = 18.75
+
+[claude-sonnet-4-6]
+input        = 3.00
+output       = 15.00
+cache_read   = 0.30
+cache_create = 3.75
+
+[claude-sonnet-4-5]
+input        = 3.00
+output       = 15.00
+cache_read   = 0.30
+cache_create = 3.75
+
+[claude-sonnet-4-0]
+input        = 3.00
+output       = 15.00
+cache_read   = 0.30
+cache_create = 3.75
+
+[claude-haiku-4-5]
+input        = 1.00
+output       = 5.00
+cache_read   = 0.10
+cache_create = 1.25
+
+[claude-haiku-4-5-20251001]
+input        = 1.00
+output       = 5.00
+cache_read   = 0.10
+cache_create = 1.25
+
+[claude-haiku-3-5]
+input        = 0.80
+output       = 4.00
+cache_read   = 0.08
+cache_create = 1.00

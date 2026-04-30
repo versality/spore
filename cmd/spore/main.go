@@ -40,6 +40,7 @@ Commands:
   infect     Bootstrap a fresh server with NixOS via nixos-anywhere.
   lint       Run portable lints over the working tree.
   hooks      Install or run claude-code / git hooks.
+  budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
@@ -146,6 +147,8 @@ func main() {
 		}
 	case "install":
 		os.Exit(runInstall(args))
+	case "budget":
+		os.Exit(runBudget(args))
 	default:
 		fmt.Fprintf(os.Stderr, "spore: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
