@@ -152,6 +152,43 @@ type usageSnapshot struct {
 	Short     usageWindow `json:"short"`
 	Long      usageWindow `json:"long"`
 	Stale     bool        `json:"stale,omitempty"`
+	Tier      string      `json:"tier,omitempty"`
+}
+
+// normalizeTier maps a subscriptionType string to a routing tier.
+func normalizeTier(subscriptionType string) string {
+	switch strings.ToLower(subscriptionType) {
+	case "max":
+		return "max"
+	case "pro":
+		return "pro"
+	case "team":
+		return "team"
+	case "free", "":
+		return "free"
+	default:
+		return subscriptionType
+	}
+}
+
+// ActiveTier reads the live OAuth credentials and prints the
+// normalized tier (max, pro, team, free) on a single line. Callers
+// like coordinator-spawn and rower-token-monitor gate on this output.
+func ActiveTier() error {
+	path := oauthCredsPath()
+	if path == "" {
+		return errors.New("oauth credentials path unresolved")
+	}
+	cf, err := loadCredentials(path)
+	if err != nil {
+		return err
+	}
+	tier := normalizeTier(cf.oauth.SubscriptionType)
+	if tier == "" {
+		return errors.New("subscriptionType missing from credentials")
+	}
+	fmt.Println(tier)
+	return nil
 }
 
 // fetchUsage hits /usage, refreshing the access token once on a 401 if

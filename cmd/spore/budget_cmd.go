@@ -16,6 +16,7 @@ Usage:
   spore budget capture       read one JSON header line from stdin, append to spool
   spore budget stop-hook     Stop-hook helper: exit 2 + stderr reminder on a
                              fresh band crossing, exit 0 otherwise
+  spore budget active-tier   print the live credential's tier (max|pro|team|free)
   spore budget debug-usage   hit /usage once and print raw + parsed response
                              (diagnostic; bypasses the freshness throttle)
 
@@ -59,6 +60,8 @@ func runBudgetCmd(sub string, rest []string) int {
 		return budgetExec(budget.Summary, "summary", rest)
 	case "capture":
 		return budgetExec(budget.Capture, "capture", rest)
+	case "active-tier":
+		return budgetExec(budget.ActiveTier, "active-tier", rest)
 	case "debug-usage":
 		return budgetExec(budget.DebugUsage, "debug-usage", rest)
 	case "stop-hook":
