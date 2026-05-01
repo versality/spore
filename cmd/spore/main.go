@@ -63,6 +63,10 @@ Subcommands:
                          stdin, write the response JSON to stdout.
   stop                   Read a claude-code Stop JSON request from stdin,
                          write the (currently no-op) response JSON.
+  settings               Read a hook binding JSON from stdin, emit a
+                         deterministic settings.json to stdout.
+  watch-inbox <slug>     Stop-hook: block on inbox, exit 2 on message.
+  notify-coordinator <slug>  Write a poke to coordinator's project inbox.
 `
 
 const infectUsage = `spore infect - bootstrap a fresh server with NixOS via nixos-anywhere

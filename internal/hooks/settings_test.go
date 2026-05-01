@@ -2,22 +2,25 @@ package hooks
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
 func TestSettings_GoldenFile(t *testing.T) {
-	stops := []HookBin{
-		{Name: "watch-inbox", BinPath: "/usr/bin/watch-inbox"},
-		{Name: "replenish", BinPath: "/usr/bin/replenish", Timeout: 30},
-	}
-	postToolUse := []HookBin{
-		{Name: "lint-noise", BinPath: "/usr/bin/lint-noise write", Matcher: "Write|Edit", Timeout: 10},
-	}
-	notification := []HookBin{
-		{Name: "notify-coordinator", BinPath: "/usr/bin/notify-coordinator"},
+	events := map[string][]HookBin{
+		"Stop": {
+			{Name: "watch-inbox", BinPath: "/usr/bin/watch-inbox"},
+			{Name: "replenish", BinPath: "/usr/bin/replenish", Timeout: 30},
+		},
+		"PostToolUse": {
+			{Name: "lint-noise", BinPath: "/usr/bin/lint-noise write", Matcher: "Write|Edit", Timeout: 10},
+		},
+		"Notification": {
+			{Name: "notify-coordinator", BinPath: "/usr/bin/notify-coordinator"},
+		},
 	}
 
-	got, err := Settings(stops, postToolUse, notification)
+	got, err := Settings(events)
 	if err != nil {
 		t.Fatalf("Settings: %v", err)
 	}
@@ -31,8 +34,8 @@ func TestSettings_GoldenFile(t *testing.T) {
 	}
 }
 
-func TestSettings_EmptySlicesOmitHooks(t *testing.T) {
-	got, err := Settings(nil, nil, nil)
+func TestSettings_EmptyEventsOmitHooks(t *testing.T) {
+	got, err := Settings(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,38 +46,85 @@ func TestSettings_EmptySlicesOmitHooks(t *testing.T) {
 }
 
 func TestSettings_EmptyBinPathErrors(t *testing.T) {
-	_, err := Settings([]HookBin{{Name: "bad"}}, nil, nil)
+	_, err := Settings(map[string][]HookBin{
+		"Stop": {{Name: "bad"}},
+	})
 	if err == nil {
 		t.Fatal("expected error for empty BinPath")
 	}
 }
 
 func TestSettings_SingleEvent(t *testing.T) {
-	got, err := Settings(nil, nil, []HookBin{
-		{Name: "x", BinPath: "/bin/x"},
+	got, err := Settings(map[string][]HookBin{
+		"Notification": {{Name: "x", BinPath: "/bin/x"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Should contain Notification but not Stop or PostToolUse.
 	s := string(got)
-	if !contains(s, `"Notification"`) {
+	if !strings.Contains(s, `"Notification"`) {
 		t.Fatalf("missing Notification:\n%s", s)
 	}
-	if contains(s, `"Stop"`) || contains(s, `"PostToolUse"`) {
+	if strings.Contains(s, `"Stop"`) || strings.Contains(s, `"PostToolUse"`) {
 		t.Fatalf("unexpected event keys:\n%s", s)
 	}
 }
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsSub(s, sub))
+func TestSettings_AsyncFields(t *testing.T) {
+	got, err := Settings(map[string][]HookBin{
+		"Stop": {
+			{Name: "watcher", BinPath: "/bin/watch", AsyncRewake: true, Timeout: 604800},
+		},
+		"Notification": {
+			{Name: "notify", BinPath: "/bin/notify", Async: true, Timeout: 10},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(got)
+	if !strings.Contains(s, `"asyncRewake": true`) {
+		t.Fatalf("missing asyncRewake:\n%s", s)
+	}
+	if !strings.Contains(s, `"async": true`) {
+		t.Fatalf("missing async:\n%s", s)
+	}
 }
 
-func containsSub(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
+func TestSettings_Consolidation(t *testing.T) {
+	got, err := Settings(map[string][]HookBin{
+		"Stop": {
+			{Name: "a", BinPath: "/bin/a"},
+			{Name: "b", BinPath: "/bin/b"},
+			{Name: "c", BinPath: "/bin/c", Matcher: "Write"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	return false
+	s := string(got)
+	// a and b share the same matcher (empty) -> one group with 2 entries.
+	// c has a different matcher -> separate group.
+	// So Stop should have 2 groups total.
+	if strings.Count(s, `"matcher"`) != 1 {
+		t.Fatalf("expected 1 matcher field (only the non-empty one):\n%s", s)
+	}
+	if strings.Count(s, `"/bin/a"`) != 1 || strings.Count(s, `"/bin/b"`) != 1 {
+		t.Fatalf("missing consolidated entries:\n%s", s)
+	}
+}
+
+func TestSettings_UserPromptSubmit(t *testing.T) {
+	got, err := Settings(map[string][]HookBin{
+		"UserPromptSubmit": {
+			{Name: "feedback", BinPath: "/bin/feedback", Timeout: 5},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(got)
+	if !strings.Contains(s, `"UserPromptSubmit"`) {
+		t.Fatalf("missing UserPromptSubmit:\n%s", s)
+	}
 }

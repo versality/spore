@@ -30,6 +30,12 @@ func runHooks(args []string) int {
 		return runHooksPreToolUse()
 	case "stop":
 		return runHooksStop()
+	case "settings":
+		return runHooksSettings()
+	case "watch-inbox":
+		return runHooksWatchInbox(rest)
+	case "notify-coordinator":
+		return runHooksNotifyCoordinator(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore hooks: unknown subcommand %q\n\n%s", sub, hooksUsage)
 		return 2
@@ -110,6 +116,79 @@ func writeHookResponse(resp hooks.Response) int {
 		return 1
 	}
 	os.Stdout.Write([]byte{'\n'})
+	return 0
+}
+
+// settingsInput is the JSON schema read from stdin by `spore hooks settings`.
+type settingsInput struct {
+	Events map[string][]settingsInputBin `json:"events"`
+}
+
+type settingsInputBin struct {
+	Command     string `json:"command"`
+	Matcher     string `json:"matcher,omitempty"`
+	Timeout     int    `json:"timeout,omitempty"`
+	Async       bool   `json:"async,omitempty"`
+	AsyncRewake bool   `json:"asyncRewake,omitempty"`
+}
+
+func runHooksSettings() int {
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks settings:", err)
+		return 1
+	}
+	var input settingsInput
+	if err := json.Unmarshal(body, &input); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks settings: bad input:", err)
+		return 1
+	}
+	events := make(map[string][]hooks.HookBin, len(input.Events))
+	for name, bins := range input.Events {
+		for _, b := range bins {
+			events[name] = append(events[name], hooks.HookBin{
+				BinPath:     b.Command,
+				Matcher:     b.Matcher,
+				Timeout:     b.Timeout,
+				Async:       b.Async,
+				AsyncRewake: b.AsyncRewake,
+			})
+		}
+	}
+	out, err := hooks.Settings(events)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks settings:", err)
+		return 1
+	}
+	os.Stdout.Write(out)
+	return 0
+}
+
+func runHooksWatchInbox(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox <slug>")
+		return 2
+	}
+	err := hooks.WatchInbox(args[0])
+	if err == hooks.ErrWake {
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks watch-inbox:", err)
+		return 1
+	}
+	return 0
+}
+
+func runHooksNotifyCoordinator(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator <slug>")
+		return 2
+	}
+	if err := hooks.NotifyCoordinator(args[0]); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks notify-coordinator:", err)
+		return 1
+	}
 	return 0
 }
 
