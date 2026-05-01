@@ -1,5 +1,5 @@
 ---
-status: active
+status: done
 slug: s6-task-parity
 title: "S6 task: Edit + Pick + Waybar + flag parity"
 created: 2026-05-01T00:00:00Z
