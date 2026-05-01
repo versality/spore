@@ -48,17 +48,15 @@ func TestRoundTrip(t *testing.T) {
 			body: []byte("\nbody\n"),
 		},
 		{
-			name: "with extras",
+			name: "with host and agent",
 			m: Meta{
 				Status:  "draft",
 				Slug:    "y",
 				Title:   "y",
 				Created: "2026-01-02T00:00:00Z",
 				Project: "spore",
-				Extra: map[string]string{
-					"agent": "claude",
-					"host":  "localhost",
-				},
+				Host:    "localhost",
+				Agent:   "claude",
 			},
 			body: []byte("\nlonger\nbody\n"),
 		},
@@ -104,19 +102,58 @@ func TestParseQuotedValue(t *testing.T) {
 	}
 }
 
-func TestParseUnknownFieldRoundTrip(t *testing.T) {
-	in := []byte("---\nstatus: draft\nslug: x\nagent: claude\nhost: tower\n---\nbody\n")
+func TestParseFirstClassFieldRoundTrip(t *testing.T) {
+	in := []byte("---\nstatus: draft\nslug: x\nhost: tower\nagent: claude\n---\nbody\n")
 	m, body, err := Parse(in)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if m.Extra["agent"] != "claude" || m.Extra["host"] != "tower" {
+	if m.Agent != "claude" || m.Host != "tower" {
+		t.Errorf("Agent=%q Host=%q", m.Agent, m.Host)
+	}
+	out := Write(m, body)
+	want := "---\nstatus: draft\nslug: x\nhost: tower\nagent: claude\n---\nbody\n"
+	if string(out) != want {
+		t.Errorf("Write mismatch\nwant:\n%s\ngot:\n%s", want, out)
+	}
+}
+
+func TestParseUnknownFieldRoundTrip(t *testing.T) {
+	in := []byte("---\nstatus: draft\nslug: x\ncustom_key: hello\n---\nbody\n")
+	m, body, err := Parse(in)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if m.Extra["custom_key"] != "hello" {
 		t.Errorf("Extra = %#v", m.Extra)
 	}
 	out := Write(m, body)
-	want := "---\nstatus: draft\nslug: x\nagent: claude\nhost: tower\n---\nbody\n"
+	want := "---\nstatus: draft\nslug: x\ncustom_key: hello\n---\nbody\n"
 	if string(out) != want {
 		t.Errorf("Write mismatch\nwant:\n%s\ngot:\n%s", want, out)
+	}
+}
+
+func TestNeedsBlockList(t *testing.T) {
+	in := []byte("---\nstatus: draft\nslug: x\nneeds:\n  - foo\n  - bar\n---\nbody\n")
+	m, body, err := Parse(in)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(m.Needs) != 2 || m.Needs[0] != "foo" || m.Needs[1] != "bar" {
+		t.Errorf("Needs = %v", m.Needs)
+	}
+	out := Write(m, body)
+	if string(out) != string(in) {
+		t.Errorf("round-trip mismatch\nwant:\n%s\ngot:\n%s", in, out)
+	}
+}
+
+func TestNeedsEmpty(t *testing.T) {
+	m := Meta{Status: "draft", Slug: "x"}
+	out := Write(m, nil)
+	if strings.Contains(string(out), "needs") {
+		t.Errorf("empty Needs should not appear in output: %s", out)
 	}
 }
 

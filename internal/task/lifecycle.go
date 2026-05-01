@@ -230,6 +230,12 @@ func metaToAny(m frontmatter.Meta) map[string]any {
 	if m.Project != "" {
 		out["project"] = m.Project
 	}
+	if m.Host != "" {
+		out["host"] = m.Host
+	}
+	if m.Agent != "" {
+		out["agent"] = m.Agent
+	}
 	for k, v := range m.Extra {
 		out[k] = v
 	}
