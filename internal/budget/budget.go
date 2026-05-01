@@ -261,6 +261,13 @@ func refreshUsageSnapshot(s *state, now time.Time) {
 	if mode != "subscription" {
 		return
 	}
+
+	storeDir, serr := accountsStoreDir()
+	if serr == nil && hasAccountFiles(storeDir) {
+		refreshAllAccountSnapshots(s, now, storeDir)
+		return
+	}
+
 	if s.UsageSnapshot != nil && !s.UsageSnapshot.Stale {
 		minInterval := usageMinInterval
 		if v := os.Getenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC"); v != "" {
@@ -293,13 +300,19 @@ func Query() error {
 	if err != nil {
 		return err
 	}
-	computeAggregates(s, time.Now().UTC())
+	now := time.Now().UTC()
+	if queryNeedsRefresh(s, now) {
+		refreshUsageSnapshot(s, now)
+		_ = writeState(s)
+	}
+	computeAggregates(s, now)
 	out := map[string]any{
-		"mode":       s.Mode,
-		"updated_at": s.UpdatedAt,
-		"short":      s.Short,
-		"long":       s.Long,
-		"advice":     s.Advice,
+		"mode":              s.Mode,
+		"updated_at":        s.UpdatedAt,
+		"short":             s.Short,
+		"long":              s.Long,
+		"advice":            s.Advice,
+		"account_snapshots": s.AccountSnapshots,
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -315,7 +328,12 @@ func Summary() error {
 	if err != nil {
 		return err
 	}
-	computeAggregates(s, time.Now().UTC())
+	now := time.Now().UTC()
+	if queryNeedsRefresh(s, now) {
+		refreshUsageSnapshot(s, now)
+		_ = writeState(s)
+	}
+	computeAggregates(s, now)
 	fmt.Println(formatSummary(s))
 	return nil
 }
@@ -404,7 +422,9 @@ func computeAggregates(s *state, now time.Time) {
 		}
 		s.Long = long.finalize("transcript-est")
 	default:
-		if s.UsageSnapshot != nil {
+		if len(s.AccountSnapshots) > 0 {
+			s.Short, s.Long = aggregateAccountSnapshots(s.AccountSnapshots)
+		} else if s.UsageSnapshot != nil {
 			s.Short = usageWindowState(s.UsageSnapshot.Short, shortWindow, s.UsageSnapshot.Stale)
 			s.Long = usageWindowState(s.UsageSnapshot.Long, longWindow, s.UsageSnapshot.Stale)
 		} else {

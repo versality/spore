@@ -108,6 +108,7 @@ func TestRefreshAndAggregate(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", filepath.Join(dir, "state"))
 	t.Setenv("AGENT_BUDGET_CREDS", filepath.Join(dir, "no-such-credentials.json"))
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 
 	if err := Refresh(); err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -377,8 +378,7 @@ func TestStopHookFiresOnceThenSilent(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", filepath.Join(dir, "state"))
 	t.Setenv("AGENT_BUDGET_CREDS", filepath.Join(dir, "no-such-credentials.json"))
-	// Synthetic transcript above costs ~$0.037; pick a tiny short cap so any
-	// spend trips at least tighten without needing realistic token counts.
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 	t.Setenv("AGENT_BUDGET_SHORT_CAP", "0.045")
 	t.Setenv("AGENT_BUDGET_LONG_CAP", "10000")
 
@@ -425,6 +425,7 @@ func TestStopHookUnderCapExitsZero(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects-empty"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", filepath.Join(dir, "state"))
 	t.Setenv("AGENT_BUDGET_CREDS", filepath.Join(dir, "no-such-credentials.json"))
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 	t.Setenv("AGENT_BUDGET_SHORT_CAP", "1000")
 	t.Setenv("AGENT_BUDGET_LONG_CAP", "10000")
 
