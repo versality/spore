@@ -34,9 +34,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -249,49 +251,62 @@ func callUsage(ctx context.Context, accessToken string) ([]byte, int, error) {
 	return b, resp.StatusCode, err
 }
 
-func refreshOAuthToken(ctx context.Context, cf *credentialsFile, now time.Time) error {
-	if cf.oauth.RefreshToken == "" {
-		return errors.New("no refresh token")
-	}
+type tokenRefreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+	Scope        string `json:"scope"`
+}
+
+// callTokenRefresh exchanges a refresh token for a new access token.
+// Shared by refreshOAuthToken (credentials file path) and
+// fetchUsageForFile (account store path).
+func callTokenRefresh(ctx context.Context, refreshToken string) (*tokenRefreshResponse, error) {
 	payload, err := json.Marshal(map[string]string{
 		"grant_type":    "refresh_token",
-		"refresh_token": cf.oauth.RefreshToken,
+		"refresh_token": refreshToken,
 		"client_id":     oauthClientID,
 		"scope":         oauthScope,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	c, cancel := context.WithTimeout(ctx, tokenHTTPTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(c, http.MethodPost, oauthTokenURL, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("oauth refresh POST: %w", err)
+		return nil, fmt.Errorf("oauth refresh POST: %w", err)
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if err != nil {
-		return fmt.Errorf("oauth refresh read: %w", err)
+		return nil, fmt.Errorf("oauth refresh read: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("oauth refresh: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("oauth refresh: HTTP %d", resp.StatusCode)
 	}
-	var out struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int64  `json:"expires_in"`
-		Scope        string `json:"scope"`
-	}
+	var out tokenRefreshResponse
 	if err := json.Unmarshal(b, &out); err != nil {
-		return fmt.Errorf("oauth refresh decode: %w", err)
+		return nil, fmt.Errorf("oauth refresh decode: %w", err)
 	}
 	if out.AccessToken == "" || out.ExpiresIn <= 0 {
-		return errors.New("oauth refresh: empty access_token or expires_in")
+		return nil, errors.New("oauth refresh: empty access_token or expires_in")
+	}
+	return &out, nil
+}
+
+func refreshOAuthToken(ctx context.Context, cf *credentialsFile, now time.Time) error {
+	if cf.oauth.RefreshToken == "" {
+		return errors.New("no refresh token")
+	}
+	out, err := callTokenRefresh(ctx, cf.oauth.RefreshToken)
+	if err != nil {
+		return err
 	}
 	cf.oauth.AccessToken = out.AccessToken
 	if out.RefreshToken != "" {
@@ -339,6 +354,320 @@ func parseUsageTimestamp(s string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return t.UTC(), nil
+}
+
+// accountsStoreDir returns the directory where per-account OAuth
+// snapshots are stored (~/.local/state/claude-accounts). Override with
+// AGENT_BUDGET_ACCOUNTS_DIR for tests or non-standard layouts.
+func accountsStoreDir() (string, error) {
+	if d := os.Getenv("AGENT_BUDGET_ACCOUNTS_DIR"); d != "" {
+		return d, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "claude-accounts"), nil
+}
+
+func hasAccountFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			return true
+		}
+	}
+	return false
+}
+
+// writeOAuthBlockToFile persists an updated oauthBlock back to a store
+// file (flat format, without the claudeAiOauth wrapper). Uses
+// mktemp + rename for atomicity; mode 0600.
+func writeOAuthBlockToFile(path string, block oauthBlock) error {
+	b, err := json.MarshalIndent(block, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".store.*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpName) }
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	return os.Rename(tmpName, path)
+}
+
+type accountUsageResult struct {
+	Usage *usageResponse
+	Tier  string
+}
+
+// fetchUsageForFile hits /usage using the OAuth token stored in a
+// per-account store file (flat oauthBlock JSON). On 401, refreshes
+// once and writes the new token back to the same file.
+func fetchUsageForFile(ctx context.Context, path string, now time.Time) (*accountUsageResult, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var block oauthBlock
+	if err := json.Unmarshal(b, &block); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", filepath.Base(path), err)
+	}
+	if block.AccessToken == "" {
+		return nil, fmt.Errorf("%s: no access_token", filepath.Base(path))
+	}
+
+	body, code, err := callUsage(ctx, block.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	if code == http.StatusUnauthorized && block.RefreshToken != "" {
+		out, rerr := callTokenRefresh(ctx, block.RefreshToken)
+		if rerr != nil {
+			return nil, fmt.Errorf("oauth refresh for %s: %w", filepath.Base(path), rerr)
+		}
+		block.AccessToken = out.AccessToken
+		if out.RefreshToken != "" {
+			block.RefreshToken = out.RefreshToken
+		}
+		block.ExpiresAt = now.UnixMilli() + out.ExpiresIn*1000
+		if out.Scope != "" {
+			block.Scopes = strings.Fields(out.Scope)
+		}
+		if werr := writeOAuthBlockToFile(path, block); werr != nil {
+			fmt.Fprintf(os.Stderr, "spore budget: refresh writeback for %s: %v\n", filepath.Base(path), werr)
+		}
+		body, code, err = callUsage(ctx, block.AccessToken)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("usage for %s: HTTP %d", filepath.Base(path), code)
+	}
+	var ur usageResponse
+	if err := json.Unmarshal(body, &ur); err != nil {
+		return nil, fmt.Errorf("usage decode for %s: %w", filepath.Base(path), err)
+	}
+	return &accountUsageResult{
+		Usage: &ur,
+		Tier:  normalizeTier(block.SubscriptionType),
+	}, nil
+}
+
+// readAccountTier reads the subscriptionType from a store file without
+// hitting the network.
+func readAccountTier(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var block oauthBlock
+	if err := json.Unmarshal(b, &block); err != nil {
+		return "", fmt.Errorf("parse %s: %w", filepath.Base(path), err)
+	}
+	return normalizeTier(block.SubscriptionType), nil
+}
+
+// refreshAllAccountSnapshots fetches /usage for every *.json file in
+// storeDir and updates s.AccountSnapshots. Per-account freshness gate
+// mirrors the single-account usageMinInterval. Snapshots for accounts
+// no longer in the store are removed.
+func refreshAllAccountSnapshots(s *state, now time.Time, storeDir string) {
+	entries, err := os.ReadDir(storeDir)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			fmt.Fprintf(os.Stderr, "spore budget: read accounts dir: %v\n", err)
+		}
+		return
+	}
+
+	minInterval := usageMinInterval
+	if v := os.Getenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			minInterval = time.Duration(n) * time.Second
+		}
+	}
+
+	if s.AccountSnapshots == nil {
+		s.AccountSnapshots = make(map[string]*usageSnapshot)
+	}
+
+	liveNames := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), ".json")
+		liveNames[name] = true
+
+		existing := s.AccountSnapshots[name]
+		if existing != nil && !existing.Stale && now.Sub(existing.FetchedAt) < minInterval {
+			continue
+		}
+
+		path := filepath.Join(storeDir, e.Name())
+		result, ferr := fetchUsageForFile(context.Background(), path, now)
+		if ferr != nil {
+			fmt.Fprintf(os.Stderr, "spore budget: /usage for %s unavailable (%v)\n", name, ferr)
+			if existing != nil {
+				existing.Stale = true
+			}
+			continue
+		}
+		s.AccountSnapshots[name] = &usageSnapshot{
+			FetchedAt: now,
+			Short:     result.Usage.FiveHour,
+			Long:      result.Usage.SevenDay,
+			Tier:      result.Tier,
+		}
+	}
+
+	for name := range s.AccountSnapshots {
+		if !liveNames[name] {
+			delete(s.AccountSnapshots, name)
+		}
+	}
+}
+
+// aggregateAccountSnapshots averages per-account fracs across all
+// snapshots. Mean frac = total used / total capacity (equal-cap
+// assumption). ResetAt is the earliest per-window reset time.
+func aggregateAccountSnapshots(snaps map[string]*usageSnapshot) (windowState, windowState) {
+	var shortSum, longSum float64
+	var shortResetAt, longResetAt *time.Time
+	anyStale := false
+	n := 0
+
+	for _, snap := range snaps {
+		if snap.Stale {
+			anyStale = true
+		}
+		shortSum += snap.Short.Utilization / 100.0
+		longSum += snap.Long.Utilization / 100.0
+
+		if snap.Short.ResetsAt != "" {
+			if t, err := parseUsageTimestamp(snap.Short.ResetsAt); err == nil {
+				if shortResetAt == nil || t.Before(*shortResetAt) {
+					tc := t
+					shortResetAt = &tc
+				}
+			}
+		}
+		if snap.Long.ResetsAt != "" {
+			if t, err := parseUsageTimestamp(snap.Long.ResetsAt); err == nil {
+				if longResetAt == nil || t.Before(*longResetAt) {
+					tc := t
+					longResetAt = &tc
+				}
+			}
+		}
+		n++
+	}
+
+	if n == 0 {
+		return windowState{}, windowState{}
+	}
+
+	source := "usage-aggregate"
+	if anyStale {
+		source = "usage-aggregate-stale"
+	}
+
+	return windowState{
+		DurationSeconds: int(shortWindow.Seconds()),
+		Frac:            shortSum / float64(n),
+		Source:          source,
+		ResetAt:         shortResetAt,
+	}, windowState{
+		DurationSeconds: int(longWindow.Seconds()),
+		Frac:            longSum / float64(n),
+		Source:          source,
+		ResetAt:         longResetAt,
+	}
+}
+
+const queryAutoRefreshAge = 30 * time.Minute
+
+// queryNeedsRefresh returns true when subscription-mode snapshot data
+// is absent or older than queryAutoRefreshAge. This lets query/summary
+// serve fresh advice without requiring a prior explicit refresh call.
+func queryNeedsRefresh(s *state, now time.Time) bool {
+	mode, err := resolveMode(now)
+	if err != nil || mode != "subscription" {
+		return false
+	}
+	if len(s.AccountSnapshots) > 0 {
+		for _, snap := range s.AccountSnapshots {
+			if snap.Stale || now.Sub(snap.FetchedAt) >= queryAutoRefreshAge {
+				return true
+			}
+		}
+		return false
+	}
+	if s.UsageSnapshot == nil {
+		return true
+	}
+	return s.UsageSnapshot.Stale || now.Sub(s.UsageSnapshot.FetchedAt) >= queryAutoRefreshAge
+}
+
+// Tier prints a JSON map of account names to their tiers. Reads the
+// account store files without hitting the network.
+func Tier() error {
+	storeDir, err := accountsStoreDir()
+	if err != nil {
+		return fmt.Errorf("account store: %w", err)
+	}
+
+	entries, err := os.ReadDir(storeDir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			fmt.Println("{}")
+			return nil
+		}
+		return fmt.Errorf("read accounts dir: %w", err)
+	}
+
+	tiers := map[string]string{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), ".json")
+		tier, terr := readAccountTier(filepath.Join(storeDir, e.Name()))
+		if terr != nil {
+			fmt.Fprintf(os.Stderr, "spore budget: tier for %s: %v\n", name, terr)
+			continue
+		}
+		tiers[name] = tier
+	}
+
+	b, err := json.MarshalIndent(tiers, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(b))
+	return nil
 }
 
 // DebugUsage hits /usage once (bypassing the persisted-snapshot

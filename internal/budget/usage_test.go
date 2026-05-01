@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -222,6 +223,7 @@ func TestRefreshSubscriptionPrefersUsage(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
 	t.Setenv("AGENT_BUDGET_CREDS", creds)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 
 	if err := Refresh(); err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -279,6 +281,7 @@ func TestRefreshSubscriptionFallsBackToTranscript(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
 	t.Setenv("AGENT_BUDGET_CREDS", creds)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 
 	if err := Refresh(); err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -326,6 +329,7 @@ func TestRefreshKeepsStaleSnapshotWhenUsageDown(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
 	t.Setenv("AGENT_BUDGET_CREDS", creds)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 	t.Setenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC", "0")
 
 	if err := Refresh(); err != nil {
@@ -373,7 +377,7 @@ func TestRefreshThrottlesUsageHits(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
 	t.Setenv("AGENT_BUDGET_CREDS", creds)
-	// Default freshness gate (60s) should suppress the second hit.
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 
 	if err := Refresh(); err != nil {
 		t.Fatalf("first refresh: %v", err)
@@ -470,6 +474,7 @@ func TestRefreshAPIModeSkipsUsage(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects-empty"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
 	t.Setenv("AGENT_BUDGET_CREDS", creds)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 	t.Setenv("AGENT_BUDGET_MODE", "api")
 	t.Setenv("AGENT_BUDGET_IDENTITY", "runner-a")
 
@@ -490,5 +495,277 @@ func TestRefreshAPIModeSkipsUsage(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&calls); got != 0 {
 		t.Errorf("usage server should not be hit in api mode, got %d calls", got)
+	}
+}
+
+func writeAccountFile(t *testing.T, dir, name, accessToken, refreshToken string) {
+	t.Helper()
+	writeAccountFileWithTier(t, dir, name, accessToken, refreshToken, "max")
+}
+
+func writeAccountFileWithTier(t *testing.T, dir, name, accessToken, refreshToken, tier string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := map[string]any{
+		"accessToken":      accessToken,
+		"refreshToken":     refreshToken,
+		"expiresAt":        time.Now().Add(2 * time.Hour).UnixMilli(),
+		"subscriptionType": tier,
+		"rateLimitTier":    "default",
+		"scopes":           []string{"user:profile"},
+	}
+	b, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRefreshMultiAccountAggregation(t *testing.T) {
+	dir := t.TempDir()
+	stateD := filepath.Join(dir, "state")
+	accountsD := filepath.Join(dir, "accounts")
+
+	writeAccountFile(t, accountsD, "primary", "at-primary", "rt-primary")
+	writeAccountFile(t, accountsD, "secondary", "at-secondary", "rt-secondary")
+
+	usageByToken := map[string]string{
+		"at-primary":   `{"five_hour":{"utilization":80,"resets_at":"2026-04-26T17:00:00.000000+00:00"},"seven_day":{"utilization":60,"resets_at":"2026-04-26T20:00:00.000000+00:00"}}`,
+		"at-secondary": `{"five_hour":{"utilization":20,"resets_at":"2026-04-26T17:00:00.000000+00:00"},"seven_day":{"utilization":40,"resets_at":"2026-04-26T20:00:00.000000+00:00"}}`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if resp, ok := usageByToken[auth]; ok {
+			_, _ = fmt.Fprintln(w, resp)
+		} else {
+			http.Error(w, "unknown token", http.StatusUnauthorized)
+		}
+	}))
+	defer srv.Close()
+	swapURLs(t, srv.URL, srv.URL+"/token-unused")
+
+	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects-empty"))
+	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", accountsD)
+	t.Setenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC", "0")
+
+	if err := Refresh(); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	s, err := loadState()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	computeAggregates(s, time.Now().UTC())
+
+	if len(s.AccountSnapshots) != 2 {
+		t.Fatalf("account_snapshots len: got %d want 2", len(s.AccountSnapshots))
+	}
+	if math.Abs(s.AccountSnapshots["primary"].Short.Utilization-80) > 1e-9 {
+		t.Errorf("primary short: got %v want 80", s.AccountSnapshots["primary"].Short.Utilization)
+	}
+	if math.Abs(s.AccountSnapshots["secondary"].Short.Utilization-20) > 1e-9 {
+		t.Errorf("secondary short: got %v want 20", s.AccountSnapshots["secondary"].Short.Utilization)
+	}
+
+	if math.Abs(s.Short.Frac-0.50) > 1e-9 {
+		t.Errorf("aggregate short.frac: got %.4f want 0.50", s.Short.Frac)
+	}
+	if math.Abs(s.Long.Frac-0.50) > 1e-9 {
+		t.Errorf("aggregate long.frac: got %.4f want 0.50", s.Long.Frac)
+	}
+	if s.Short.Source != "usage-aggregate" {
+		t.Errorf("short.source: got %q want usage-aggregate", s.Short.Source)
+	}
+	if s.Advice != "ok" {
+		t.Errorf("advice: got %q want ok (avg short=50%%)", s.Advice)
+	}
+}
+
+func TestRefreshPopulatesTier(t *testing.T) {
+	dir := t.TempDir()
+	stateD := filepath.Join(dir, "state")
+	accountsD := filepath.Join(dir, "accounts")
+
+	writeAccountFileWithTier(t, accountsD, "primary", "at-primary", "rt-primary", "max")
+	writeAccountFileWithTier(t, accountsD, "secondary", "at-secondary", "rt-secondary", "team")
+
+	usageByToken := map[string]string{
+		"at-primary":   `{"five_hour":{"utilization":10,"resets_at":"2026-04-26T17:00:00.000000+00:00"},"seven_day":{"utilization":5,"resets_at":"2026-04-26T20:00:00.000000+00:00"}}`,
+		"at-secondary": `{"five_hour":{"utilization":20,"resets_at":"2026-04-26T17:00:00.000000+00:00"},"seven_day":{"utilization":10,"resets_at":"2026-04-26T20:00:00.000000+00:00"}}`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if resp, ok := usageByToken[auth]; ok {
+			_, _ = fmt.Fprintln(w, resp)
+		} else {
+			http.Error(w, "unknown", http.StatusUnauthorized)
+		}
+	}))
+	defer srv.Close()
+	swapURLs(t, srv.URL, srv.URL+"/token-unused")
+
+	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects-empty"))
+	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", accountsD)
+	t.Setenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC", "0")
+
+	if err := Refresh(); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	s, err := loadState()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if s.AccountSnapshots["primary"].Tier != "max" {
+		t.Errorf("primary tier: got %q want max", s.AccountSnapshots["primary"].Tier)
+	}
+	if s.AccountSnapshots["secondary"].Tier != "team" {
+		t.Errorf("secondary tier: got %q want team", s.AccountSnapshots["secondary"].Tier)
+	}
+}
+
+func TestTier(t *testing.T) {
+	dir := t.TempDir()
+	accountsD := filepath.Join(dir, "accounts")
+
+	writeAccountFileWithTier(t, accountsD, "primary", "at-1", "rt-1", "max")
+	writeAccountFileWithTier(t, accountsD, "secondary", "at-2", "rt-2", "team")
+
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", accountsD)
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	origStdout := os.Stdout
+	os.Stdout = pw
+	terr := Tier()
+	pw.Close()
+	os.Stdout = origStdout
+
+	if terr != nil {
+		t.Fatalf("Tier: %v", terr)
+	}
+
+	var buf strings.Builder
+	b := make([]byte, 4096)
+	for {
+		n, rerr := pr.Read(b)
+		if n > 0 {
+			buf.Write(b[:n])
+		}
+		if rerr != nil {
+			break
+		}
+	}
+	pr.Close()
+
+	var tiers map[string]string
+	if err := json.Unmarshal([]byte(buf.String()), &tiers); err != nil {
+		t.Fatalf("parse tier output: %v (raw: %q)", err, buf.String())
+	}
+	if tiers["primary"] != "max" {
+		t.Errorf("primary: got %q want max", tiers["primary"])
+	}
+	if tiers["secondary"] != "team" {
+		t.Errorf("secondary: got %q want team", tiers["secondary"])
+	}
+}
+
+func TestTierMissingDir(t *testing.T) {
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(t.TempDir(), "nonexistent"))
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	origStdout := os.Stdout
+	os.Stdout = pw
+	terr := Tier()
+	pw.Close()
+	os.Stdout = origStdout
+	pr.Close()
+
+	if terr != nil {
+		t.Fatalf("Tier with missing dir: %v", terr)
+	}
+}
+
+func TestQueryAutoRefreshesStaleSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	stateD := filepath.Join(dir, "state")
+	if err := os.MkdirAll(stateD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	staleAt := time.Now().UTC().Add(-(queryAutoRefreshAge + time.Minute))
+	initial := &state{
+		Cache: map[string]*fileEntry{},
+		UsageSnapshot: &usageSnapshot{
+			FetchedAt: staleAt,
+			Short:     usageWindow{Utilization: 100.0, ResetsAt: "2099-01-01T00:00:00.000000+00:00"},
+			Long:      usageWindow{Utilization: 100.0, ResetsAt: "2099-01-01T00:00:00.000000+00:00"},
+		},
+	}
+	b, err := json.MarshalIndent(initial, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateD, "state.json"), append(b, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = fmt.Fprintln(w, `{"five_hour":{"utilization":50,"resets_at":"2099-01-01T00:00:00.000000+00:00"},"seven_day":{"utilization":25,"resets_at":"2099-01-01T00:00:00.000000+00:00"}}`)
+	}))
+	defer srv.Close()
+	swapURLs(t, srv.URL, srv.URL+"/token-unused")
+
+	creds := filepath.Join(dir, ".credentials.json")
+	writeCredentials(t, creds, "at-fresh", "rt-fresh", time.Now().Add(2*time.Hour).UnixMilli())
+
+	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects-empty"))
+	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
+	t.Setenv("AGENT_BUDGET_CREDS", creds)
+	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
+
+	pr, pw, perr := os.Pipe()
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	origStdout := os.Stdout
+	os.Stdout = pw
+	qErr := Query()
+	pw.Close()
+	os.Stdout = origStdout
+	pr.Close()
+
+	if qErr != nil {
+		t.Fatalf("Query: %v", qErr)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("usage server calls: got %d want 1 (stale snapshot should trigger re-fetch)", got)
+	}
+
+	s, lerr := loadState()
+	if lerr != nil {
+		t.Fatalf("load state: %v", lerr)
+	}
+	if s.UsageSnapshot == nil {
+		t.Fatal("usage_snapshot missing after query refresh")
+	}
+	if math.Abs(s.UsageSnapshot.Short.Utilization-50.0) > 1e-9 {
+		t.Errorf("short utilization after refresh: got %.1f want 50.0", s.UsageSnapshot.Short.Utilization)
+	}
+	if time.Since(s.UsageSnapshot.FetchedAt) > 5*time.Second {
+		t.Errorf("FetchedAt not updated: %v", s.UsageSnapshot.FetchedAt)
 	}
 }
