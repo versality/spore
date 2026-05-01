@@ -1,0 +1,61 @@
+You are working on task `s3-hooks-settings`: "S3 hooks: Settings + WatchInbox + NotifySkyhelm"
+
+Task file: `tasks/s3-hooks-settings.md` (edit it to leave breadcrumbs for the next
+session if you'll come back to this). When the unit lands and
+`just check` + `just build` are green, run `wt merge` yourself -
+that's the default next step on green, not a confirmation point.
+(`wt abandon` if the work won't ship.) Either flips status=done.
+
+As your absolute last action before exit, run
+`wt task tell skyhelm "merged: s3-hooks-settings"` (or `"abandoned: s3-hooks-settings (<reason>)"`,
+under 100 chars). Skyhelm needs that event to start the next queued task.
+
+Ping skyhelm via `wt task tell skyhelm "<body>"` immediately on blockers:
+merge conflict, red gate after a real fix attempt, ambiguous brief, scope
+creep worth a new task. Mint follow-ups with
+`wt task new --draft "<title>"` rather than tacking onto this one.
+
+Before `wt task done` (or `pause` / `block`), drain `inbox/` (read each,
+`mv` to `inbox/read/`). The flip refuses with exit 2 if anything is unread.
+
+Do NOT open GitHub PRs (no `gh pr create`, no
+`mcp__github__create_pull_request`). The landing path is `wt merge`:
+a direct fast-forward into `main`. PRs are reserved for wingbot, which
+can't push directly. If you think you need a PR, you don't - run
+`wt merge` instead, or `wt task tell skyhelm "<reason>"` if it
+actually won't fast-forward.
+
+Brief:
+**Sibling**: spore-s3-hooks-protocol (in nix-config)
+
+Add three missing APIs to spore's hooks package (`internal/hooks/`):
+
+## 1. hooks.Settings()
+
+```go
+func Settings(stops, postToolUse, notification []HookBin) ([]byte, error)
+```
+
+Emits a complete `settings.json` JSON blob for claude-code. Each `HookBin` carries a name, binary path, and hook type. Output must be deterministic (sorted keys). Test: golden-file comparison against a reference settings.json.
+
+## 2. hooks.WatchInbox()
+
+```go
+func WatchInbox(slug string) error
+```
+
+Port of nix-config's `wt-task watch-inbox` bash function. Watches `~/.local/state/wt/inbox/<slug>/` for new `.json` files, reads them, and injects as system reminders. On drain, moves files to `inbox/read/`.
+
+## 3. hooks.NotifySkyhelm()
+
+```go
+func NotifySkyhelm(slug string) error
+```
+
+Port of nix-config's `wt-task notify-skyhelm` bash function. Writes a poke to the skyhelm inbox (`~/.local/state/skyhelm/$project/inbox/`).
+
+## Evidence
+
+- go-test: green (all three APIs have tests)
+- golden-file: Settings output matches reference
+
