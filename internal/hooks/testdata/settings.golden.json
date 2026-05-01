@@ -29,11 +29,7 @@
           {
             "command": "/usr/bin/watch-inbox",
             "type": "command"
-          }
-        ]
-      },
-      {
-        "hooks": [
+          },
           {
             "command": "/usr/bin/replenish",
             "timeout": 30,

@@ -3,6 +3,7 @@ package hooks
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // HookBin describes one hook binary entry for claude-code's
@@ -11,33 +12,44 @@ import (
 // name regex (used for PreToolUse/PostToolUse); leave empty for
 // Stop/Notification hooks.
 type HookBin struct {
-	Name    string
-	BinPath string
-	Matcher string
-	Timeout int // seconds; 0 omits the field (claude-code default)
+	Name        string
+	BinPath     string
+	Matcher     string
+	Timeout     int  // seconds; 0 omits the field (claude-code default)
+	Async       bool // run without blocking the agent
+	AsyncRewake bool // long-running hook that wakes the agent on exit 2
 }
 
 // Settings emits a complete, deterministic settings.json blob for
-// claude-code. Each slice maps to a hook event group: Stop,
-// PostToolUse, Notification. Empty slices are omitted. Keys are
-// sorted at every level (struct field order + map key sort).
-func Settings(stops, postToolUse, notification []HookBin) ([]byte, error) {
-	hooks := make(map[string][]hookGroup)
-	if err := addGroup(hooks, "Notification", notification); err != nil {
-		return nil, err
+// claude-code. The events map keys are hook event names (Stop,
+// Notification, PostToolUse, UserPromptSubmit, PreToolUse, ...).
+// Empty slices are omitted. Keys are sorted at every level.
+// Hooks with the same Matcher within one event are consolidated
+// into a single group.
+func Settings(events map[string][]HookBin) ([]byte, error) {
+	hooksMap := make(map[string][]hookGroup)
+
+	names := make([]string, 0, len(events))
+	for name := range events {
+		names = append(names, name)
 	}
-	if err := addGroup(hooks, "PostToolUse", postToolUse); err != nil {
-		return nil, err
-	}
-	if err := addGroup(hooks, "Stop", stops); err != nil {
-		return nil, err
+	sort.Strings(names)
+
+	for _, name := range names {
+		groups, err := consolidate(events[name])
+		if err != nil {
+			return nil, err
+		}
+		if len(groups) > 0 {
+			hooksMap[name] = groups
+		}
 	}
 
 	top := settingsTop{
 		Schema: "https://json.schemastore.org/claude-code-settings.json",
 	}
-	if len(hooks) > 0 {
-		top.Hooks = hooks
+	if len(hooksMap) > 0 {
+		top.Hooks = hooksMap
 	}
 	b, err := json.MarshalIndent(top, "", "  ")
 	if err != nil {
@@ -47,45 +59,65 @@ func Settings(stops, postToolUse, notification []HookBin) ([]byte, error) {
 	return b, nil
 }
 
-// settingsTop is the root of settings.json. Field order matches
-// alphabetical key order ($schema < hooks).
 type settingsTop struct {
-	Schema string                   `json:"$schema"`
-	Hooks  map[string][]hookGroup   `json:"hooks,omitempty"`
+	Schema string                 `json:"$schema"`
+	Hooks  map[string][]hookGroup `json:"hooks,omitempty"`
 }
 
-// hookGroup is one matcher group inside a hook event array.
-// Field order: hooks < matcher (alphabetical).
 type hookGroup struct {
 	Hooks   []hookEntry `json:"hooks"`
 	Matcher string      `json:"matcher,omitempty"`
 }
 
-// hookEntry is a single hook command. Field order: command < timeout < type.
+// hookEntry field order is alphabetical for deterministic JSON output.
 type hookEntry struct {
-	Command string `json:"command"`
-	Timeout int    `json:"timeout,omitempty"`
-	Type    string `json:"type"`
+	Async       bool   `json:"async,omitempty"`
+	AsyncRewake bool   `json:"asyncRewake,omitempty"`
+	Command     string `json:"command"`
+	Timeout     int    `json:"timeout,omitempty"`
+	Type        string `json:"type"`
 }
 
-func addGroup(m map[string][]hookGroup, event string, bins []HookBin) error {
+// consolidate merges HookBins with the same Matcher into a single
+// hookGroup, preserving insertion order of both groups and entries.
+func consolidate(bins []HookBin) ([]hookGroup, error) {
 	if len(bins) == 0 {
-		return nil
+		return nil, nil
 	}
+
+	type accum struct {
+		matcher string
+		entries []hookEntry
+	}
+	seen := make(map[string]int)
+	var groups []accum
+
 	for _, b := range bins {
 		if b.BinPath == "" {
-			return fmt.Errorf("hook %q: empty BinPath", b.Name)
+			return nil, fmt.Errorf("hook %q: empty BinPath", b.Name)
 		}
 		entry := hookEntry{
-			Command: b.BinPath,
-			Timeout: b.Timeout,
-			Type:    "command",
+			Async:       b.Async,
+			AsyncRewake: b.AsyncRewake,
+			Command:     b.BinPath,
+			Timeout:     b.Timeout,
+			Type:        "command",
 		}
-		g := hookGroup{
-			Hooks:   []hookEntry{entry},
-			Matcher: b.Matcher,
+		idx, ok := seen[b.Matcher]
+		if !ok {
+			idx = len(groups)
+			seen[b.Matcher] = idx
+			groups = append(groups, accum{matcher: b.Matcher})
 		}
-		m[event] = append(m[event], g)
+		groups[idx].entries = append(groups[idx].entries, entry)
 	}
-	return nil
+
+	result := make([]hookGroup, len(groups))
+	for i, g := range groups {
+		result[i] = hookGroup{
+			Hooks:   g.entries,
+			Matcher: g.matcher,
+		}
+	}
+	return result, nil
 }
