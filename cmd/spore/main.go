@@ -92,14 +92,28 @@ Usage:
   spore task <subcommand> [flags]
 
 Subcommands:
-  new <title> [--body-stdin]   Create a tasks/<slug>.md with status=draft.
-  ls [--all]                   List tasks (default hides done).
+  new <title> [flags]          Create a tasks/<slug>.md.
+  ls [--all] [--done]          List tasks (default hides done).
+  edit <slug>                  Open task file in $EDITOR.
+  pick                         Interactive rofi/fzf task picker.
   start <slug>                 Flip to active, spawn worktree + tmux session.
   pause <slug>                 Flip active task to paused (no teardown).
   block <slug>                 Flip active task to blocked (no teardown).
   done <slug>                  Flip to done, kill tmux + remove worktree.
+  merge <slug>                 Fast-forward merge wt/<slug> into main.
   tell <slug> <message>        Append a message to the slug's inbox dir.
   verify <slug>                Print the evidence verdict for slug.
+  waybar                       Print JSON chip for waybar custom module.
+  drift                        Auto-commit task file changes.
+
+Flags for 'new':
+  --draft                      Set status=draft (default).
+  --start                      Set status=active and launch agent after creation.
+  --body <text>                Inline body text (skips editor).
+  --body-stdin                 Read body from stdin (skips editor).
+  --needs <slug>               Add a dependency (repeatable).
+  --edit                       Force editor open.
+  --no-edit                    Suppress editor.
 `
 
 func main() {
@@ -199,6 +213,10 @@ func runTask(args []string) error {
 		return runTaskNew(rest)
 	case "ls":
 		return runTaskLs(rest)
+	case "edit":
+		return runTaskEdit(rest)
+	case "pick":
+		return runTaskPick(rest)
 	case "start":
 		return runTaskStart(rest)
 	case "pause":
@@ -207,13 +225,55 @@ func runTask(args []string) error {
 		return runTaskBlock(rest)
 	case "done":
 		return runTaskDone(rest)
+	case "merge":
+		return runTaskMerge(rest)
 	case "tell":
 		return runTaskTell(rest)
 	case "verify":
 		return runTaskVerify(rest)
+	case "waybar":
+		return runTaskWaybar(rest)
+	case "drift":
+		return runTaskDrift(rest)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\n%s", sub, taskUsage)
 	}
+}
+
+func runTaskEdit(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spore task edit <slug>")
+	}
+	return task.Edit("tasks", args[0])
+}
+
+func runTaskPick(_ []string) error {
+	slug, err := task.Pick("tasks")
+	if err != nil {
+		return err
+	}
+	fmt.Println(slug)
+	return nil
+}
+
+func runTaskMerge(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spore task merge <slug>")
+	}
+	return task.Merge("tasks", args[0])
+}
+
+func runTaskWaybar(_ []string) error {
+	out, err := task.Waybar("tasks")
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(out)
+	return err
+}
+
+func runTaskDrift(_ []string) error {
+	return task.AutoCommitDrift("tasks")
 }
 
 func runTaskStart(args []string) error {
@@ -271,9 +331,25 @@ func runTaskVerify(args []string) error {
 	return nil
 }
 
+// needsFlag is a repeatable string flag for --needs.
+type needsFlag []string
+
+func (n *needsFlag) String() string { return strings.Join(*n, ",") }
+func (n *needsFlag) Set(v string) error {
+	*n = append(*n, v)
+	return nil
+}
+
 func runTaskNew(args []string) error {
 	fs := flag.NewFlagSet("task new", flag.ContinueOnError)
 	bodyStdin := fs.Bool("body-stdin", false, "read body from stdin")
+	bodyText := fs.String("body", "", "inline body text")
+	startFlag := fs.Bool("start", false, "set status=active and launch agent")
+	_ = fs.Bool("draft", true, "set status=draft (default)")
+	editFlag := fs.Bool("edit", false, "force editor open")
+	noEdit := fs.Bool("no-edit", false, "suppress editor")
+	var needs needsFlag
+	fs.Var(&needs, "needs", "add dependency slug (repeatable)")
 	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
 		return err
 	}
@@ -304,6 +380,8 @@ func runTaskNew(args []string) error {
 		if err != nil {
 			return err
 		}
+	} else if *bodyText != "" {
+		body = []byte("\n" + *bodyText + "\n")
 	}
 
 	project, _ := task.ProjectName("")
@@ -313,19 +391,46 @@ func runTaskNew(args []string) error {
 		Title:   title,
 		Created: time.Now().UTC().Format(time.RFC3339),
 		Project: project,
+		Needs:   []string(needs),
 	}
 	out := frontmatter.Write(m, body)
 	path := filepath.Join(tasksDir, slug+".md")
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return err
 	}
+
+	// Open editor if --edit or (no body supplied and not --no-edit and tty).
+	wantEdit := *editFlag || (body == nil && !*noEdit && isTTY())
+	if wantEdit {
+		if editErr := task.Edit(tasksDir, slug); editErr != nil {
+			return editErr
+		}
+	}
+
 	fmt.Println(slug)
+
+	if *startFlag {
+		session, startErr := task.Start(tasksDir, slug)
+		if startErr != nil {
+			return startErr
+		}
+		fmt.Println(session)
+	}
 	return nil
+}
+
+func isTTY() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func runTaskLs(args []string) error {
 	fs := flag.NewFlagSet("task ls", flag.ContinueOnError)
 	all := fs.Bool("all", false, "include done tasks")
+	doneOnly := fs.Bool("done", false, "show only done tasks")
 	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
 		return err
 	}
@@ -338,7 +443,10 @@ func runTaskLs(args []string) error {
 	}
 	fmt.Println("SLUG\tSTATUS\tTITLE")
 	for _, m := range metas {
-		if !*all && m.Status == "done" {
+		if *doneOnly && m.Status != "done" {
+			continue
+		}
+		if !*all && !*doneOnly && m.Status == "done" {
 			continue
 		}
 		fmt.Printf("%s\t%s\t%s\n", m.Slug, m.Status, m.Title)
