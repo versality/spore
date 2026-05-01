@@ -394,6 +394,64 @@ func TestRefreshThrottlesUsageHits(t *testing.T) {
 	}
 }
 
+func TestNormalizeTier(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in, want string
+	}{
+		{"max", "max"},
+		{"Max", "max"},
+		{"pro", "pro"},
+		{"PRO", "pro"},
+		{"team", "team"},
+		{"free", "free"},
+		{"", "free"},
+		{"enterprise", "enterprise"},
+	}
+	for _, c := range cases {
+		if got := normalizeTier(c.in); got != c.want {
+			t.Errorf("normalizeTier(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestActiveTier(t *testing.T) {
+	dir := t.TempDir()
+	creds := filepath.Join(dir, ".credentials.json")
+	body := map[string]any{
+		"claudeAiOauth": map[string]any{
+			"accessToken":      "at-test",
+			"subscriptionType": "max",
+		},
+	}
+	b, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(creds, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_BUDGET_CREDS", creds)
+
+	// Capture stdout.
+	r, w, _ := os.Pipe()
+	origOut := os.Stdout
+	os.Stdout = w
+	aerr := ActiveTier()
+	w.Close()
+	os.Stdout = origOut
+
+	if aerr != nil {
+		t.Fatalf("ActiveTier: %v", aerr)
+	}
+	out := make([]byte, 64)
+	n, _ := r.Read(out)
+	got := string(out[:n])
+	if got != "max\n" {
+		t.Errorf("ActiveTier output: got %q want %q", got, "max\n")
+	}
+}
+
 func TestRefreshAPIModeSkipsUsage(t *testing.T) {
 	dir := t.TempDir()
 	stateD := filepath.Join(dir, "state")

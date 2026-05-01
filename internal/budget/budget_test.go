@@ -54,7 +54,8 @@ func TestAdviceBands(t *testing.T) {
 		{0.80, 0, "tighten"},
 		{0.89, 0.79, "tighten"},
 		{0.90, 0, "ration"},
-		{0, 0.80, "ration"},
+		{0, 0.80, "tighten"},
+		{0, 0.90, "ration"},
 		{1.5, 0.1, "ration"},
 	}
 	for _, c := range cases {

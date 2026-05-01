@@ -42,7 +42,7 @@ const (
 	tightenShortFrac = 0.8
 	tightenLongFrac  = 0.8
 	rationShortFrac  = 0.9
-	rationLongFrac   = 0.8
+	rationLongFrac   = 0.9
 	stateFileMode    = 0o600
 	stateDirMode     = 0o700
 )
@@ -76,13 +76,14 @@ type windowState struct {
 }
 
 type state struct {
-	Mode          string                `json:"mode"`
-	UpdatedAt     time.Time             `json:"updated_at"`
-	Short         windowState           `json:"short"`
-	Long          windowState           `json:"long"`
-	Advice        string                `json:"advice"`
-	Cache         map[string]*fileEntry `json:"cache"`
-	UsageSnapshot *usageSnapshot        `json:"usage_snapshot,omitempty"`
+	Mode             string                    `json:"mode"`
+	UpdatedAt        time.Time                 `json:"updated_at"`
+	Short            windowState               `json:"short"`
+	Long             windowState               `json:"long"`
+	Advice           string                    `json:"advice"`
+	Cache            map[string]*fileEntry     `json:"cache"`
+	UsageSnapshot    *usageSnapshot            `json:"usage_snapshot,omitempty"`
+	AccountSnapshots map[string]*usageSnapshot `json:"account_snapshots,omitempty"`
 }
 
 func stateDir() (string, error) {
