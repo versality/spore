@@ -16,15 +16,19 @@ import (
 	"unicode"
 )
 
-// Meta is the parsed frontmatter view. Status, Slug, Title, Created
-// and Project are first-class; any other recognised key lands in
-// Extra so a Parse / Write round trip preserves it.
+// Meta is the parsed frontmatter view. Status, Slug, Title, Created,
+// Project, Host, and Agent are first-class scalars; Needs is a
+// first-class list. Any other recognised key lands in Extra so a
+// Parse / Write round trip preserves it.
 type Meta struct {
 	Status  string
 	Slug    string
 	Title   string
 	Created string
 	Project string
+	Host    string
+	Agent   string
+	Needs   []string
 	Extra   map[string]string
 }
 
@@ -41,6 +45,7 @@ func Parse(content []byte) (Meta, []byte, error) {
 	var m Meta
 	closed := false
 	closeIdx := 0
+	var listTarget *[]string
 
 	for i := 1; i < len(lines); i++ {
 		ln := lines[i]
@@ -49,6 +54,13 @@ func Parse(content []byte) (Meta, []byte, error) {
 			closeIdx = i
 			break
 		}
+
+		if item, ok := parseListItem(ln); ok && listTarget != nil {
+			*listTarget = append(*listTarget, item)
+			continue
+		}
+		listTarget = nil
+
 		key, val, ok := splitKV(ln)
 		if !ok {
 			return Meta{}, nil, fmt.Errorf("frontmatter:%d: malformed line %q", i+1, ln)
@@ -65,6 +77,12 @@ func Parse(content []byte) (Meta, []byte, error) {
 			m.Created = val
 		case "project":
 			m.Project = val
+		case "host":
+			m.Host = val
+		case "agent":
+			m.Agent = val
+		case "needs":
+			listTarget = &m.Needs
 		default:
 			if m.Extra == nil {
 				m.Extra = make(map[string]string)
@@ -97,6 +115,9 @@ func Write(m Meta, body []byte) []byte {
 	writeScalar(&buf, "title", m.Title)
 	writeScalar(&buf, "created", m.Created)
 	writeScalar(&buf, "project", m.Project)
+	writeScalar(&buf, "host", m.Host)
+	writeScalar(&buf, "agent", m.Agent)
+	writeBlockList(&buf, "needs", m.Needs)
 
 	keys := make([]string, 0, len(m.Extra))
 	for k := range m.Extra {
@@ -116,6 +137,24 @@ func writeScalar(buf *bytes.Buffer, key, value string) {
 		return
 	}
 	fmt.Fprintf(buf, "%s: %s\n", key, value)
+}
+
+func writeBlockList(buf *bytes.Buffer, key string, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	fmt.Fprintf(buf, "%s:\n", key)
+	for _, item := range items {
+		fmt.Fprintf(buf, "  - %s\n", item)
+	}
+}
+
+func parseListItem(line string) (string, bool) {
+	trimmed := strings.TrimLeft(line, " \t")
+	if !strings.HasPrefix(trimmed, "- ") {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed[2:]), true
 }
 
 func stripDoubleQuotes(s string) string {
