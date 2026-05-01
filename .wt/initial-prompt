@@ -1,13 +1,13 @@
-You are working on task `s3-hooks-settings`: "S3 hooks: Settings + WatchInbox + NotifySkyhelm"
+You are working on task `s6-task-parity`: "S6 task: Edit + Pick + Waybar + flag parity"
 
-Task file: `tasks/s3-hooks-settings.md` (edit it to leave breadcrumbs for the next
+Task file: `tasks/s6-task-parity.md` (edit it to leave breadcrumbs for the next
 session if you'll come back to this). When the unit lands and
 `just check` + `just build` are green, run `wt merge` yourself -
 that's the default next step on green, not a confirmation point.
 (`wt abandon` if the work won't ship.) Either flips status=done.
 
 As your absolute last action before exit, run
-`wt task tell skyhelm "merged: s3-hooks-settings"` (or `"abandoned: s3-hooks-settings (<reason>)"`,
+`wt task tell skyhelm "merged: s6-task-parity"` (or `"abandoned: s6-task-parity (<reason>)"`,
 under 100 chars). Skyhelm needs that event to start the next queued task.
 
 Ping skyhelm via `wt task tell skyhelm "<body>"` immediately on blockers:
@@ -26,36 +26,23 @@ can't push directly. If you think you need a PR, you don't - run
 actually won't fast-forward.
 
 Brief:
-**Sibling**: spore-s3-hooks-protocol (in nix-config)
+**Sibling**: spore-s6-driver-cutover (in nix-config)
 
-Add three missing APIs to spore's hooks package (`internal/hooks/`):
+Complete spore's task package to reach parity with nix-config's wt-task bash blob.
 
-## 1. hooks.Settings()
+## Missing APIs
 
-```go
-func Settings(stops, postToolUse, notification []HookBin) ([]byte, error)
-```
+1. `task.Edit(slug, editor string) error` - open $EDITOR on tasks/<slug>.md
+2. `task.Pick(filter string) (string, error)` - rofi/fzf task picker
+3. `task.Waybar() ([]byte, error)` - JSON chip for waybar
+4. Flag parity for `cmd/spore task`: `--start`, `--body`, `--needs`, `--draft`, `--all`, `--done`, `--edit/--no-edit`
+5. `task.AutoCommitDrift()` - replaces nix-config's `harness/auto-commit-tasks.sh`
+6. `task.Merge(slug string) error` - fast-forward merge to main
 
-Emits a complete `settings.json` JSON blob for claude-code. Each `HookBin` carries a name, binary path, and hook type. Output must be deterministic (sorted keys). Test: golden-file comparison against a reference settings.json.
-
-## 2. hooks.WatchInbox()
-
-```go
-func WatchInbox(slug string) error
-```
-
-Port of nix-config's `wt-task watch-inbox` bash function. Watches `~/.local/state/wt/inbox/<slug>/` for new `.json` files, reads them, and injects as system reminders. On drain, moves files to `inbox/read/`.
-
-## 3. hooks.NotifySkyhelm()
-
-```go
-func NotifySkyhelm(slug string) error
-```
-
-Port of nix-config's `wt-task notify-skyhelm` bash function. Writes a poke to the skyhelm inbox (`~/.local/state/skyhelm/$project/inbox/`).
+Reference source: `~/nix-config/nix/packages/wt/wt-task` (bash) + `~/nix-config/nix/packages/wt-go/` (Go shadow)
 
 ## Evidence
 
-- go-test: green (all three APIs have tests)
-- golden-file: Settings output matches reference
+- go-test: green
+- flag-parity: `spore task --help` covers all flags from `wt task --help`
 
