@@ -242,6 +242,36 @@ func TestDrainInbox_IgnoresNonJsonAndDirs(t *testing.T) {
 	}
 }
 
+func TestWatchInboxAt_EnvDrivenInboxPath(t *testing.T) {
+	tmp := t.TempDir()
+	inbox := filepath.Join(tmp, "coordinator-inbox")
+	if err := os.MkdirAll(filepath.Join(inbox, "read"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(inbox, ".tmp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTell(t, filepath.Join(inbox, "100-1-1.json"),
+		`{"ts":"t","source":"s","body":"hello"}`)
+
+	var stdout, stderr bytes.Buffer
+	opts := watchOpts{
+		timeout: time.Second, settle: 0,
+		initWatcher: func(string) (inboxWaiter, error) {
+			t.Fatal("watcher should not init when pre-drain found files")
+			return nil, nil
+		},
+		sleep: func(time.Duration) {},
+	}
+	err := watchInboxAt(inbox, &stdout, &stderr, opts)
+	if !errors.Is(err, ErrWake) {
+		t.Fatalf("got err=%v, want ErrWake", err)
+	}
+	if !strings.Contains(stdout.String(), "[t] s: hello") {
+		t.Errorf("stdout: %q", stdout.String())
+	}
+}
+
 func TestReadTellFile_MalformedYieldsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "bad.json")

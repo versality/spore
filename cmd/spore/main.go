@@ -66,8 +66,11 @@ Subcommands:
                          write the (currently no-op) response JSON.
   settings               Read a hook binding JSON from stdin, emit a
                          deterministic settings.json to stdout.
-  watch-inbox <slug>     Stop-hook: block on inbox, exit 2 on message.
-  notify-coordinator <slug>  Write a poke to coordinator's project inbox.
+  watch-inbox [<slug>]   Stop-hook: block on inbox, exit 2 on message.
+                         No slug -> reads inbox path from $SKYBOT_INBOX.
+  notify-coordinator [<slug>] Write a poke to coordinator's project inbox.
+                         No slug -> reads project from $WT_PROJECT and
+                         skips when $SKYBOT_INBOX matches the target.
 `
 
 const infectUsage = `spore infect - bootstrap a fresh server with NixOS via nixos-anywhere
