@@ -23,16 +23,16 @@ func TestClaudeSubdir_Clean(t *testing.T) {
 func TestClaudeSubdir_Dominated(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
 		"CLAUDE.md": strings.Join([]string{
-			"# Bot rules",
-			"`nix/features/bots/wingbot.nix` config",
-			"`nix/features/bots/skyler.nix` config",
-			"`nix/features/bots/lookout/cage.nix` cage",
-			"`nix/features/bots/CLAUDE.md` rules",
+			"# Plugin rules",
+			"`src/plugins/alpha/main.go` config",
+			"`src/plugins/beta/main.go` config",
+			"`src/plugins/gamma/main.go` cage",
+			"`src/plugins/CLAUDE.md` rules",
 		}, "\n") + "\n",
-		"nix/features/bots/CLAUDE.md":         "# Bots\nBot-specific rules.\n",
-		"nix/features/bots/wingbot.nix":        "{ }\n",
-		"nix/features/bots/skyler.nix":         "{ }\n",
-		"nix/features/bots/lookout/cage.nix":   "{ }\n",
+		"src/plugins/CLAUDE.md":      "# Plugins\nPlugin-specific rules.\n",
+		"src/plugins/alpha/main.go":  "package alpha\n",
+		"src/plugins/beta/main.go":   "package beta\n",
+		"src/plugins/gamma/main.go":  "package gamma\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {
@@ -41,25 +41,25 @@ func TestClaudeSubdir_Dominated(t *testing.T) {
 	if len(issues) != 1 {
 		t.Fatalf("expected 1 issue, got %v", issues)
 	}
-	if !strings.Contains(issues[0].Message, "nix/features/bots") {
-		t.Fatalf("expected nix/features/bots in message, got %v", issues[0])
+	if !strings.Contains(issues[0].Message, "src/plugins") {
+		t.Fatalf("expected src/plugins in message, got %v", issues[0])
 	}
 }
 
 func TestClaudeSubdir_OptOut(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
 		"CLAUDE.md": strings.Join([]string{
-			"# Bot rules",
+			"# Plugin rules",
 			"<!-- lint: scope-ok -->",
-			"`nix/features/bots/wingbot.nix` config",
-			"`nix/features/bots/skyler.nix` config",
-			"`nix/features/bots/lookout/cage.nix` cage",
-			"`nix/features/bots/CLAUDE.md` rules",
+			"`src/plugins/alpha/main.go` config",
+			"`src/plugins/beta/main.go` config",
+			"`src/plugins/gamma/main.go` cage",
+			"`src/plugins/CLAUDE.md` rules",
 		}, "\n") + "\n",
-		"nix/features/bots/CLAUDE.md":         "# Bots\nBot-specific rules.\n",
-		"nix/features/bots/wingbot.nix":        "{ }\n",
-		"nix/features/bots/skyler.nix":         "{ }\n",
-		"nix/features/bots/lookout/cage.nix":   "{ }\n",
+		"src/plugins/CLAUDE.md":      "# Plugins\nPlugin-specific rules.\n",
+		"src/plugins/alpha/main.go":  "package alpha\n",
+		"src/plugins/beta/main.go":   "package beta\n",
+		"src/plugins/gamma/main.go":  "package gamma\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {
@@ -72,9 +72,9 @@ func TestClaudeSubdir_OptOut(t *testing.T) {
 
 func TestClaudeSubdir_BelowThreshold(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
-		"CLAUDE.md": "# Small\n`nix/features/bots/one.nix` only one ref\n",
-		"nix/features/bots/CLAUDE.md": "# Bots\nrules\n",
-		"nix/features/bots/one.nix":   "{ }\n",
+		"CLAUDE.md":               "# Small\n`src/plugins/one.go` only one ref\n",
+		"src/plugins/CLAUDE.md":   "# Plugins\nrules\n",
+		"src/plugins/one.go":      "package plugins\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {
@@ -87,16 +87,16 @@ func TestClaudeSubdir_BelowThreshold(t *testing.T) {
 
 func TestClaudeSubdir_OwnScopeIgnored(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
-		"nix/features/bots/CLAUDE.md": strings.Join([]string{
-			"# Bots",
-			"`nix/features/bots/wingbot.nix` config",
-			"`nix/features/bots/skyler.nix` config",
-			"`nix/features/bots/lookout/cage.nix` cage",
+		"src/plugins/CLAUDE.md": strings.Join([]string{
+			"# Plugins",
+			"`src/plugins/alpha/main.go` config",
+			"`src/plugins/beta/main.go` config",
+			"`src/plugins/gamma/main.go` cage",
 		}, "\n") + "\n",
-		"nix/features/bots/wingbot.nix":      "{ }\n",
-		"nix/features/bots/skyler.nix":        "{ }\n",
-		"nix/features/bots/lookout/cage.nix":  "{ }\n",
-		"CLAUDE.md":                           "# Top\nok\n",
+		"src/plugins/alpha/main.go": "package alpha\n",
+		"src/plugins/beta/main.go":  "package beta\n",
+		"src/plugins/gamma/main.go": "package gamma\n",
+		"CLAUDE.md":                 "# Top\nok\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {
