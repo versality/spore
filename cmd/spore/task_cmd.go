@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -109,7 +110,7 @@ func runTaskMerge(args []string) error {
 }
 
 func runTaskWaybar(_ []string) error {
-	out, err := task.Waybar("tasks")
+	out, err := task.Waybar(resolveTasksDir())
 	if err != nil {
 		return err
 	}
@@ -305,4 +306,38 @@ func runTaskLs(args []string) error {
 		fmt.Printf("%s\t%s\t%s\n", m.Slug, m.Status, m.Title)
 	}
 	return nil
+}
+
+// resolveTasksDir returns an absolute tasks/ path. Priority:
+//  1. SPORE_TASKS_DIR env var (explicit override)
+//  2. git root from cwd (works when called from project root)
+//  3. first entry in ~/.config/wt/projects (fallback for waybar/systemd callers)
+//  4. relative "tasks" (last resort)
+func resolveTasksDir() string {
+	if v := os.Getenv("SPORE_TASKS_DIR"); v != "" {
+		return v
+	}
+	if out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output(); err == nil {
+		root := strings.TrimSpace(string(out))
+		if i := strings.Index(root, "/.worktrees/"); i >= 0 {
+			root = root[:i]
+		}
+		return filepath.Join(root, "tasks")
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		data, err := os.ReadFile(filepath.Join(home, ".config", "wt", "projects"))
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				dir := filepath.Join(line, "tasks")
+				if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+					return dir
+				}
+			}
+		}
+	}
+	return "tasks"
 }
