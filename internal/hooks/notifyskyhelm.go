@@ -12,7 +12,39 @@ import (
 // $SKYHELM_STATE_DIR/<slug>/inbox/. The poke is a JSON file following
 // the tell protocol ({ts, source, body}), written atomically via .tmp.
 func NotifySkyhelm(slug string) error {
-	inbox := skyhelmInbox(slug)
+	return notifySkyhelmAt(skyhelmInbox(slug))
+}
+
+// NotifySkyhelmEnv is the env-driven entry point for the Notification
+// hook. It reads $WT_PROJECT to identify the target skyhelm inbox, and
+// $SKYBOT_INBOX to skip self-pokes when the firing session is the
+// project's skyhelm itself. Returns nil (no-op) when WT_PROJECT is
+// unset (ad-hoc claude session outside a configured project) or when
+// the firing session is the target skyhelm.
+func NotifySkyhelmEnv() error {
+	project := os.Getenv("WT_PROJECT")
+	if project == "" {
+		return nil
+	}
+	inbox := skyhelmInbox(project)
+	if isSkyhelmSession(inbox) {
+		return nil
+	}
+	return notifySkyhelmAt(inbox)
+}
+
+// isSkyhelmSession reports whether the firing session is the skyhelm
+// for inbox. Mirrors the bash self_id check: SKYBOT_INBOX equal to the
+// skyhelm inbox path means we are skyhelm and pokes would self-wake.
+func isSkyhelmSession(inbox string) bool {
+	self := os.Getenv("SKYBOT_INBOX")
+	if self == "" {
+		return false
+	}
+	return self == inbox
+}
+
+func notifySkyhelmAt(inbox string) error {
 	if err := ensureInbox(inbox); err != nil {
 		return fmt.Errorf("notify-skyhelm: ensure inbox: %w", err)
 	}

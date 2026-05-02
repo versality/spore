@@ -23,7 +23,16 @@ var ErrWake = errors.New("inbox drained")
 // files to inbox/read/, and returns ErrWake when files were drained.
 // Returns nil on timeout (no files), or a real error on failure.
 func WatchInbox(slug string) error {
-	return watchInbox(slug, os.Stdout, os.Stderr, defaultWatchOpts())
+	return watchInboxAt(workerInbox(slug), os.Stdout, os.Stderr, defaultWatchOpts())
+}
+
+// WatchInboxAt is the env-driven Stop-hook entry point. It targets
+// inboxDir directly instead of computing it from a slug, so callers
+// like `spore hooks watch-inbox` (no positional) can pass
+// $SKYBOT_INBOX, which the consumer harness sets per spawn (rower:
+// $WT_STATE/<slug>/inbox; coordinator: $SKYHELM_STATE_DIR/<project>/inbox).
+func WatchInboxAt(inboxDir string) error {
+	return watchInboxAt(inboxDir, os.Stdout, os.Stderr, defaultWatchOpts())
 }
 
 type watchOpts struct {
@@ -50,7 +59,10 @@ func defaultWatchOpts() watchOpts {
 }
 
 func watchInbox(slug string, stdout, stderr io.Writer, opts watchOpts) error {
-	inboxDir := workerInbox(slug)
+	return watchInboxAt(workerInbox(slug), stdout, stderr, opts)
+}
+
+func watchInboxAt(inboxDir string, stdout, stderr io.Writer, opts watchOpts) error {
 	if err := ensureInbox(inboxDir); err != nil {
 		return err
 	}
