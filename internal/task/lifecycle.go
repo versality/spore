@@ -112,14 +112,22 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 }
 
 // Pause flips an active task to paused. The worktree and tmux session
-// are left in place so the operator can stay attached.
+// are left in place so the operator can stay attached. Refuses when
+// the inbox has unread messages.
 func Pause(tasksDir, slug string) error {
+	if err := inboxGate(slug); err != nil {
+		return err
+	}
 	return flipStatus(tasksDir, slug, "active", "paused")
 }
 
 // Block flips an active task to blocked. Same teardown semantics as
-// Pause: the worktree and tmux session are left in place.
+// Pause: the worktree and tmux session are left in place. Refuses
+// when the inbox has unread messages.
 func Block(tasksDir, slug string) error {
+	if err := inboxGate(slug); err != nil {
+		return err
+	}
 	return flipStatus(tasksDir, slug, "active", "blocked")
 }
 
@@ -145,7 +153,11 @@ func Verify(tasksDir, slug string) (evidence.Verdict, []string, error) {
 // session, worktree, and wt/<slug> branch. Errors from cleanup are
 // swallowed; the status flip is the source of truth. Calling Done on
 // an already-done task is a no-op.
-func Done(tasksDir, slug string) error {
+//
+// When force is true, the inbox-drain and unmerged-commit gates are
+// bypassed; the evidence gate still runs (it has its own soak/env
+// override).
+func Done(tasksDir, slug string, force bool) error {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -159,6 +171,30 @@ func Done(tasksDir, slug string) error {
 		return nil
 	}
 
+	if !force {
+		if err := inboxGate(slug); err != nil {
+			return err
+		}
+	}
+
+	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return err
+	}
+
+	branch := "wt/" + slug
+	unmerged, err := UnmergedCommits(projectRoot, branch)
+	if err != nil {
+		return err
+	}
+	if unmerged > 0 {
+		if force {
+			fmt.Fprintf(os.Stderr, "spore task done %s: --force: discarding %d unmerged commit(s) on %s\n", slug, unmerged, branch)
+		} else {
+			return fmt.Errorf("done refused for %s: branch %q has %d unmerged commit(s); run 'spore task merge %s' first, or 'spore task done %s --force' to discard", slug, branch, unmerged, slug, slug)
+		}
+	}
+
 	if err := evidenceGate(slug, m, body, os.Stderr); err != nil {
 		return err
 	}
@@ -168,12 +204,7 @@ func Done(tasksDir, slug string) error {
 		return err
 	}
 
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
-	if err != nil {
-		return err
-	}
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
-	branch := "wt/" + slug
 	session := tmuxSessionName(projectRoot, slug)
 
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
@@ -206,6 +237,19 @@ func evidenceGate(slug string, m frontmatter.Meta, body []byte, warnOut *os.File
 	}
 	if warnOut != nil {
 		fmt.Fprintf(warnOut, "spore task done %s: warn-only: %s\n", slug, msg)
+	}
+	return nil
+}
+
+// inboxGate refuses the status flip when the slug's inbox has unread
+// *.json files. Returns nil when the inbox is empty or missing.
+func inboxGate(slug string) error {
+	n, dir, err := CountUnreadInbox(slug)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("%d unread inbox message(s) at %s; read each, then mv to inbox/read/", n, dir)
 	}
 	return nil
 }

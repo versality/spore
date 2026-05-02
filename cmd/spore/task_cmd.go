@@ -26,7 +26,7 @@ Subcommands:
   start <slug>                 Flip to active, spawn worktree + tmux session.
   pause <slug>                 Flip active task to paused (no teardown).
   block <slug>                 Flip active task to blocked (no teardown).
-  done <slug>                  Flip to done, kill tmux + remove worktree.
+  done <slug> [--force]         Flip to done, kill tmux + remove worktree.
   merge <slug>                 Fast-forward merge wt/<slug> into main.
   tell <slug> <message>        Append a message to the slug's inbox dir.
   verify <slug>                Print the evidence verdict for slug.
@@ -148,10 +148,19 @@ func runTaskBlock(args []string) error {
 }
 
 func runTaskDone(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: spore task done <slug>")
+	if len(args) < 1 || len(args) > 2 {
+		return fmt.Errorf("usage: spore task done <slug> [--force]")
 	}
-	return task.Done("tasks", args[0])
+	slug := args[0]
+	force := false
+	for _, a := range args[1:] {
+		if a == "--force" {
+			force = true
+		} else {
+			return fmt.Errorf("spore task done: unknown flag: %s", a)
+		}
+	}
+	return task.Done("tasks", slug, force)
 }
 
 func runTaskTell(args []string) error {
