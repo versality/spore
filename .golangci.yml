@@ -1,0 +1,11 @@
+version: "2"
+
+# spore is plain stdlib Go that leans on conventional patterns
+# (defer Close, fire-and-forget ledger writes, fmt.Fprintf to
+# stdout/stderr). errcheck flags every one of these, which produces
+# noise without surfacing real bugs. Lean on staticcheck + go vet for
+# correctness and rely on review/tests for the rest.
+linters:
+  default: standard
+  disable:
+    - errcheck
