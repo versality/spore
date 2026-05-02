@@ -170,7 +170,7 @@ func TestAppendLedger(t *testing.T) {
 		StateDir:   dir,
 		LedgerFile: ledgerFile,
 	}
-	cfg = cfg.defaults()
+	cfg = cfg.Defaults()
 	appendLedger(cfg, "sess1", 100000, false, false)
 
 	content, err := os.ReadFile(ledgerFile)
