@@ -1,7 +1,8 @@
-// Package verify ports the coordinator-verify-done.sh verdict logic to Go.
-// Given a slug and a project root, it inspects git history, wt-task
-// event logs, and claude-code session transcripts to determine whether
-// a rower's done flip is backed by real evidence.
+// Package verify decides whether a worker's done flip is backed by
+// real evidence. Given a slug and a project root, it inspects git
+// history, task event logs, and claude-code session transcripts to
+// emit a verdict the coordinator gate uses to allow or refuse the
+// flip.
 package verify
 
 import (

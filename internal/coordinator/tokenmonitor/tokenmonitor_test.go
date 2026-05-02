@@ -1,7 +1,6 @@
 package tokenmonitor
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,10 +12,10 @@ func TestIsCoordinator(t *testing.T) {
 		stateDir string
 		want     bool
 	}{
-		{"/home/sky/.local/state/coordinator", "/home/sky/.local/state/coordinator", true},
-		{"/home/sky/.local/state/coordinator/consumer-config/inbox", "/home/sky/.local/state/coordinator", true},
-		{"/home/sky/.local/state/wt/slug/inbox", "/home/sky/.local/state/coordinator", false},
-		{"", "/home/sky/.local/state/coordinator", false},
+		{"/state/coord", "/state/coord", true},
+		{"/state/coord/myproj/inbox", "/state/coord", true},
+		{"/state/wt/slug/inbox", "/state/coord", false},
+		{"", "/state/coord", false},
 	}
 	for _, tc := range cases {
 		cfg := Config{Inbox: tc.inbox, StateDir: tc.stateDir}
@@ -29,7 +28,7 @@ func TestIsCoordinator(t *testing.T) {
 func TestCheckSkipsNonCoordinator(t *testing.T) {
 	cfg := Config{
 		Inbox:    "/some/other/path",
-		StateDir: "/home/sky/.local/state/coordinator",
+		StateDir: "/state/coord",
 	}
 	result := Check(cfg, HookPayload{})
 	if result.Level != "skip" {
@@ -83,7 +82,7 @@ func TestCheckHardCap(t *testing.T) {
 	os.MkdirAll(transcriptDir, 0o700)
 	f := filepath.Join(transcriptDir, "session.jsonl")
 
-	line := fmt.Sprintf(`{"type":"assistant","message":{"role":"assistant","content":[],"usage":{"input_tokens":195000,"output_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}`)
+	line := `{"type":"assistant","message":{"role":"assistant","content":[],"usage":{"input_tokens":195000,"output_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}`
 	os.WriteFile(f, []byte(line+"\n"), 0o644)
 
 	stateDir := filepath.Join(dir, "state")

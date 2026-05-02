@@ -24,8 +24,8 @@ type ForbiddenPattern struct {
 
 // DefaultForbidden is the starter set of bash patterns spore blocks
 // out of the box. Downstream projects override with their own set
-// (e.g. nixos-rebuild for consumer-config, terraform apply for an infra
-// repo). Keep the kernel set small and obviously universal.
+// (e.g. nixos-rebuild for a NixOS host repo, terraform apply for an
+// infra repo). Keep the kernel set small and obviously universal.
 func DefaultForbidden() []ForbiddenPattern {
 	return []ForbiddenPattern{
 		{

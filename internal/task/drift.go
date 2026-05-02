@@ -6,9 +6,8 @@ import (
 )
 
 // AutoCommitDrift stages and commits any uncommitted changes under
-// tasksDir to the current branch. This replaces consumer-config's
-// auto-commit-tasks.sh: a single idempotent call that no-ops when
-// clean. Returns nil when there is nothing to commit.
+// tasksDir to the current branch. Idempotent: no-ops when the tree
+// is clean. Returns nil when there is nothing to commit.
 func AutoCommitDrift(tasksDir string) error {
 	projectRoot, err := projectRootFromTasksDir(tasksDir)
 	if err != nil {

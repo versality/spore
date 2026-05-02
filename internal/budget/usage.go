@@ -175,7 +175,7 @@ func normalizeTier(subscriptionType string) string {
 
 // ActiveTier reads the live OAuth credentials and prints the
 // normalized tier (max, pro, team, free) on a single line. Callers
-// like coordinator-spawn and rower-token-monitor gate on this output.
+// (orchestrator spawn paths, token monitors) gate on this output.
 func ActiveTier() error {
 	path := oauthCredsPath()
 	if path == "" {

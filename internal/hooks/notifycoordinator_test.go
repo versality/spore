@@ -10,7 +10,7 @@ import (
 
 func TestNotifyCoordinator_WritesPoke(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 
 	slug := "myproject"
 	if err := NotifyCoordinator(slug); err != nil {
@@ -53,13 +53,12 @@ func TestNotifyCoordinator_WritesPoke(t *testing.T) {
 
 func TestNotifyCoordinator_AtomicWrite(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 
 	if err := NotifyCoordinator("proj"); err != nil {
 		t.Fatal(err)
 	}
 
-	// .tmp should be empty (file was renamed out).
 	tmpDir := filepath.Join(state, "proj", "inbox", ".tmp")
 	entries, err := os.ReadDir(tmpDir)
 	if err != nil {
@@ -74,7 +73,7 @@ func TestNotifyCoordinator_AtomicWrite(t *testing.T) {
 
 func TestNotifyCoordinator_CreatesInboxDirs(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 
 	if err := NotifyCoordinator("fresh"); err != nil {
 		t.Fatal(err)

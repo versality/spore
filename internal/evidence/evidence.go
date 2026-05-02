@@ -6,13 +6,10 @@
 // allow or refuse a status flip.
 //
 // Verdicts are deliberately structural: this package never shells out
-// to git or reads the working tree. A separate coordinator-side verifier
-// can layer live-state checks on top; spore's own gate stays pure so
-// the unit tests run in-process without git fixtures.
-//
-// SIGPIPE class fix: the basecamp seed implemented this in bash with
-// `git log | head | grep` pipelines that intermittently SIGPIPEd. The
-// Go port avoids shell pipes by construction, reading bytes directly.
+// to git or reads the working tree. A live-state verifier (see
+// internal/coordinator/verify) can layer commit-history and session-
+// transcript checks on top; spore's own gate stays pure so the unit
+// tests run in-process without git fixtures.
 package evidence
 
 import (
