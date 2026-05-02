@@ -40,6 +40,7 @@ func Default() []Lint {
 		EmDash{},
 		FileSize{Limit: 500},
 		CommentNoise{},
+		Decoration{},
 		ClaudeDrift{ConsumersDir: "rules/consumers", RulesDir: "rules"},
 		TaskEvidence{TasksDir: "tasks"},
 	}
