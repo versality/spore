@@ -13,7 +13,27 @@ import (
 // JSON file following the tell protocol ({ts, source, body}), written
 // atomically via .tmp.
 func NotifyCoordinator(slug string) error {
-	inbox := coordinatorInbox(slug)
+	return notifyCoordinatorAt(coordinatorInbox(slug))
+}
+
+// NotifyCoordinatorEnv is the env-driven entry point for the
+// Notification hook. It reads $WT_PROJECT to identify the target
+// coordinator inbox, and $SKYBOT_INBOX to skip self-pokes when the
+// firing session is the coordinator itself. Returns nil (no-op) when
+// WT_PROJECT is unset or when SKYBOT_INBOX matches the target inbox.
+func NotifyCoordinatorEnv() error {
+	project := os.Getenv("WT_PROJECT")
+	if project == "" {
+		return nil
+	}
+	inbox := coordinatorInbox(project)
+	if os.Getenv("SKYBOT_INBOX") == inbox {
+		return nil
+	}
+	return notifyCoordinatorAt(inbox)
+}
+
+func notifyCoordinatorAt(inbox string) error {
 	if err := ensureInbox(inbox); err != nil {
 		return fmt.Errorf("notify-coordinator: ensure inbox: %w", err)
 	}

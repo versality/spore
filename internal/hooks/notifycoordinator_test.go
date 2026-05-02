@@ -92,14 +92,14 @@ func TestNotifyCoordinator_CreatesInboxDirs(t *testing.T) {
 	}
 }
 
-func TestNotifySkyhelmEnv_NoProjectIsNoop(t *testing.T) {
+func TestNotifyCoordinatorEnv_NoProjectIsNoop(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "")
 	t.Setenv("SKYBOT_INBOX", "")
 
-	if err := NotifySkyhelmEnv(); err != nil {
-		t.Fatalf("NotifySkyhelmEnv: %v", err)
+	if err := NotifyCoordinatorEnv(); err != nil {
+		t.Fatalf("NotifyCoordinatorEnv: %v", err)
 	}
 	entries, _ := os.ReadDir(state)
 	if len(entries) != 0 {
@@ -107,14 +107,14 @@ func TestNotifySkyhelmEnv_NoProjectIsNoop(t *testing.T) {
 	}
 }
 
-func TestNotifySkyhelmEnv_PokesProjectInbox(t *testing.T) {
+func TestNotifyCoordinatorEnv_PokesProjectInbox(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
 	t.Setenv("SKYBOT_INBOX", filepath.Join(t.TempDir(), "rower-slug", "inbox"))
 
-	if err := NotifySkyhelmEnv(); err != nil {
-		t.Fatalf("NotifySkyhelmEnv: %v", err)
+	if err := NotifyCoordinatorEnv(); err != nil {
+		t.Fatalf("NotifyCoordinatorEnv: %v", err)
 	}
 	inbox := filepath.Join(state, "myproject", "inbox")
 	entries, err := os.ReadDir(inbox)
@@ -132,15 +132,15 @@ func TestNotifySkyhelmEnv_PokesProjectInbox(t *testing.T) {
 	}
 }
 
-func TestNotifySkyhelmEnv_SkyhelmSelfPokeIsNoop(t *testing.T) {
+func TestNotifyCoordinatorEnv_SelfPokeIsNoop(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
 	inbox := filepath.Join(state, "myproject", "inbox")
 	t.Setenv("SKYBOT_INBOX", inbox)
 
-	if err := NotifySkyhelmEnv(); err != nil {
-		t.Fatalf("NotifySkyhelmEnv: %v", err)
+	if err := NotifyCoordinatorEnv(); err != nil {
+		t.Fatalf("NotifyCoordinatorEnv: %v", err)
 	}
 	if _, err := os.Stat(inbox); !os.IsNotExist(err) {
 		t.Errorf("expected inbox not created (self-poke skipped), got err=%v", err)
