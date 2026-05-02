@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
@@ -57,7 +58,8 @@ func runCoordinator(args []string) int {
 
 func runCoordinatorRoleBrief(args []string) int {
 	fs := flag.NewFlagSet("coordinator role-brief", flag.ContinueOnError)
-	rolePath := fs.String("role", "", "path to role file (default: auto-detect)")
+	rolePath := fs.String("role", "", "path to role file (default: bundled role.md)")
+	consumerPath := fs.String("consumer", "", "optional consumer overlay appended after a separator")
 	help := fs.Bool("h", false, "show help")
 	helpLong := fs.Bool("help", false, "show help")
 	fs.SetOutput(io.Discard)
@@ -67,27 +69,57 @@ func runCoordinatorRoleBrief(args []string) int {
 	}
 	if *help || *helpLong {
 		fmt.Println("spore coordinator role-brief - render the coordinator role brief")
-		fmt.Println("  --role <path>   path to role file")
+		fmt.Println("  --role <path>      path to role file (default: bundled role.md)")
+		fmt.Println("  --consumer <path>  consumer overlay appended after the role file")
 		return 0
 	}
 
-	path := *rolePath
-	if path == "" {
-		root, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "spore coordinator role-brief:", err)
-			return 1
-		}
-		path = root + "/bootstrap/coordinator/role.md"
-	}
-
-	content, err := os.ReadFile(path)
+	role, err := readRole(*rolePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "spore coordinator role-brief: %v\n", err)
 		return 1
 	}
-	os.Stdout.Write(content)
+
+	out := role
+	if *consumerPath != "" {
+		consumer, err := os.ReadFile(*consumerPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "spore coordinator role-brief: %v\n", err)
+			return 1
+		}
+		out = joinRoleConsumer(role, consumer)
+	}
+	os.Stdout.Write(out)
 	return 0
+}
+
+// readRole returns the role file at path or, when path is empty, the
+// embedded BundledCoordinatorRole shipped with the spore binary.
+func readRole(path string) ([]byte, error) {
+	if path == "" {
+		return spore.BundledCoordinatorRole, nil
+	}
+	return os.ReadFile(path)
+}
+
+// joinRoleConsumer concatenates the role and consumer payloads with one
+// blank line between them. Trailing newlines on the role are normalised
+// so the join produces exactly one blank line regardless of whether the
+// inputs end in `\n`, `\n\n`, or no trailing newline at all.
+func joinRoleConsumer(role, consumer []byte) []byte {
+	r := trimTrailingNewlines(role)
+	out := make([]byte, 0, len(r)+2+len(consumer))
+	out = append(out, r...)
+	out = append(out, '\n', '\n')
+	out = append(out, consumer...)
+	return out
+}
+
+func trimTrailingNewlines(b []byte) []byte {
+	for len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b
 }
 
 func runCoordinatorStateDebt(args []string) int {
