@@ -165,20 +165,11 @@ func runHooksSettings() int {
 }
 
 func runHooksWatchInbox(args []string) int {
-	var err error
-	switch len(args) {
-	case 0:
-		inbox := os.Getenv("SKYBOT_INBOX")
-		if inbox == "" {
-			return 0
-		}
-		err = hooks.WatchInboxAt(inbox)
-	case 1:
-		err = hooks.WatchInbox(args[0])
-	default:
-		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox [<slug>]")
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox <slug>")
 		return 2
 	}
+	err := hooks.WatchInbox(args[0])
 	if err == hooks.ErrWake {
 		return 2
 	}
@@ -190,17 +181,11 @@ func runHooksWatchInbox(args []string) int {
 }
 
 func runHooksNotifyCoordinator(args []string) int {
-	var err error
-	switch len(args) {
-	case 0:
-		err = hooks.NotifyCoordinatorEnv()
-	case 1:
-		err = hooks.NotifyCoordinator(args[0])
-	default:
-		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator [<slug>]")
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator <slug>")
 		return 2
 	}
-	if err != nil {
+	if err := hooks.NotifyCoordinator(args[0]); err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks notify-coordinator:", err)
 		return 1
 	}

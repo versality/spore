@@ -1,7 +1,8 @@
 // Package statedebt scans a coordinator state.md file for prose
-// lessons (CRITICAL LESSON / SKYHELM SELF-LESSON / RULE blocks under
-// H2/H3 headings) that should have been lifted to the harness.
-// Port of coordinator-state-debt from bash.
+// lessons (CRITICAL LESSON / <prefix> SELF-LESSON / RULE blocks under
+// H2/H3 headings) that should have been lifted to the harness. The
+// SELF-LESSON prefix is consumer-supplied (e.g. SKYHELM SELF-LESSON);
+// any single-word prefix matches.
 package statedebt
 
 import (
@@ -44,8 +45,7 @@ type ScanResult struct {
 
 func (c Config) defaults() Config {
 	if c.StateDir == "" {
-		home, _ := os.UserHomeDir()
-		c.StateDir = filepath.Join(home, ".local", "state", "coordinator")
+		c.StateDir = defaultStateDir()
 	}
 	if c.StateFile == "" {
 		c.StateFile = filepath.Join(c.StateDir, "state.md")
@@ -57,10 +57,23 @@ func (c Config) defaults() Config {
 }
 
 var (
-	lessonRE = regexp.MustCompile(`(?i)(CRITICAL LESSON|SKYHELM SELF-LESSON|RULE)`)
-	dateRE   = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
+	lessonRE  = regexp.MustCompile(`(?i)(CRITICAL LESSON|\w+ SELF-LESSON|RULE)`)
+	dateRE    = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 	harnessRE = regexp.MustCompile(`harness:\s*\S+`)
 )
+
+// defaultStateDir resolves the coordinator state dir from the
+// SPORE_COORDINATOR_STATE_DIR env var, falling back to
+// $HOME/.local/state/spore/coordinator. Consumers (e.g. an external
+// orchestrator that already has its own state tree) export the env
+// var to point spore at their existing layout.
+func defaultStateDir() string {
+	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
+		return d
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "state", "spore", "coordinator")
+}
 
 // Scan reads the state file and classifies every H2/H3 block whose
 // heading matches the lesson pattern.
@@ -162,7 +175,7 @@ func findLatestDate(text string) string {
 // FormatVerbose returns a human-readable table of all classified blocks.
 func FormatVerbose(result ScanResult) string {
 	if len(result.Blocks) == 0 {
-		return "no CRITICAL LESSON / SKYHELM SELF-LESSON / RULE blocks"
+		return "no CRITICAL LESSON / SELF-LESSON / RULE blocks"
 	}
 	var buf strings.Builder
 	for _, b := range result.Blocks {

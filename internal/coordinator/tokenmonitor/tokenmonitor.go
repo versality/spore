@@ -52,13 +52,23 @@ func (c Config) Defaults() Config {
 		c.HardCap = DefaultHardCap
 	}
 	if c.StateDir == "" {
-		home, _ := os.UserHomeDir()
-		c.StateDir = filepath.Join(home, ".local", "state", "coordinator")
+		c.StateDir = defaultStateDir()
 	}
 	if c.LedgerFile == "" {
 		c.LedgerFile = filepath.Join(c.StateDir, "token-monitor.jsonl")
 	}
 	return c
+}
+
+// defaultStateDir resolves the coordinator state dir from the
+// SPORE_COORDINATOR_STATE_DIR env var, falling back to
+// $HOME/.local/state/spore/coordinator.
+func defaultStateDir() string {
+	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
+		return d
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "state", "spore", "coordinator")
 }
 
 // IsCoordinator returns true if the inbox path is under the state

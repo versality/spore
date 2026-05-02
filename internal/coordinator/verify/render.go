@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// Format renders the result in the same block format as
-// coordinator-verify-done.sh for drop-in compatibility.
+// Format renders the result in the verdict block format consumers
+// can pipe directly into a coordinator log or a tell message.
 func (r Result) Format() string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "%s: %s\n", r.Slug, r.Verdict)
