@@ -1,13 +1,13 @@
-You are working on task `s6-task-parity`: "S6 task: Edit + Pick + Waybar + flag parity"
+You are working on task `s7-coordinator`: "S7 coordinator: state + verify + loopguard + tokenmonitor"
 
-Task file: `tasks/s6-task-parity.md` (edit it to leave breadcrumbs for the next
+Task file: `tasks/s7-coordinator.md` (edit it to leave breadcrumbs for the next
 session if you'll come back to this). When the unit lands and
 `just check` + `just build` are green, run `wt merge` yourself -
 that's the default next step on green, not a confirmation point.
 (`wt abandon` if the work won't ship.) Either flips status=done.
 
 As your absolute last action before exit, run
-`wt task tell skyhelm "merged: s6-task-parity"` (or `"abandoned: s6-task-parity (<reason>)"`,
+`wt task tell skyhelm "merged: s7-coordinator"` (or `"abandoned: s7-coordinator (<reason>)"`,
 under 100 chars). Skyhelm needs that event to start the next queued task.
 
 Ping skyhelm via `wt task tell skyhelm "<body>"` immediately on blockers:
@@ -26,23 +26,29 @@ can't push directly. If you think you need a PR, you don't - run
 actually won't fast-forward.
 
 Brief:
-**Sibling**: spore-s6-driver-cutover (in nix-config)
+**Sibling**: spore-s7-fleet-coordinator (in nix-config)
 
-Complete spore's task package to reach parity with nix-config's wt-task bash blob.
+Build the coordinator packages in spore that skyhelm consumes.
 
-## Missing APIs
+## New packages
 
-1. `task.Edit(slug, editor string) error` - open $EDITOR on tasks/<slug>.md
-2. `task.Pick(filter string) (string, error)` - rofi/fzf task picker
-3. `task.Waybar() ([]byte, error)` - JSON chip for waybar
-4. Flag parity for `cmd/spore task`: `--start`, `--body`, `--needs`, `--draft`, `--all`, `--done`, `--edit/--no-edit`
-5. `task.AutoCommitDrift()` - replaces nix-config's `harness/auto-commit-tasks.sh`
-6. `task.Merge(slug string) error` - fast-forward merge to main
+1. `coordinator/state` - state.md parser/writer (H2/H3 format, active tasks table, recent events, rules, directives)
+2. `coordinator/verify` - port nix-config's `harness/skyhelm-verify-done.sh` verdict logic to Go. Verdicts: real-impl, rational-close, cross-repo, suspect-hallucination, bogus-evidence, unknown.
+3. `coordinator/loopguard` - circuit breaker on respawn rate
+4. `coordinator/tokenmonitor` - wraps budget short window into stop-hook shape
+5. `coordinator/statedebt` - port skyhelm-state-debt scanner
 
-Reference source: `~/nix-config/nix/packages/wt/wt-task` (bash) + `~/nix-config/nix/packages/wt-go/` (Go shadow)
+Reference sources:
+- `~/nix-config/harness/skyhelm-verify-done.sh`
+- `~/nix-config/nix/packages/wt/skyhelm-state-debt`
+- `~/nix-config/nix/packages/wt/skyhelm-token-monitor`
+
+## New CLI
+
+`cmd/spore coordinator {role-brief, state-debt, verify-done, loop-guard}`
 
 ## Evidence
 
-- go-test: green
-- flag-parity: `spore task --help` covers all flags from `wt task --help`
+- go-test: green for all 5 packages
+- verify-verdicts: test cases cover all 6 verdict types
 
