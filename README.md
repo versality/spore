@@ -8,8 +8,9 @@ Drop-in harness template for LLM-coding agents.
 
 ## Status
 
-alpha. Kernel and bootstrap stage gates shipped; not yet battle-tested
-against a real adoption. See `docs/design.md` for origin and rationale.
+beta. Kernel, bootstrap stage gates, fleet coordinator, budget tracking,
+and evidence-gated done flips shipped. Dogfooded against one live
+consumer. See `docs/design.md` for origin and rationale.
 
 ## Getting started
 
@@ -75,11 +76,11 @@ A coordinator session and one worker session per active task come
 up under tmux as `spore/<project>/<slug>`. Attach with `tmux attach
 -t spore/<project>/coordinator` to watch them work.
 
-> **v0 alpha**: the single-command shape above is the intended
+> **v0 beta**: the single-command shape above is the intended
 > operator path. Pieces of step 2 and step 3 are still operator-side
-> manual work in v0 (`--repo` flag, bundled-flake plants, on-box
-> agent flow). The current workaround and the spec for closing the
-> gap live in `docs/todo/kickstart-onecommand.md`.
+> manual work (`--repo` flag, bundled-flake plants, on-box agent
+> flow). The current workaround and the spec for closing the gap
+> live in `docs/todo/kickstart-onecommand.md`.
 
 ## Architecture
 
@@ -194,10 +195,11 @@ framing.
 
 ## What it claims
 
-- **Beautifully minimal.** About 5,000 lines of well-tested plain Go,
-  no external dependencies, Apache 2.0. The abstraction layer is the
-  kernel itself: files, processes, git, tmux, ssh. Nothing
-  proprietary, nothing you do not already use every day.
+- **Beautifully minimal.** About 11,000 lines of well-tested plain Go
+  (plus 7,000 lines of tests), no external dependencies, Apache 2.0.
+  The abstraction layer is the kernel itself: files, processes, git,
+  tmux, ssh. Nothing proprietary, nothing you do not already use
+  every day.
 - **Extremely fast.** No SaaS round-trip, no remote queue, no
   backend. Tasks land instantly, agents start instantly, the kill
   switch trips instantly. It runs at the speed of the operating
