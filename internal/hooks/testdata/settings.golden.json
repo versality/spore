@@ -5,7 +5,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/notify-skyhelm",
+            "command": "/usr/bin/notify-coordinator",
             "type": "command"
           }
         ]

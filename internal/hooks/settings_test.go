@@ -16,7 +16,7 @@ func TestSettings_GoldenFile(t *testing.T) {
 			{Name: "lint-noise", BinPath: "/usr/bin/lint-noise write", Matcher: "Write|Edit", Timeout: 10},
 		},
 		"Notification": {
-			{Name: "notify-skyhelm", BinPath: "/usr/bin/notify-skyhelm"},
+			{Name: "notify-coordinator", BinPath: "/usr/bin/notify-coordinator"},
 		},
 	}
 

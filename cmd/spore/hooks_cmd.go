@@ -34,8 +34,8 @@ func runHooks(args []string) int {
 		return runHooksSettings()
 	case "watch-inbox":
 		return runHooksWatchInbox(rest)
-	case "notify-skyhelm":
-		return runHooksNotifySkyhelm(rest)
+	case "notify-coordinator":
+		return runHooksNotifyCoordinator(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore hooks: unknown subcommand %q\n\n%s", sub, hooksUsage)
 		return 2
@@ -165,20 +165,11 @@ func runHooksSettings() int {
 }
 
 func runHooksWatchInbox(args []string) int {
-	var err error
-	switch len(args) {
-	case 0:
-		inbox := os.Getenv("SKYBOT_INBOX")
-		if inbox == "" {
-			return 0
-		}
-		err = hooks.WatchInboxAt(inbox)
-	case 1:
-		err = hooks.WatchInbox(args[0])
-	default:
-		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox [<slug>]")
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox <slug>")
 		return 2
 	}
+	err := hooks.WatchInbox(args[0])
 	if err == hooks.ErrWake {
 		return 2
 	}
@@ -189,19 +180,13 @@ func runHooksWatchInbox(args []string) int {
 	return 0
 }
 
-func runHooksNotifySkyhelm(args []string) int {
-	var err error
-	switch len(args) {
-	case 0:
-		err = hooks.NotifySkyhelmEnv()
-	case 1:
-		err = hooks.NotifySkyhelm(args[0])
-	default:
-		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-skyhelm [<slug>]")
+func runHooksNotifyCoordinator(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator <slug>")
 		return 2
 	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "spore hooks notify-skyhelm:", err)
+	if err := hooks.NotifyCoordinator(args[0]); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks notify-coordinator:", err)
 		return 1
 	}
 	return 0
