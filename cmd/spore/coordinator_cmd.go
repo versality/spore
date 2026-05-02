@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/statedebt"
+	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
 )
 
@@ -17,10 +19,12 @@ Usage:
   spore coordinator <subcommand> [flags]
 
 Subcommands:
-  role-brief     Render the coordinator role brief to stdout.
-  state-debt     Scan state.md for prose lessons that should be lifted.
-  verify-done    Run the verify-done verdict for a slug.
-  loop-guard     Check the respawn circuit breaker.
+  role-brief      Render the coordinator role brief to stdout.
+  state-debt      Scan state.md for prose lessons that should be lifted.
+  verify-done     Run the verify-done verdict for a slug.
+  loop-guard      Check the respawn circuit breaker.
+  token-monitor   Stop-hook: check coordinator context budget.
+  monitor         Boot-time verdict over the token-monitor ledger.
 `
 
 func runCoordinator(args []string) int {
@@ -41,6 +45,10 @@ func runCoordinator(args []string) int {
 		return runCoordinatorVerifyDone(rest)
 	case "loop-guard":
 		return runCoordinatorLoopGuard(rest)
+	case "token-monitor":
+		return runCoordinatorTokenMonitor(rest)
+	case "monitor":
+		return runCoordinatorMonitor(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -159,6 +167,58 @@ func runCoordinatorVerifyDone(args []string) int {
 
 	result := verify.Verify(slug, cfg)
 	fmt.Print(result.Format())
+	return 0
+}
+
+func runCoordinatorTokenMonitor(_ []string) int {
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator token-monitor: read stdin:", err)
+		return 1
+	}
+
+	var payload tokenmonitor.HookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return 0
+	}
+
+	cfg := tokenmonitor.Config{
+		Inbox: os.Getenv("SKYBOT_INBOX"),
+	}
+
+	result := tokenmonitor.Check(cfg, payload)
+	if result.ShouldFire {
+		fmt.Fprint(os.Stderr, result.Message)
+		return 2
+	}
+	return 0
+}
+
+func runCoordinatorMonitor(args []string) int {
+	fs := flag.NewFlagSet("coordinator monitor", flag.ContinueOnError)
+	threshold := fs.Int("threshold", 3, "consecutive-broken count")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator monitor:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator monitor - boot-time verdict over the token-monitor ledger")
+		fmt.Println("  --threshold N  consecutive-broken count (default 3)")
+		return 0
+	}
+
+	cfg := tokenmonitor.Config{Inbox: "self"}
+	cfg = cfg.Defaults()
+
+	broken, sessions := tokenmonitor.LedgerVerdict(cfg.LedgerFile, cfg.SoftCap, *threshold)
+	if broken {
+		fmt.Fprintf(os.Stderr, "broken-hook: %s\n", sessions)
+		return 2
+	}
+	fmt.Println("ok")
 	return 0
 }
 
