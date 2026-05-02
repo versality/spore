@@ -12,7 +12,39 @@ import (
 // $SKYHELM_STATE_DIR/<slug>/inbox/. The poke is a JSON file following
 // the tell protocol ({ts, source, body}), written atomically via .tmp.
 func NotifyCoordinator(slug string) error {
-	inbox := coordinatorInbox(slug)
+	return notifyCoordinatorAt(coordinatorInbox(slug))
+}
+
+// NotifyCoordinatorEnv is the env-driven entry point for the Notification
+// hook. It reads $WT_PROJECT to identify the target coordinator inbox, and
+// $SKYBOT_INBOX to skip self-pokes when the firing session is the
+// project's coordinator itself. Returns nil (no-op) when WT_PROJECT is
+// unset (ad-hoc claude session outside a configured project) or when
+// the firing session is the target coordinator.
+func NotifyCoordinatorEnv() error {
+	project := os.Getenv("WT_PROJECT")
+	if project == "" {
+		return nil
+	}
+	inbox := coordinatorInbox(project)
+	if isCoordinatorSession(inbox) {
+		return nil
+	}
+	return notifyCoordinatorAt(inbox)
+}
+
+// isCoordinatorSession reports whether the firing session is the coordinator
+// for inbox. Mirrors the bash self_id check: SKYBOT_INBOX equal to the
+// coordinator inbox path means we are coordinator and pokes would self-wake.
+func isCoordinatorSession(inbox string) bool {
+	self := os.Getenv("SKYBOT_INBOX")
+	if self == "" {
+		return false
+	}
+	return self == inbox
+}
+
+func notifyCoordinatorAt(inbox string) error {
 	if err := ensureInbox(inbox); err != nil {
 		return fmt.Errorf("notify-coordinator: ensure inbox: %w", err)
 	}

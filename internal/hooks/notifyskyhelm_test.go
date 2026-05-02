@@ -92,3 +92,58 @@ func TestNotifyCoordinator_CreatesInboxDirs(t *testing.T) {
 		}
 	}
 }
+
+func TestNotifyCoordinatorEnv_NoProjectIsNoop(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("WT_PROJECT", "")
+	t.Setenv("SKYBOT_INBOX", "")
+
+	if err := NotifyCoordinatorEnv(); err != nil {
+		t.Fatalf("NotifyCoordinatorEnv: %v", err)
+	}
+	entries, _ := os.ReadDir(state)
+	if len(entries) != 0 {
+		t.Errorf("expected no project dirs created, got %d", len(entries))
+	}
+}
+
+func TestNotifyCoordinatorEnv_PokesProjectInbox(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("WT_PROJECT", "myproject")
+	t.Setenv("SKYBOT_INBOX", filepath.Join(t.TempDir(), "rower-slug", "inbox"))
+
+	if err := NotifyCoordinatorEnv(); err != nil {
+		t.Fatalf("NotifyCoordinatorEnv: %v", err)
+	}
+	inbox := filepath.Join(state, "myproject", "inbox")
+	entries, err := os.ReadDir(inbox)
+	if err != nil {
+		t.Fatalf("read inbox: %v", err)
+	}
+	var jsonFiles []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			jsonFiles = append(jsonFiles, e.Name())
+		}
+	}
+	if len(jsonFiles) != 1 {
+		t.Fatalf("expected 1 json file, got %d", len(jsonFiles))
+	}
+}
+
+func TestNotifyCoordinatorEnv_CoordinatorSelfPokeIsNoop(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("WT_PROJECT", "myproject")
+	inbox := filepath.Join(state, "myproject", "inbox")
+	t.Setenv("SKYBOT_INBOX", inbox)
+
+	if err := NotifyCoordinatorEnv(); err != nil {
+		t.Fatalf("NotifyCoordinatorEnv: %v", err)
+	}
+	if _, err := os.Stat(inbox); !os.IsNotExist(err) {
+		t.Errorf("expected inbox not created (self-poke skipped), got err=%v", err)
+	}
+}

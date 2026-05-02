@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/versality/spore/internal/budget"
 	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/task"
 )
@@ -16,23 +17,28 @@ const fleetUsage = `spore fleet - reconcile worker tmux sessions against the tas
 
 Usage:
   spore fleet reconcile [--max-workers N]
+  spore fleet replenish-hook
   spore fleet enable
   spore fleet disable
   spore fleet status
 
 Subcommands:
-  reconcile  Run a single reconcile pass: list status=active tasks; for
-             each one without a live tmux session, ensure the worktree
-             and spawn a session; for each spore-prefix tmux session
-             whose task is no longer active, kill it. Idempotent;
-             exits 0 when there is nothing to do. Short-circuits when
-             the kill-switch flag is missing.
-  enable     Create the kill-switch flag (the reconciler resumes
-             spawning on the next pass).
-  disable    Remove the kill-switch flag (the reconciler stops
-             spawning; running sessions are left alone).
-  status     Print the kill-switch state plus the list of slugs whose
-             session is currently alive.
+  reconcile       Run a single reconcile pass: list status=active tasks; for
+                  each one without a live tmux session, ensure the worktree
+                  and spawn a session; for each spore-prefix tmux session
+                  whose task is no longer active, kill it. Idempotent;
+                  exits 0 when there is nothing to do. Short-circuits when
+                  the kill-switch flag is missing.
+  replenish-hook  Stop-hook variant of reconcile: reads context from env
+                  ($SKYBOT_INBOX, $WT_PROJECT, $WT_FLEET_FLOOR), no-ops in
+                  non-coordinator sessions, skips when the budget advice
+                  is tighten/ration, and never propagates errors.
+  enable          Create the kill-switch flag (the reconciler resumes
+                  spawning on the next pass).
+  disable         Remove the kill-switch flag (the reconciler stops
+                  spawning; running sessions are left alone).
+  status          Print the kill-switch state plus the list of slugs whose
+                  session is currently alive.
 
 Flags (reconcile):
   --max-workers N   Override concurrency cap. Beats spore.toml.
@@ -51,6 +57,8 @@ func runFleet(args []string) error {
 		return nil
 	case "reconcile":
 		return runFleetReconcile(rest)
+	case "replenish-hook":
+		return runFleetReplenishHook(rest)
 	case "enable":
 		return runFleetEnable(rest)
 	case "disable":
@@ -183,5 +191,92 @@ func resolveMaxWorkers(flagVal int, projectRoot string) (int, error) {
 		}
 		return n, nil
 	}
+	if env := os.Getenv("WT_FLEET_FLOOR"); env != "" {
+		n, err := strconv.Atoi(env)
+		if err != nil || n < 1 {
+			return 0, fmt.Errorf("WT_FLEET_FLOOR=%q: want positive integer", env)
+		}
+		return n, nil
+	}
 	return fleet.LoadMaxWorkers(projectRoot)
+}
+
+// runFleetReplenishHook is the Stop-hook entry point for `spore fleet
+// replenish-hook`. It reads context entirely from the environment so a
+// settings.json hook entry can be a static string (no slug
+// interpolation). Behaviour mirrors the bash cmd_fleet_replenish_hook
+// shim:
+//
+//   - swallow stdin (claude-code feeds the hook payload there)
+//   - no-op when the firing session is not the coordinator (per
+//     $SKYBOT_INBOX vs $SKYHELM_STATE_DIR / $SPORE_COORDINATOR_STATE_DIR)
+//   - skip the spawn pass when budget advice is "tighten" / "ration"
+//   - never exit non-zero: a failing reconcile must not block the Stop
+//     hook
+//
+// $WT_PROJECT and $WT_FLEET_FLOOR are read by the helpers above
+// (resolveMaxWorkers honours $WT_FLEET_FLOOR; project root is the
+// firing session's cwd, which is the per-project coordinator's tree).
+func runFleetReplenishHook(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: spore fleet replenish-hook (no args; reads env)")
+	}
+	_, _ = io.Copy(io.Discard, os.Stdin)
+
+	if !isCoordinatorSession() {
+		return nil
+	}
+
+	if a := budget.Advice(); a == "tighten" || a == "ration" {
+		fmt.Fprintf(os.Stderr, "replenish-hook: skipping reconcile (budget advice=%s)\n", a)
+		return nil
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "replenish-hook:", err)
+		return nil
+	}
+	resolved, err := resolveMaxWorkers(0, root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "replenish-hook:", err)
+		return nil
+	}
+
+	res, err := fleet.Reconcile(fleet.Config{
+		TasksDir:    "tasks",
+		ProjectRoot: root,
+		MaxWorkers:  resolved,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "replenish-hook:", err)
+		return nil
+	}
+	if res.Disabled {
+		return nil
+	}
+	fmt.Printf("replenish-hook: active=%d spawned=%d kept=%d reaped=%d skipped=%d\n",
+		len(res.Active), len(res.Spawned), len(res.Kept), len(res.Reaped), len(res.Skipped))
+	return nil
+}
+
+// isCoordinatorSession reports whether $SKYBOT_INBOX points under the
+// coordinator state dir (matching the bash self_id == "coordinator" test).
+// Honours both SKYHELM_STATE_DIR (legacy) and SPORE_COORDINATOR_STATE_DIR
+// (kernel-neutral) so the hook works during the rename transition.
+func isCoordinatorSession() bool {
+	inbox := os.Getenv("SKYBOT_INBOX")
+	if inbox == "" {
+		return false
+	}
+	for _, key := range []string{"SKYHELM_STATE_DIR", "SPORE_COORDINATOR_STATE_DIR"} {
+		root := strings.TrimRight(os.Getenv(key), "/")
+		if root == "" {
+			continue
+		}
+		if inbox == root || strings.HasPrefix(inbox, root+"/") {
+			return true
+		}
+	}
+	return false
 }
