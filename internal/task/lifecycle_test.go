@@ -96,7 +96,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		t.Error("Pause from paused should error, got nil")
 	}
 
-	if err := Done(tasksDir, slug); err != nil {
+	if err := Done(tasksDir, slug, false); err != nil {
 		t.Fatalf("Done: %v", err)
 	}
 	if status := readStatus(t, taskPath); status != "done" {
@@ -112,7 +112,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		t.Errorf("tmux session %q still alive after Done", session)
 	}
 
-	if err := Done(tasksDir, slug); err != nil {
+	if err := Done(tasksDir, slug, false); err != nil {
 		t.Errorf("Done on already-done task should be no-op, got %v", err)
 	}
 }
@@ -172,7 +172,7 @@ func TestStartResumesPaused(t *testing.T) {
 		t.Errorf("tmux has-session after resume: %v", err)
 	}
 
-	if err := Done(tasksDir, slug); err != nil {
+	if err := Done(tasksDir, slug, false); err != nil {
 		t.Fatalf("Done: %v", err)
 	}
 }
@@ -225,7 +225,7 @@ func TestDoneRefusesBogusEvidence(t *testing.T) {
 	evidence.ContractStart = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	t.Cleanup(func() { evidence.ContractStart = origStart })
 
-	if err := Done(tasksDir, "x"); err == nil {
+	if err := Done(tasksDir, "x", false); err == nil {
 		t.Fatal("Done with bogus evidence should error, got nil")
 	}
 	if status := readStatus(t, taskPath); status != "active" {
@@ -246,7 +246,7 @@ func TestDoneAllowsRealImpl(t *testing.T) {
 	evidence.ContractStart = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	t.Cleanup(func() { evidence.ContractStart = origStart })
 
-	if err := Done(tasksDir, "x"); err != nil {
+	if err := Done(tasksDir, "x", false); err != nil {
 		t.Fatalf("Done with real-impl evidence: %v", err)
 	}
 	if status := readStatus(t, taskPath); status != "done" {
@@ -267,11 +267,194 @@ func TestDoneWarnOnlyAllowsBlockedVerdict(t *testing.T) {
 	evidence.ContractStart = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	t.Cleanup(func() { evidence.ContractStart = origStart })
 
-	if err := Done(tasksDir, "x"); err != nil {
+	if err := Done(tasksDir, "x", false); err != nil {
 		t.Fatalf("Done in warn-only mode should pass, got %v", err)
 	}
 	if status := readStatus(t, taskPath); status != "done" {
 		t.Errorf("status = %q want done (warn-only)", status)
+	}
+}
+
+func TestDoneRefusesUnreadInbox(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Chdir(filepath.Dir(tasksDir))
+
+	inbox := filepath.Join(state, "spore", filepath.Base(filepath.Dir(tasksDir)), "x", "inbox")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inbox, "1.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Done(tasksDir, "x", false)
+	if err == nil {
+		t.Fatal("Done should refuse with unread inbox, got nil")
+	}
+	if !strings.Contains(err.Error(), "unread inbox") {
+		t.Errorf("error %q should mention 'unread inbox'", err)
+	}
+	if readStatus(t, taskPath) != "active" {
+		t.Error("status should remain active")
+	}
+}
+
+func TestDoneForceBypassesInbox(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Chdir(filepath.Dir(tasksDir))
+
+	inbox := filepath.Join(state, "spore", filepath.Base(filepath.Dir(tasksDir)), "x", "inbox")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inbox, "1.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Done(tasksDir, "x", true); err != nil {
+		t.Fatalf("Done --force should bypass inbox gate: %v", err)
+	}
+	if readStatus(t, taskPath) != "done" {
+		t.Error("status should be done")
+	}
+}
+
+func TestPauseRefusesUnreadInbox(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Chdir(filepath.Dir(tasksDir))
+
+	inbox := filepath.Join(state, "spore", filepath.Base(filepath.Dir(tasksDir)), "x", "inbox")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inbox, "1.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Pause(tasksDir, "x")
+	if err == nil {
+		t.Fatal("Pause should refuse with unread inbox, got nil")
+	}
+	if !strings.Contains(err.Error(), "unread inbox") {
+		t.Errorf("error %q should mention 'unread inbox'", err)
+	}
+}
+
+func TestBlockRefusesUnreadInbox(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskPath := filepath.Join(tasksDir, "x.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Chdir(filepath.Dir(tasksDir))
+
+	inbox := filepath.Join(state, "spore", filepath.Base(filepath.Dir(tasksDir)), "x", "inbox")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inbox, "1.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Block(tasksDir, "x")
+	if err == nil {
+		t.Fatal("Block should refuse with unread inbox, got nil")
+	}
+	if !strings.Contains(err.Error(), "unread inbox") {
+		t.Errorf("error %q should mention 'unread inbox'", err)
+	}
+}
+
+func TestDoneRefusesUnmergedCommits(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	repo := t.TempDir()
+	t.Chdir(repo)
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	runGit(t, repo, "checkout", "-q", "-b", "wt/x")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "feature")
+	runGit(t, repo, "checkout", "-q", "main")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Done(tasksDir, "x", false)
+	if err == nil {
+		t.Fatal("Done should refuse with unmerged commits, got nil")
+	}
+	if !strings.Contains(err.Error(), "unmerged commit") {
+		t.Errorf("error %q should mention 'unmerged commit'", err)
+	}
+}
+
+func TestDoneForceBypassesUnmergedCommits(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	repo := t.TempDir()
+	t.Chdir(repo)
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	runGit(t, repo, "checkout", "-q", "-b", "wt/x")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "feature")
+	runGit(t, repo, "checkout", "-q", "main")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Done(tasksDir, "x", true); err != nil {
+		t.Fatalf("Done --force should bypass unmerged gate: %v", err)
+	}
+	if readStatus(t, filepath.Join(tasksDir, "x.md")) != "done" {
+		t.Error("status should be done")
 	}
 }
 
