@@ -13,12 +13,6 @@ project into a SaaS workflow.
 budget tracking, and evidence-gated task closes are in place and are
 being dogfooded on live projects.
 
-## Choose a Path
-
-| If you want to understand Spore | If you want to build or extend it |
-|---------------------------------|-----------------------------------|
-| Read [What It Feels Like](#what-it-feels-like), then [Operator Flow](#operator-flow). | Read [Developer Entry](#developer-entry), then [Architecture](#architecture). |
-
 ## What It Feels Like
 
 You keep your repo, your tests, your shell, and your git history.
