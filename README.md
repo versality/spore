@@ -71,15 +71,57 @@ Worker sessions live under tmux names like
 `spore/<project>/<slug>`. The coordinator session is
 `spore/<project>/coordinator`.
 
-Fresh-server install is available separately:
+Fresh-server install uses nixos-anywhere:
 
 ```sh
 spore infect 203.0.113.7 --ssh-key ~/.ssh/id_ed25519
 ```
 
-`spore infect` wraps nixos-anywhere and wipes the target host. See
-[docs/infect.md](docs/infect.md) for flags and prerequisites. The
-planned one-command "infect and copy this repo" flow is tracked in
+`spore infect` is destructive: it wipes the target host and installs
+NixOS over SSH. Point it only at a freshly provisioned Linux VM that is
+root-reachable over SSH, can kexec, and has no data worth keeping. The
+machine running spore needs Nix with flakes enabled plus `ssh` and
+`ssh-keygen` on PATH.
+
+The `--ssh-key` value is the private key nixos-anywhere uses to log
+into the target during install. Its `.pub` sibling must exist because
+spore writes that public key into the installed system for post-install
+root SSH access:
+
+```sh
+ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub
+```
+
+By default spore stages the bundled minimal flake from
+`bootstrap/flake/`. Pass `--flake <path-or-attr>` when the target needs
+your own NixOS config, disk layout, packages, or host settings:
+
+```sh
+spore infect 203.0.113.7 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --flake ./nixos#web-1
+```
+
+The intended kickstart path is one command that installs NixOS, copies
+the current repo to the box, and leaves the operator ready to run
+`spore bootstrap` there. Today `spore infect` only performs the NixOS
+install and SSH smoke check. Until repo-copy lands, the concise manual
+handoff is:
+
+```sh
+# local: copy this checkout, including .git, after infect succeeds
+rsync -az --exclude='.env*' --exclude='node_modules/' --exclude='tmp/' \
+  /path/to/project/ root@203.0.113.7:/root/project/
+
+# remote: install runtime tools, then bootstrap inside the copied repo
+ssh root@203.0.113.7 \
+  'nix profile install github:versality/spore nixpkgs#git \
+   --extra-experimental-features "nix-command flakes"'
+ssh -t root@203.0.113.7 'cd /root/project && spore bootstrap'
+```
+
+See [docs/infect.md](docs/infect.md) for full flag behavior and
+failure hints. The remaining one-command repo-copy work is tracked in
 [docs/todo/kickstart-onecommand.md](docs/todo/kickstart-onecommand.md).
 
 ## Developer Entry
