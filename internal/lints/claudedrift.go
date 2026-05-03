@@ -11,12 +11,13 @@ import (
 	"github.com/versality/spore/internal/composer"
 )
 
-// ClaudeDrift fails when a consumer's on-disk target file diverges
-// from what the composer would render. The composer is the source of
-// truth; rendered files are derived. To opt a consumer in, add a line
-// "# target: <repo-relative-path>" anywhere in <ConsumersDir>/<name>.txt
-// (composer skips comment lines so the directive is inert during
-// rendering). Consumers without a target directive are skipped.
+// ClaudeDrift fails when a consumer's on-disk instruction target
+// diverges from what the composer would render. The composer is the
+// source of truth; rendered files are derived. To opt a consumer in,
+// add one or more "# target: <repo-relative-path>" lines anywhere in
+// <ConsumersDir>/<name>.txt (composer skips comment lines so the
+// directive is inert during rendering). Consumers without a target
+// directive are skipped.
 type ClaudeDrift struct {
 	ConsumersDir string
 	RulesDir     string
@@ -56,45 +57,48 @@ func (l ClaudeDrift) Run(root string) ([]Issue, error) {
 		}
 		name := strings.TrimSuffix(e.Name(), ".txt")
 		consumerPath := filepath.Join(absConsumers, e.Name())
-		target, err := readTargetDirective(consumerPath)
+		targets, err := readTargetDirectives(consumerPath)
 		if err != nil {
 			return nil, err
 		}
-		if target == "" {
+		if len(targets) == 0 {
 			continue
 		}
 		rendered, err := composer.Compose(absRules, consumerPath, opts)
 		if err != nil {
 			return nil, fmt.Errorf("compose %s: %w", name, err)
 		}
-		targetPath := filepath.Join(root, target)
-		on, err := os.ReadFile(targetPath)
-		if err != nil {
-			if os.IsNotExist(err) {
+		for _, target := range targets {
+			targetPath := filepath.Join(root, target)
+			on, err := os.ReadFile(targetPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					issues = append(issues, Issue{
+						Path:    target,
+						Message: fmt.Sprintf("missing render target for consumer %q", name),
+					})
+					continue
+				}
+				return nil, err
+			}
+			if string(on) != rendered {
 				issues = append(issues, Issue{
 					Path:    target,
-					Message: fmt.Sprintf("missing render target for consumer %q", name),
+					Message: fmt.Sprintf("drift vs composer (consumer %q); rerun render", name),
 				})
-				continue
 			}
-			return nil, err
-		}
-		if string(on) != rendered {
-			issues = append(issues, Issue{
-				Path:    target,
-				Message: fmt.Sprintf("drift vs composer (consumer %q); rerun render", name),
-			})
 		}
 	}
 	return issues, nil
 }
 
-func readTargetDirective(path string) (string, error) {
+func readTargetDirectives(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer f.Close()
+	var targets []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -103,8 +107,11 @@ func readTargetDirective(path string) (string, error) {
 		}
 		body := strings.TrimSpace(strings.TrimPrefix(line, "#"))
 		if v, ok := strings.CutPrefix(body, "target:"); ok {
-			return strings.TrimSpace(v), nil
+			target := strings.TrimSpace(v)
+			if target != "" {
+				targets = append(targets, target)
+			}
 		}
 	}
-	return "", scanner.Err()
+	return targets, scanner.Err()
 }

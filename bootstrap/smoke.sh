@@ -3,7 +3,7 @@
 # fleet up / one-task / fleet down cycle.
 #
 # Creates a fresh git repo + flake.nix + justfile + README.md +
-# CLAUDE.md in a tempdir, pre-populates the operator-facing
+# instruction files in a tempdir, pre-populates the operator-facing
 # sentinels (info-gathered.json, readme-followed.json) and the
 # alignment criteria, then walks `spore bootstrap` to
 # worker-fleet-ready. Then mints + starts a task, brings the fleet
@@ -55,10 +55,9 @@ cat > README.md <<'EOF'
 To use: run `just check`.
 EOF
 cat > CLAUDE.md <<'EOF'
-# CLAUDE.md
-
 Smoke project. Secrets live in `.envrc` (no values stored).
 EOF
+cp CLAUDE.md AGENTS.md
 cat > .envrc <<'EOF'
 export FOO=bar
 EOF
@@ -300,13 +299,19 @@ Run `spore lint`.
 EOF
 cat > "$project_root/rules/consumers/test.txt" <<'EOF'
 # target: CLAUDE.md
+# target: AGENTS.md
 test/header
 test/body
 EOF
 
 "$spore_bin" compose --consumer test > "$project_root/CLAUDE.md"
+cp "$project_root/CLAUDE.md" "$project_root/AGENTS.md"
 if ! diff -u <("$spore_bin" compose --consumer test) "$project_root/CLAUDE.md"; then
   echo "smoke: compose: rendered output drifts from on-disk CLAUDE.md" >&2
+  exit 1
+fi
+if ! diff -u "$project_root/CLAUDE.md" "$project_root/AGENTS.md"; then
+  echo "smoke: compose: AGENTS.md mirror drifts from CLAUDE.md" >&2
   exit 1
 fi
 echo "smoke: compose ok"

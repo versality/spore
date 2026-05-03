@@ -60,7 +60,7 @@ func runAlign(args []string) error {
 			return err
 		}
 		fmt.Printf("alignment flipped off for %s\n", paths.Project)
-		fmt.Println("rerun `spore compose` to drop the alignment-mode rule from CLAUDE.md.")
+		fmt.Println("rerun `spore compose` to drop the alignment-mode rule from the instruction files.")
 		return nil
 	case "note":
 		if len(args) != 2 {

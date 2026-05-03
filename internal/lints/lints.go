@@ -42,6 +42,7 @@ func Default() []Lint {
 		CommentNoise{},
 		Decoration{},
 		ClaudeDrift{ConsumersDir: "rules/consumers", RulesDir: "rules"},
+		AgentMirror{},
 		TaskEvidence{TasksDir: "tasks"},
 	}
 }

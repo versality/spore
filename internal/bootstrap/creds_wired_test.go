@@ -14,7 +14,7 @@ func TestDetectCredsWired(t *testing.T) {
 		wantNote string
 	}{
 		{
-			name:     "no secrets, no CLAUDE.md needed",
+			name:     "no secrets, no instruction file needed",
 			files:    map[string]string{"flake.nix": "{}\n"},
 			wantNote: "no secret surface detected",
 		},
@@ -25,6 +25,14 @@ func TestDetectCredsWired(t *testing.T) {
 				"CLAUDE.md": "Secrets live in `.env`.\n",
 			},
 			wantNote: "documented",
+		},
+		{
+			name: ".env documented in AGENTS.md",
+			files: map[string]string{
+				".env":      "FOO=bar\n",
+				"AGENTS.md": "Secrets live in `.env`.\n",
+			},
+			wantNote: "documented in AGENTS.md",
 		},
 		{
 			name: ".envrc documented as environment variable",
@@ -43,19 +51,19 @@ func TestDetectCredsWired(t *testing.T) {
 			wantNote: "documented",
 		},
 		{
-			name: "secret surface but CLAUDE.md silent",
+			name: "secret surface but instructions silent",
 			files: map[string]string{
 				".env":      "FOO=bar\n",
 				"CLAUDE.md": "lorem ipsum dolor sit amet.\n",
 			},
-			wantErr: "CLAUDE.md mentions none",
+			wantErr: "agent instructions mention none",
 		},
 		{
-			name: "secret surface, CLAUDE.md missing",
+			name: "secret surface, instructions missing",
 			files: map[string]string{
 				".env": "FOO=bar\n",
 			},
-			wantErr: "CLAUDE.md is absent",
+			wantErr: "agent instructions are absent",
 		},
 	}
 	for _, tc := range cases {

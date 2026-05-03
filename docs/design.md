@@ -9,7 +9,7 @@ top-level README plus the per-stage runbooks under `bootstrap/stages/`.
 spore was extracted from a personal NixOS + home-manager flake that
 grew an LLM-agent harness incrementally. The upstream harness landed
 in one commit on 2026-04-14 ("Add harness") and accreted heavily
-through 2026-04-21: a CLAUDE.md rule pool plus composer,
+through 2026-04-21: an agent-instruction rule pool plus composer,
 several drift / file-size / comment-noise / em-dash lints, an
 `install-hooks` recipe wiring `core.hooksPath` for each worktree.
 Each lint exists because the agent made a specific mistake first;
@@ -32,8 +32,9 @@ Drop-in substrate, generic enough to plant in any project repo.
 - Worktree-task driver. Port the upstream's existing `wt-go` (Go,
   stdlib-only where possible) renamed and stripped of Nix-specific
   paths.
-- CLAUDE.md tier system + composer. Pool of rule fragments composed
-  into a per-project `CLAUDE.md` plus per-tool mirrors. A drift gate
+- Instruction tier system + composer. Pool of rule fragments composed
+  into per-project `CLAUDE.md` / `AGENTS.md` files plus per-tool
+  mirrors. A drift gate
   prevents the rendered file from diverging from the pool silently.
 - Hook patterns. `Stop` (auto-commit on green), `PreToolUse`
   (forbidden-command guard), with a pluggable shape so each project
@@ -50,7 +51,7 @@ operator from an unprepared repo to a worker-ready one.
 
 - Map the project. Detect language, test runner, CI shape, secrets
   layer (or its absence).
-- Generate the initial `CLAUDE.md`. Skeleton plus per-language
+- Generate the initial instruction files. Skeleton plus per-language
   fragments pulled from the rule pool. Operator edits before commit.
 - Wire the validation gate. `make check`, `npm test`, `cargo check`,
   whichever shape the project actually uses. The gate must be green
@@ -108,7 +109,7 @@ they prove generic across more than one project?
 
 ### Specificity tax
 
-Most rules in the upstream's root `CLAUDE.md` exist because the agent
+Most rules in the upstream's root instruction files exist because the agent
 made specific mistakes there. A generic template ships infrastructure
 (rule pool, lints framework, drift gate) but not the rules
 themselves. Rules grow organically per project, the same way they
@@ -132,7 +133,7 @@ Defaults are `dispatcher` / `runner`; the operator can accept the
 defaults or pick anything (`foreman` / `crew`, `pilot` / `cell`,
 `captain` / `hand`, or anything fitting the project's voice).
 
-The picked names get baked into the project's `CLAUDE.md`, the task
+The picked names get baked into the project's instruction files, the task
 driver's CLI, and the rendered hook plumbing. Renaming after the
 fact is not free but is a recipe, not a fork.
 

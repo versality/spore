@@ -57,8 +57,8 @@ will refuse to start.
 ## Bootstrap stage hook
 
 The `creds-wired` stage of `spore bootstrap` checks that any secret
-surface it finds is documented in `CLAUDE.md`; it does not auto-wire
-MCP servers. The manual checklist above is the contract: render
+surface it finds is documented in the agent instructions; it does not
+auto-wire MCP servers. The manual checklist above is the contract: render
 placeholders to real values, copy to the runtime's expected path,
 restart the agent.
 

@@ -45,7 +45,7 @@ failed) plus the recorded notes. The state file lives at
 The Go detector handles this on its own: it inspects the project
 root for known markers (flake.nix, Cargo.toml, go.mod, package.json,
 pyproject.toml, Gemfile, deps.edn, pom.xml, Makefile, justfile) and
-drops a starter CLAUDE.md if absent. Do not pre-empt it.
+drops starter instruction files if absent. Do not pre-empt it.
 
 ### `info-gathered`
 
@@ -107,9 +107,10 @@ is genuinely unreachable in this environment.
 ### `creds-wired`
 
 The detector checks for any obvious secret surface (`.env`,
-`.envrc`, `secrets/`, `.env.example`, `*.age`) and that CLAUDE.md
-mentions how the agent obtains values. If the blocker fires, edit
-CLAUDE.md to document the secret surface (creds-broker reference,
+`.envrc`, `secrets/`, `.env.example`, `*.age`) and that agent
+instructions mention how the agent obtains values. If the blocker
+fires, edit the instruction files to document the secret surface
+(creds-broker reference,
 `.envrc` shape, agenix path, etc) before re-running. Never paste
 the value itself.
 

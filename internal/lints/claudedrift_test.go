@@ -31,6 +31,21 @@ func TestClaudeDrift_NoDrift(t *testing.T) {
 	}
 }
 
+func TestClaudeDrift_MultipleTargets(t *testing.T) {
+	root := setupDriftRepo(t, map[string]string{
+		"rules/consumers/host.txt": "# target: CLAUDE.md\n# target: AGENTS.md\ncore/a\n",
+		"CLAUDE.md":                "# a body\n",
+		"AGENTS.md":                "stale content\n",
+	})
+	issues, err := ClaudeDrift{ConsumersDir: "rules/consumers", RulesDir: "rules"}.Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(issues) != 1 || issues[0].Path != "AGENTS.md" {
+		t.Fatalf("expected one AGENTS.md drift issue, got %v", issues)
+	}
+}
+
 func TestClaudeDrift_DetectsDrift(t *testing.T) {
 	root := setupDriftRepo(t, map[string]string{
 		"rules/consumers/host.txt": "# target: HOST.md\ncore/a\ncore/b\n",

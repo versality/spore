@@ -1,8 +1,8 @@
 # Stage: repo-mapped
 
 The first gate. Spore inspects the project root for build-system
-markers and, if no `CLAUDE.md` exists, drops a starter that points
-at `spore compose`.
+markers and, if instruction files are missing, drops starters that
+point at `spore compose`.
 
 ## Detect
 
@@ -23,8 +23,9 @@ at `spore compose`.
 ## Exit criteria
 
 1. At least one marker present at the project root.
-2. `CLAUDE.md` exists. The detector writes a starter when absent;
-   the operator edits it during the rest of the bootstrap.
+2. `CLAUDE.md` and `AGENTS.md` exist. The detector writes starters
+   when absent; the operator edits them during the rest of the
+   bootstrap.
 
 ## Blocker
 
@@ -35,5 +36,5 @@ yet recognise (extend `repoMarkers` in `repo_mapped.go`).
 
 ## Notes recorded
 
-`detected: <comma-separated languages>; wrote starter CLAUDE.md`
+`detected: <comma-separated languages>; wrote starter CLAUDE.md / AGENTS.md`
 (when applicable).
