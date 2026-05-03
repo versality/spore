@@ -53,3 +53,31 @@ func TestTellWritesJSON(t *testing.T) {
 		t.Error("ts is empty")
 	}
 }
+
+func TestWriteUniqueInboxFilePreservesCollisions(t *testing.T) {
+	dir := t.TempDir()
+	body1 := []byte(`{"msg":"first"}`)
+	body2 := []byte(`{"msg":"second"}`)
+
+	if err := writeUniqueInboxFile(dir, 1234, body1); err != nil {
+		t.Fatalf("first writeUniqueInboxFile: %v", err)
+	}
+	if err := writeUniqueInboxFile(dir, 1234, body2); err != nil {
+		t.Fatalf("second writeUniqueInboxFile: %v", err)
+	}
+
+	first, err := os.ReadFile(filepath.Join(dir, "1234.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.ReadFile(filepath.Join(dir, "1234-1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) != string(body1) {
+		t.Errorf("first body = %s, want %s", first, body1)
+	}
+	if string(second) != string(body2) {
+		t.Errorf("second body = %s, want %s", second, body2)
+	}
+}

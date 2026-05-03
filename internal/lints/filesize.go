@@ -14,12 +14,14 @@ type FileSize struct {
 	Limit int
 }
 
+const defaultFileSizeLimit = 800
+
 func (FileSize) Name() string { return "filesize" }
 
 func (l FileSize) Run(root string) ([]Issue, error) {
 	limit := l.Limit
 	if limit <= 0 {
-		limit = 500
+		limit = defaultFileSizeLimit
 	}
 	files, err := listFiles(root, sourceExts)
 	if err != nil {

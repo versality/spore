@@ -55,7 +55,7 @@ func TestRoundTrip(t *testing.T) {
 				Title:   "y",
 				Created: "2026-01-02T00:00:00Z",
 				Project: "spore",
-				Host:    "localhost",
+				Host:    "example-host",
 				Agent:   "claude",
 			},
 			body: []byte("\nlonger\nbody\n"),

@@ -94,7 +94,7 @@ func TestNotifyCoordinator_CreatesInboxDirs(t *testing.T) {
 
 func TestNotifyCoordinatorEnv_NoProjectIsNoop(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "")
 	t.Setenv("SKYBOT_INBOX", "")
 
@@ -109,7 +109,7 @@ func TestNotifyCoordinatorEnv_NoProjectIsNoop(t *testing.T) {
 
 func TestNotifyCoordinatorEnv_PokesProjectInbox(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
 	t.Setenv("SKYBOT_INBOX", filepath.Join(t.TempDir(), "rower-slug", "inbox"))
 
@@ -132,9 +132,9 @@ func TestNotifyCoordinatorEnv_PokesProjectInbox(t *testing.T) {
 	}
 }
 
-func TestNotifyCoordinatorEnv_CoordinatorSelfPokeIsNoop(t *testing.T) {
+func TestNotifyCoordinatorEnv_SelfPokeIsNoop(t *testing.T) {
 	state := t.TempDir()
-	t.Setenv("SKYHELM_STATE_DIR", state)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
 	inbox := filepath.Join(state, "myproject", "inbox")
 	t.Setenv("SKYBOT_INBOX", inbox)

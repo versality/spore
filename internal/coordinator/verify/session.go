@@ -15,11 +15,7 @@ func findSessionFile(slug, projectsDir string) string {
 		home, _ := os.UserHomeDir()
 		projectsDir = filepath.Join(home, ".claude", "projects")
 	}
-	active := filepath.Join(projectsDir, "-home-sky-consumer-config--worktrees-"+slug)
-	if f := newestJSONL(active); f != "" {
-		return f
-	}
-	entries, err := filepath.Glob(active + ".archived-*")
+	entries, err := filepath.Glob(filepath.Join(projectsDir, "*--worktrees-"+slug+"*"))
 	if err != nil || len(entries) == 0 {
 		return ""
 	}
@@ -151,10 +147,10 @@ func analyzeSession(path string) (finalTool, finalText, lastTS string, gitCommit
 			if p == "" {
 				continue
 			}
-			if strings.HasPrefix(p, "/home/sky/consumer-config") || strings.HasPrefix(p, "~/consumer-config") {
+			if strings.HasPrefix(p, "/work/consumer-config") || strings.HasPrefix(p, "~/consumer-config") {
 				continue
 			}
-			if strings.HasPrefix(p, "~/projects/") || strings.HasPrefix(p, "/home/sky/projects/") {
+			if strings.HasPrefix(p, "~/projects/") || strings.HasPrefix(p, "/work/projects/") {
 				crossRepoPath = p
 			} else if crossRepoPath == "" {
 				crossRepoPath = p

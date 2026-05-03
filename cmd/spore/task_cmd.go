@@ -28,7 +28,7 @@ Subcommands:
   pause <slug>                 Flip active task to paused (no teardown).
   block <slug>                 Flip active task to blocked (no teardown).
   done <slug> [--force]         Flip to done, kill tmux + remove worktree.
-  merge <slug>                 Fast-forward merge wt/<slug> into main.
+  merge <slug>                 Merge wt/<slug> into main; push origin main:main only.
   tell <slug> <message>        Append a message to the slug's inbox dir.
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.

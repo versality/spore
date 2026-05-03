@@ -449,4 +449,3 @@ func readAll(r *os.File) (string, error) {
 	}
 	return b.String(), nil
 }
-

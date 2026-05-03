@@ -51,8 +51,8 @@ func newTestRepo(t *testing.T, files map[string]string) string {
 
 func TestListFiles_FiltersByExt(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
-		"a.go":   "package a\n",
-		"b.md":   "doc\n",
+		"a.go":     "package a\n",
+		"b.md":     "doc\n",
 		"sub/c.sh": "echo hi\n",
 	})
 	got, err := listFiles(root, sourceExts)

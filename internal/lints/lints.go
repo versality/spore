@@ -38,7 +38,7 @@ type Lint interface {
 func Default() []Lint {
 	return []Lint{
 		EmDash{},
-		FileSize{Limit: 500},
+		FileSize{Limit: defaultFileSizeLimit},
 		CommentNoise{},
 		Decoration{},
 		ClaudeDrift{ConsumersDir: "rules/consumers", RulesDir: "rules"},
