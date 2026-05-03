@@ -31,14 +31,14 @@ var repoMarkers = map[string]string{
 	"justfile":       "just",
 }
 
-// starterClaude is the minimum CLAUDE.md spore drops when the project
-// has none. It points at `spore compose` for the real per-project
-// rendering; this is the seed.
-const starterClaude = `# CLAUDE.md
+// starterInstructions is the minimum agent-instruction file spore
+// drops when the project has none. CLAUDE.md and AGENTS.md receive the
+// same bytes so Claude Code and Codex start from the same contract.
+const starterInstructions = `# Agent Instructions
 
 This project uses spore for agent governance. Run ` + "`spore compose --consumer <name>`" + ` to
-render the per-project rule set into this file once a consumer list
-exists under ` + "`rules/consumers/`" + `.
+render the per-project rule set into CLAUDE.md, then mirror it to
+AGENTS.md once a consumer list exists under ` + "`rules/consumers/`" + `.
 
 ## Validation
 
@@ -65,16 +65,9 @@ func detectRepoMapped(root string) (string, error) {
 	}
 	sort.Strings(hits)
 
-	claudePath := filepath.Join(root, "CLAUDE.md")
-	wroteStarter := false
-	if _, err := os.Stat(claudePath); err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		if err := os.WriteFile(claudePath, []byte(starterClaude), 0o644); err != nil {
-			return "", fmt.Errorf("write starter CLAUDE.md: %w", err)
-		}
-		wroteStarter = true
+	wrote, err := ensureInstructionFiles(root)
+	if err != nil {
+		return "", err
 	}
 	skills, err := install.Install(root, spore.BundledSkills, "bootstrap/skills")
 	if err != nil {
@@ -82,11 +75,48 @@ func detectRepoMapped(root string) (string, error) {
 	}
 
 	notes := "detected: " + strings.Join(hits, ",")
-	if wroteStarter {
-		notes += "; wrote starter CLAUDE.md"
+	if len(wrote) > 0 {
+		notes += "; wrote starter " + strings.Join(wrote, " / ")
 	}
 	if len(skills.Written) > 0 {
 		notes += fmt.Sprintf("; installed %d skill file(s)", len(skills.Written))
 	}
 	return notes, nil
+}
+
+func ensureInstructionFiles(root string) ([]string, error) {
+	claudePath := filepath.Join(root, "CLAUDE.md")
+	agentsPath := filepath.Join(root, "AGENTS.md")
+	claude, claudeErr := os.ReadFile(claudePath)
+	agents, agentsErr := os.ReadFile(agentsPath)
+
+	if claudeErr != nil && !os.IsNotExist(claudeErr) {
+		return nil, claudeErr
+	}
+	if agentsErr != nil && !os.IsNotExist(agentsErr) {
+		return nil, agentsErr
+	}
+
+	var wrote []string
+	switch {
+	case os.IsNotExist(claudeErr) && os.IsNotExist(agentsErr):
+		if err := os.WriteFile(claudePath, []byte(starterInstructions), 0o644); err != nil {
+			return nil, fmt.Errorf("write starter CLAUDE.md: %w", err)
+		}
+		if err := os.WriteFile(agentsPath, []byte(starterInstructions), 0o644); err != nil {
+			return nil, fmt.Errorf("write starter AGENTS.md: %w", err)
+		}
+		wrote = append(wrote, "CLAUDE.md", "AGENTS.md")
+	case os.IsNotExist(claudeErr):
+		if err := os.WriteFile(claudePath, agents, 0o644); err != nil {
+			return nil, fmt.Errorf("write starter CLAUDE.md: %w", err)
+		}
+		wrote = append(wrote, "CLAUDE.md")
+	case os.IsNotExist(agentsErr):
+		if err := os.WriteFile(agentsPath, claude, 0o644); err != nil {
+			return nil, fmt.Errorf("write starter AGENTS.md: %w", err)
+		}
+		wrote = append(wrote, "AGENTS.md")
+	}
+	return wrote, nil
 }

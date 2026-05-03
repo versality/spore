@@ -12,8 +12,9 @@ issues.
 - `filesize` - source files under 500 lines.
 - `comment-noise` - section labels, restated bindings, undated
   TODOs, change-history comments.
-- `claude-drift` - rendered `CLAUDE.md` consistent with composer
-  output, when `rules/consumers/` is set up.
+- `claude-drift` - rendered instruction files consistent with
+  composer output, when `rules/consumers/` is set up.
+- `agents-mirror` - `AGENTS.md` mirrors every tracked `CLAUDE.md`.
 
 ## Exit criteria
 
@@ -29,6 +30,6 @@ Every lint reports zero issues.
 
 ## Notes recorded
 
-`emdash: 0, filesize: 0, comment-noise: 0, claude-drift: 0` (or
-whatever counts the lints reported). Useful in the audit trail
-when comparing across bootstraps.
+`emdash: 0, filesize: 0, comment-noise: 0, claude-drift: 0,
+agents-mirror: 0` (or whatever counts the lints reported). Useful in
+the audit trail when comparing across bootstraps.

@@ -41,4 +41,4 @@ You exit alignment mode when all three are true:
 
 Defaults are configurable per project via `spore.toml`
 (`[align]` section). Once you flip out, the next composer render
-drops this block from `CLAUDE.md`.
+drops this block from the instruction files.

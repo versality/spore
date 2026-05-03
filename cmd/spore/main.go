@@ -1,6 +1,6 @@
-// Command spore is the kernel CLI: compose CLAUDE.md from a rule
-// pool, drive the bootstrap stage gates, manage tasks, run lints and
-// hooks, and wrap nixos-anywhere for fresh-server installs.
+// Command spore is the kernel CLI: compose agent instructions from a
+// rule pool, drive the bootstrap stage gates, manage tasks, run lints
+// and hooks, and wrap nixos-anywhere for fresh-server installs.
 package main
 
 import (
@@ -29,7 +29,7 @@ Usage:
 
 Commands:
   version    Print the spore version.
-  compose    Render a CLAUDE.md from a consumer's rule list.
+  compose    Render agent instructions from a consumer's rule list.
   task       Manage tasks (new, ls, start, pause, block, done, tell).
   fleet      Run the worker fleet against the task queue (up/down/status).
   align      Track and exit the pilot-agent alignment period.

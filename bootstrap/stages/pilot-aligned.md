@@ -27,7 +27,7 @@ spore bootstrap                  # re-enter the bootstrap; advance
 
 `spore align flip` writes the sentinel that turns alignment mode
 off. The next compose drops the alignment-mode rule from the
-project's CLAUDE.md.
+project's instruction files.
 
 ## Why this stage exists
 

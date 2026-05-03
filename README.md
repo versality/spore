@@ -187,8 +187,8 @@ Main extension points:
 - [internal/hooks/](internal/hooks/) emits and runs Claude Code hook
   bindings.
 - [internal/lints/](internal/lints/) holds portable repo lints.
-- [internal/composer/](internal/composer/) renders `CLAUDE.md` from
-  rule fragments in [rules/](rules/).
+- [internal/composer/](internal/composer/) renders instruction files
+  from rule fragments in [rules/](rules/).
 - [nixosModules/spore-fleet.nix](nixosModules/spore-fleet.nix)
   autostarts fleet reconciliation on NixOS hosts.
 

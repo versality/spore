@@ -10,8 +10,8 @@ import (
 
 // credIndicators are filenames or directory basenames that suggest the
 // project carries secrets / env-bound config. When one is present, the
-// CLAUDE.md must mention how the agent obtains the value (creds-broker
-// reference, .envrc usage, agenix path, etc).
+// agent instructions must mention how the agent obtains the value
+// (creds-broker reference, .envrc usage, agenix path, etc).
 var credIndicators = []string{
 	".env",
 	".envrc",
@@ -21,9 +21,9 @@ var credIndicators = []string{
 	".env.template",
 }
 
-// credKeywords are the substrings the detector looks for in CLAUDE.md
-// to confirm the operator has documented the secret surface. Lowercase
-// match.
+// credKeywords are the substrings the detector looks for in the agent
+// instructions to confirm the operator has documented the secret
+// surface. Lowercase match.
 var credKeywords = []string{
 	"creds-broker",
 	"creds broker",
@@ -59,19 +59,35 @@ func detectCredsWired(root string) (string, error) {
 	if len(found) == 0 {
 		return "no secret surface detected; nothing to document", nil
 	}
-	claudePath := filepath.Join(root, "CLAUDE.md")
-	b, err := os.ReadFile(claudePath)
+	b, paths, err := readAgentInstructions(root)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("found %v but CLAUDE.md is absent; complete repo-mapped first", found)
-		}
 		return "", err
 	}
 	lower := strings.ToLower(string(b))
 	for _, kw := range credKeywords {
 		if strings.Contains(lower, kw) {
-			return fmt.Sprintf("documented (matched %q); detected %v", kw, found), nil
+			return fmt.Sprintf("documented in %s (matched %q); detected %v", paths, kw, found), nil
 		}
 	}
-	return "", fmt.Errorf("found secret surface %v but CLAUDE.md mentions none of %v; document how the agent obtains values without storing them", found, credKeywords)
+	return "", fmt.Errorf("found secret surface %v but agent instructions mention none of %v; document how the agent obtains values without storing them", found, credKeywords)
+}
+
+func readAgentInstructions(root string) ([]byte, string, error) {
+	var parts []string
+	var paths []string
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md"} {
+		b, err := os.ReadFile(filepath.Join(root, name))
+		if err == nil {
+			parts = append(parts, string(b))
+			paths = append(paths, name)
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return nil, "", err
+		}
+	}
+	if len(parts) > 0 {
+		return []byte(strings.Join(parts, "\n")), strings.Join(paths, " / "), nil
+	}
+	return nil, "", fmt.Errorf("agent instructions are absent; complete repo-mapped first")
 }

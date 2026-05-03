@@ -1,5 +1,5 @@
-// Package composer renders a CLAUDE.md by concatenating named rule
-// fragments listed in a consumer file. Pure stdlib.
+// Package composer renders agent instructions by concatenating named
+// rule fragments listed in a consumer file. Pure stdlib.
 //
 // The rules pool has ONE source dir, no override layering. Compose
 // reads only the rulesDir argument it is given: no env-var redirects,
@@ -26,7 +26,7 @@ type Options struct {
 }
 
 // Compose reads a consumer config (line-per-rule plain text, "#"
-// and blank lines ignored) and returns the rendered CLAUDE.md
+// and blank lines ignored) and returns the rendered instruction
 // string built by concatenating the named rule fragments from
 // rulesDir, separated by a single blank line. Returns error on
 // missing rule, missing consumer, or read failure.

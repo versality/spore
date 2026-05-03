@@ -1,5 +1,6 @@
-# spore's own root CLAUDE.md - composed at build time.
+# spore's own root instruction files - composed at build time.
 # target: CLAUDE.md
+# target: AGENTS.md
 core/header
 core/roles
 core/source-map

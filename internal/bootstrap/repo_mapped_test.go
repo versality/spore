@@ -68,18 +68,26 @@ func TestDetectRepoMapped(t *testing.T) {
 	}
 }
 
-func TestDetectRepoMappedDropsStarterClaude(t *testing.T) {
+func TestDetectRepoMappedDropsStarterInstructions(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "flake.nix"), []byte("{}\n"))
 	notes, err := detectRepoMapped(root)
 	if err != nil {
 		t.Fatalf("detect: %v", err)
 	}
-	if !strings.Contains(notes, "wrote starter CLAUDE.md") {
-		t.Errorf("notes=%q; want mention of starter CLAUDE.md", notes)
+	if !strings.Contains(notes, "wrote starter CLAUDE.md / AGENTS.md") {
+		t.Errorf("notes=%q; want mention of starter instruction files", notes)
 	}
-	if _, err := os.Stat(filepath.Join(root, "CLAUDE.md")); err != nil {
+	claude, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil {
 		t.Fatalf("starter CLAUDE.md missing: %v", err)
+	}
+	agents, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("starter AGENTS.md missing: %v", err)
+	}
+	if string(agents) != string(claude) {
+		t.Fatalf("starter AGENTS.md differs from CLAUDE.md")
 	}
 }
 
@@ -128,5 +136,39 @@ func TestDetectRepoMappedLeavesExistingClaude(t *testing.T) {
 	}
 	if string(got) != string(original) {
 		t.Errorf("starter clobbered existing CLAUDE.md")
+	}
+	agents, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("AGENTS.md mirror missing: %v", err)
+	}
+	if string(agents) != string(original) {
+		t.Errorf("AGENTS.md mirror did not match existing CLAUDE.md")
+	}
+}
+
+func TestDetectRepoMappedLeavesExistingInstructionPair(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "flake.nix"), []byte("{}\n"))
+	claude := []byte("# existing\nclaude\n")
+	agents := []byte("# existing\nagents\n")
+	writeFile(t, filepath.Join(root, "CLAUDE.md"), claude)
+	writeFile(t, filepath.Join(root, "AGENTS.md"), agents)
+	notes, err := detectRepoMapped(root)
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+	if strings.Contains(notes, "wrote starter") {
+		t.Errorf("notes=%q; want no starter note", notes)
+	}
+	gotClaude, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("read CLAUDE.md: %v", err)
+	}
+	gotAgents, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	if string(gotClaude) != string(claude) || string(gotAgents) != string(agents) {
+		t.Errorf("existing instruction files were clobbered")
 	}
 }
