@@ -26,7 +26,7 @@ func TestFileSize_FlagsOversize(t *testing.T) {
 }
 
 func TestFileSize_DefaultLimit(t *testing.T) {
-	body := strings.Repeat("x\n", 501)
+	body := strings.Repeat("x\n", defaultFileSizeLimit+1)
 	root := newTestRepo(t, map[string]string{"big.go": body})
 	issues, err := FileSize{}.Run(root)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestFileSize_AllUnder(t *testing.T) {
 		"a.go": "package a\n",
 		"b.go": "package b\n",
 	})
-	issues, err := FileSize{Limit: 500}.Run(root)
+	issues, err := FileSize{Limit: defaultFileSizeLimit}.Run(root)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -74,16 +74,16 @@ func TestFileSize_SkipsGeneratedFiles(t *testing.T) {
 
 func TestIsGenerated(t *testing.T) {
 	cases := map[string]bool{
-		"db/schema.rb":               true,
-		"db/structure.sql":           true,
-		"api/v1/foo.pb.go":           true,
-		"api/v1/foo.pb.gw.go":        true,
-		"internal/x/types_gen.go":    true,
+		"db/schema.rb":                  true,
+		"db/structure.sql":              true,
+		"api/v1/foo.pb.go":              true,
+		"api/v1/foo.pb.gw.go":           true,
+		"internal/x/types_gen.go":       true,
 		"internal/x/types_generated.go": true,
-		"sorbet/rbi/all-types.rbi":   true,
-		"app/models/post.rb":         false,
-		"db/seeds.rb":                false,
-		"foo_gen_test.go":            false,
+		"sorbet/rbi/all-types.rbi":      true,
+		"app/models/post.rb":            false,
+		"db/seeds.rb":                   false,
+		"foo_gen_test.go":               false,
 	}
 	for path, want := range cases {
 		if got := isGenerated(path); got != want {

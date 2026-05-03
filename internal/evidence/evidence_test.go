@@ -142,7 +142,7 @@ func TestVerify_RationalClose(t *testing.T) {
 func TestVerify_CrossRepo(t *testing.T) {
 	meta := map[string]any{"evidence_required": "[commit]"}
 	body := `## Evidence
-- commit: consumer-config:abc1234 work landed in sibling repo
+- commit: sibling-repo:abc1234 work landed in sibling repo
 `
 	v, _ := Verify(meta, body)
 	if v != CrossRepo {

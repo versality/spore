@@ -32,7 +32,7 @@ func TestDecideLostToReflog(t *testing.T) {
 }
 
 func TestDecideCrossRepo(t *testing.T) {
-	v := decide("", "", "none", "other", "", "/home/sky/projects/other", "",
+	v := decide("", "", "none", "other", "", "/work/projects/other", "",
 		false, false)
 	if v != CrossRepo {
 		t.Errorf("got %s, want cross-repo", v)
@@ -94,7 +94,7 @@ func TestFormatResult(t *testing.T) {
 		MergeEntry:        "2026-05-01T10:00:00+03:00 fix-auth->done",
 		FinalTool:         "wt-merge",
 		FinalText:         "Merged successfully",
-		LastTimestamp:      "2026-05-01T10:00:00Z",
+		LastTimestamp:     "2026-05-01T10:00:00Z",
 		FrontmatterStatus: "done",
 	}
 	out := r.Format()

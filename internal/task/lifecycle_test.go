@@ -199,6 +199,36 @@ func TestStartRefusesDone(t *testing.T) {
 	}
 }
 
+func TestWorkerAgentCommandCodexUsesEffortPolicy(t *testing.T) {
+	t.Setenv("SPORE_AGENT_BINARY", "")
+	m := frontmatter.Meta{
+		Agent: "codex",
+		Extra: map[string]string{
+			"effort": "very-high",
+			"model":  "gpt-5.5",
+		},
+	}
+	got, err := workerAgentCommand(m)
+	if err != nil {
+		t.Fatalf("workerAgentCommand: %v", err)
+	}
+	want := "codex --dangerously-bypass-approvals-and-sandbox --no-alt-screen --disable apps -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'"
+	if got != want {
+		t.Errorf("command = %q want %q", got, want)
+	}
+}
+
+func TestWorkerAgentCommandOverrideWins(t *testing.T) {
+	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	got, err := workerAgentCommand(frontmatter.Meta{Agent: "codex"})
+	if err != nil {
+		t.Fatalf("workerAgentCommand: %v", err)
+	}
+	if got != "sleep 30" {
+		t.Errorf("command = %q want override", got)
+	}
+}
+
 func TestPauseRequiresActive(t *testing.T) {
 	tasksDir := t.TempDir()
 	taskPath := filepath.Join(tasksDir, "x.md")
@@ -478,6 +508,25 @@ func runGit(t *testing.T, repo string, args ...string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v: %s", args, err, out)
 	}
+}
+
+func gitOutput(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func configureOrigin(t *testing.T, repo string) string {
+	t.Helper()
+	remote := filepath.Join(t.TempDir(), "origin.git")
+	runGit(t, t.TempDir(), "init", "--bare", "-q", remote)
+	runGit(t, repo, "remote", "add", "origin", remote)
+	runGit(t, repo, "push", "-q", "-u", "origin", "main")
+	return remote
 }
 
 func readStatus(t *testing.T, path string) string {

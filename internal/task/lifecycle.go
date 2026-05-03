@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/codexpolicy"
 	"github.com/versality/spore/internal/evidence"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -24,6 +25,10 @@ const EvidenceWarnOnlyEnv = "SPORE_EVIDENCE_WARN_ONLY"
 const AgentBinaryEnv = "SPORE_AGENT_BINARY"
 
 const defaultAgentBinary = "claude-code"
+
+// CodexModelEnv optionally pins the model for `agent: codex` task
+// launches. Empty lets the codex CLI use its own default.
+const CodexModelEnv = "SPORE_CODEX_MODEL"
 
 // Start flips status to active and (when starting from draft) creates
 // the worktree and wt/<slug> branch under <projectRoot>/.worktrees/.
@@ -295,6 +300,10 @@ func ensureSession(tasksDir, slug string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	meta, err := readTaskMeta(tasksDir, slug)
+	if err != nil {
+		return "", err
+	}
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
 	branch := "wt/" + slug
 
@@ -325,9 +334,9 @@ func ensureSession(tasksDir, slug string) (string, error) {
 	if hasSession(session) {
 		return session, nil
 	}
-	agent := os.Getenv(AgentBinaryEnv)
-	if agent == "" {
-		agent = defaultAgentBinary
+	agent, err := workerAgentCommand(meta)
+	if err != nil {
+		return "", err
 	}
 	out, err := exec.Command(
 		"tmux", "new-session", "-d",
@@ -340,6 +349,70 @@ func ensureSession(tasksDir, slug string) (string, error) {
 		return "", fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return session, nil
+}
+
+func readTaskMeta(tasksDir, slug string) (frontmatter.Meta, error) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return frontmatter.Meta{}, nil
+		}
+		return frontmatter.Meta{}, err
+	}
+	m, _, err := frontmatter.Parse(raw)
+	if err != nil {
+		return frontmatter.Meta{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return m, nil
+}
+
+func workerAgentCommand(m frontmatter.Meta) (string, error) {
+	if override := os.Getenv(AgentBinaryEnv); override != "" {
+		return override, nil
+	}
+	agent := m.Agent
+	if agent == "" || agent == "claude" || agent == "claude-code" {
+		return defaultAgentBinary, nil
+	}
+	if agent != "codex" {
+		return agent, nil
+	}
+
+	effort, err := codexpolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
+	if err != nil {
+		return "", err
+	}
+	model := m.Extra["model"]
+	if model == "" {
+		model = os.Getenv(CodexModelEnv)
+	}
+	return shellJoin(codexpolicy.InteractiveArgs(model, effort)), nil
+}
+
+func shellJoin(args []string) string {
+	quoted := make([]string, 0, len(args))
+	for _, arg := range args {
+		quoted = append(quoted, shellQuote(arg))
+	}
+	return strings.Join(quoted, " ")
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if strings.IndexFunc(s, func(r rune) bool { return !isShellBareChar(r) }) == -1 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func isShellBareChar(r rune) bool {
+	return r >= 'a' && r <= 'z' ||
+		r >= 'A' && r <= 'Z' ||
+		r >= '0' && r <= '9' ||
+		r == '_' || r == '-' || r == '.' || r == '/' || r == ':' || r == '='
 }
 
 func flipStatus(tasksDir, slug, from, to string) error {

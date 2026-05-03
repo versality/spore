@@ -18,8 +18,10 @@ cat <<BANNER
 +--------------------------------------------------------------+
 
 Welcome to the worker pane for "$slug". This is a git worktree on
-the wt/$slug branch. Commit here; the coordinator will pick it up
-when the task flips to status=done.
+the wt/$slug branch. Commit here; the coordinator will merge it into
+local main and publish only origin main:main. Do not push worker or
+feature branches unless the operator explicitly asks outside the
+worker close flow.
 
 Drop to shell (Ctrl-b d to detach, leave running).
 BANNER
