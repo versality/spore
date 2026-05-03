@@ -102,3 +102,40 @@ func TestInboxDir(t *testing.T) {
 		t.Errorf("InboxDir = %q, want %q", got, want)
 	}
 }
+
+func TestInboxDirForProjectUsesProjectRootNotWorkerCwd(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "project")
+	worker := filepath.Join(root, ".worktrees", "alpha")
+	if err := os.MkdirAll(worker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(worker)
+	t.Setenv("XDG_STATE_HOME", "/tmp/xdg-spore-test")
+
+	got, err := InboxDirForProject(root, "alpha")
+	if err != nil {
+		t.Fatalf("InboxDirForProject: %v", err)
+	}
+	want := filepath.Join("/tmp/xdg-spore-test", "spore", "project", "alpha", "inbox")
+	if got != want {
+		t.Errorf("InboxDirForProject = %q, want %q", got, want)
+	}
+}
+
+func TestCoordinatorInboxDirForProject(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_STATE_HOME", "/tmp/xdg-spore-test")
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", "")
+
+	got, err := CoordinatorInboxDirForProject(root)
+	if err != nil {
+		t.Fatalf("CoordinatorInboxDirForProject: %v", err)
+	}
+	want := filepath.Join("/tmp/xdg-spore-test", "spore", "coordinator", "project", "inbox")
+	if got != want {
+		t.Errorf("CoordinatorInboxDirForProject = %q, want %q", got, want)
+	}
+}

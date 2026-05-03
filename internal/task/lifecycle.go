@@ -338,11 +338,27 @@ func ensureSession(tasksDir, slug string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	project, err := ProjectName(projectRoot)
+	if err != nil {
+		return "", err
+	}
+	inbox, err := InboxDirForProject(projectRoot, slug)
+	if err != nil {
+		return "", err
+	}
+	coordinatorState, err := CoordinatorStateDir()
+	if err != nil {
+		return "", err
+	}
 	out, err := exec.Command(
 		"tmux", "new-session", "-d",
 		"-s", session,
 		"-c", worktree,
 		"-e", "SPORE_TASK_SLUG="+slug,
+		"-e", "SPORE_PROJECT_ROOT="+projectRoot,
+		"-e", "WT_PROJECT="+project,
+		"-e", "SKYBOT_INBOX="+inbox,
+		"-e", "SPORE_COORDINATOR_STATE_DIR="+coordinatorState,
 		agent,
 	).CombinedOutput()
 	if err != nil {

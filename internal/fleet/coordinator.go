@@ -63,6 +63,18 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 
 	agent := coordinatorAgent()
 	rolePath := CoordinatorRolePath(projectRoot)
+	project, err := task.ProjectName(projectRoot)
+	if err != nil {
+		return "", false, err
+	}
+	inbox, err := task.CoordinatorInboxDirForProject(projectRoot)
+	if err != nil {
+		return "", false, err
+	}
+	coordinatorState, err := task.CoordinatorStateDir()
+	if err != nil {
+		return "", false, err
+	}
 
 	cmd := coordinatorShellCommand(agent, rolePath)
 	args := []string{
@@ -71,6 +83,10 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		"-c", projectRoot,
 		"-e", "SPORE_TASK_SLUG=" + CoordinatorSlug,
 		"-e", "SPORE_COORDINATOR_ROLE=" + rolePath,
+		"-e", "SPORE_PROJECT_ROOT=" + projectRoot,
+		"-e", "WT_PROJECT=" + project,
+		"-e", "SKYBOT_INBOX=" + inbox,
+		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
 		cmd,
 	}
 	out, err := exec.Command("tmux", args...).CombinedOutput()

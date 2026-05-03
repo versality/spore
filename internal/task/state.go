@@ -12,28 +12,74 @@ import (
 // is set, else "$HOME/.local/state/spore/<project>". Project name comes
 // from the basename of the git toplevel (or cwd if not a repo).
 func StateDir() (string, error) {
-	project, err := ProjectName("")
+	return StateDirForProject("")
+}
+
+// StateDirForProject returns "$XDG_STATE_HOME/spore/<project>" for
+// projectRoot, falling back to "$HOME/.local/state/spore/<project>".
+func StateDirForProject(projectRoot string) (string, error) {
+	project, err := ProjectName(projectRoot)
 	if err != nil {
 		return "", err
 	}
-	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
-		home := os.Getenv("HOME")
-		if home == "" {
-			return "", fmt.Errorf("task: HOME and XDG_STATE_HOME both unset")
-		}
-		base = filepath.Join(home, ".local", "state")
+	base, err := stateBaseDir()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(base, "spore", project), nil
 }
 
 // InboxDir returns "<StateDir>/<slug>/inbox".
 func InboxDir(slug string) (string, error) {
-	s, err := StateDir()
+	return InboxDirForProject("", slug)
+}
+
+// InboxDirForProject returns "<StateDirForProject>/<slug>/inbox".
+func InboxDirForProject(projectRoot, slug string) (string, error) {
+	s, err := StateDirForProject(projectRoot)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(s, slug, "inbox"), nil
+}
+
+// CoordinatorStateDir returns the state root used by the singleton
+// coordinator inboxes.
+func CoordinatorStateDir() (string, error) {
+	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
+		return d, nil
+	}
+	base, err := stateBaseDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "spore", "coordinator"), nil
+}
+
+// CoordinatorInboxDirForProject returns the singleton coordinator
+// inbox path for projectRoot.
+func CoordinatorInboxDirForProject(projectRoot string) (string, error) {
+	project, err := ProjectName(projectRoot)
+	if err != nil {
+		return "", err
+	}
+	root, err := CoordinatorStateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, project, "inbox"), nil
+}
+
+func stateBaseDir() (string, error) {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base != "" {
+		return base, nil
+	}
+	home := os.Getenv("HOME")
+	if home == "" {
+		return "", fmt.Errorf("task: HOME and XDG_STATE_HOME both unset")
+	}
+	return filepath.Join(home, ".local", "state"), nil
 }
 
 // ProjectName returns the basename of the git toplevel rooted at
