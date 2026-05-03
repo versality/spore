@@ -153,14 +153,27 @@ for command routing.
 ## Architecture
 
 ```mermaid
-flowchart LR
-    Operator --> Bootstrap["spore bootstrap"]
-    Bootstrap --> Harness["rules, hooks, lints, skills"]
-    Operator --> Tasks["tasks/*.md"]
-    Tasks --> Coordinator["coordinator tmux session"]
-    Coordinator --> Workers["worker tmux sessions"]
-    Workers --> Worktrees["git worktrees"]
-    Worktrees --> Project["project repo"]
+flowchart TD
+    Operator["operator"]
+
+    subgraph Setup["bootstrap setup"]
+        Bootstrap["spore bootstrap"]
+        Harness["rules, hooks, lints, skills"]
+        Bootstrap --> Harness
+    end
+
+    subgraph Execution["task execution"]
+        Tasks["tasks/*.md"]
+        Coordinator["coordinator tmux session"]
+        Workers["worker tmux sessions"]
+        Worktrees["git worktrees"]
+        Project["project repo"]
+        Tasks --> Coordinator --> Workers --> Worktrees --> Project
+    end
+
+    Operator --> Bootstrap
+    Operator --> Tasks
+    Harness -.->|guards| Worktrees
 ```
 
 Main extension points:
