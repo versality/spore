@@ -1,13 +1,13 @@
-You are working on task `s7-coordinator`: "S7 coordinator: state + verify + loopguard + tokenmonitor"
+You are working on task `working-ci-project-hygiene`: working CI and project hygiene
 
-Task file: `tasks/s7-coordinator.md` (edit it to leave breadcrumbs for the next
+Task file: `tasks/working-ci-project-hygiene.md` (edit it to leave breadcrumbs for the next
 session if you'll come back to this). When the unit lands and
 `just check` + `just build` are green, run `wt merge` yourself -
 that's the default next step on green, not a confirmation point.
 (`wt abandon` if the work won't ship.) Either flips status=done.
 
 As your absolute last action before exit, run
-`wt task tell skyhelm "merged: s7-coordinator"` (or `"abandoned: s7-coordinator (<reason>)"`,
+`wt task tell skyhelm "merged: working-ci-project-hygiene"` (or `"abandoned: working-ci-project-hygiene (<reason>)"`,
 under 100 chars). Skyhelm needs that event to start the next queued task.
 
 Ping skyhelm via `wt task tell skyhelm "<body>"` immediately on blockers:
@@ -26,29 +26,28 @@ can't push directly. If you think you need a PR, you don't - run
 actually won't fast-forward.
 
 Brief:
-**Sibling**: spore-s7-fleet-coordinator (in nix-config)
+Low-priority operator request.
 
-Build the coordinator packages in spore that skyhelm consumes.
+Goal:
 
-## New packages
+- Spore needs working CI that covers the checks we normally rely on in nix-config/harness work.
+- The repo should be easy to trust from a fresh clone: README explains how to run checks locally, CI matches the local path, and core quality gates are not tribal knowledge.
 
-1. `coordinator/state` - state.md parser/writer (H2/H3 format, active tasks table, recent events, rules, directives)
-2. `coordinator/verify` - port nix-config's `harness/skyhelm-verify-done.sh` verdict logic to Go. Verdicts: real-impl, rational-close, cross-repo, suspect-hallucination, bogus-evidence, unknown.
-3. `coordinator/loopguard` - circuit breaker on respawn rate
-4. `coordinator/tokenmonitor` - wraps budget short window into stop-hook shape
-5. `coordinator/statedebt` - port skyhelm-state-debt scanner
+Scope:
 
-Reference sources:
-- `~/nix-config/harness/skyhelm-verify-done.sh`
-- `~/nix-config/nix/packages/wt/skyhelm-state-debt`
-- `~/nix-config/nix/packages/wt/skyhelm-token-monitor`
+- Inspect the current spore repo shape, language/tooling, package metadata, and existing tests.
+- Choose the best CI shape for the repo as it exists now. Prefer the standard host for the repo if already implied; otherwise use GitHub Actions with minimal moving parts.
+- Add or tighten local commands for tests, formatting, linting, and any build/package checks.
+- Add vulnerability/dependency scanning appropriate to the stack. Keep it useful: fail on actionable high/critical findings, avoid noisy unactionable feeds unless there is an allowlist/ruling path.
+- Update README with the local developer workflow and what CI enforces.
+- Improve test coverage where the current check suite has obvious critical gaps, especially around task/state parsing and agent-facing contracts.
+- Do not cargo-cult nix-config's exact gates if spore has a smaller or different stack; copy the intent, not the incidental machinery.
 
-## New CLI
+Acceptance:
 
-`cmd/spore coordinator {role-brief, state-debt, verify-done, loop-guard}`
-
-## Evidence
-
-- go-test: green for all 5 packages
-- verify-verdicts: test cases cover all 6 verdict types
+- A fresh clone can run one documented local command that mirrors CI as closely as practical.
+- CI runs tests, formatting/lint checks, build/package checks, and vulnerability/dependency scanning suited to spore.
+- README documents setup, local validation, and CI gates.
+- Coverage is meaningfully better for the highest-risk code paths.
+- The final task note lists exactly which gates run locally and in CI.
 

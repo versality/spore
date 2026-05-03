@@ -31,12 +31,12 @@ type Config struct {
 }
 
 type CheckResult struct {
-	Ctx         int    `json:"ctx"`
-	SoftCap     int    `json:"soft_cap"`
-	HardCap     int    `json:"hard_cap"`
-	Level       string `json:"level"`
-	Message     string `json:"message,omitempty"`
-	ShouldFire  bool   `json:"should_fire"`
+	Ctx        int    `json:"ctx"`
+	SoftCap    int    `json:"soft_cap"`
+	HardCap    int    `json:"hard_cap"`
+	Level      string `json:"level"`
+	Message    string `json:"message,omitempty"`
+	ShouldFire bool   `json:"should_fire"`
 }
 
 type HookPayload struct {

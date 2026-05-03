@@ -595,16 +595,16 @@ func aggregateAccountSnapshots(snaps map[string]*usageSnapshot) (windowState, wi
 	}
 
 	return windowState{
-		DurationSeconds: int(shortWindow.Seconds()),
-		Frac:            shortSum / float64(n),
-		Source:          source,
-		ResetAt:         shortResetAt,
-	}, windowState{
-		DurationSeconds: int(longWindow.Seconds()),
-		Frac:            longSum / float64(n),
-		Source:          source,
-		ResetAt:         longResetAt,
-	}
+			DurationSeconds: int(shortWindow.Seconds()),
+			Frac:            shortSum / float64(n),
+			Source:          source,
+			ResetAt:         shortResetAt,
+		}, windowState{
+			DurationSeconds: int(longWindow.Seconds()),
+			Frac:            longSum / float64(n),
+			Source:          source,
+			ResetAt:         longResetAt,
+		}
 }
 
 const queryAutoRefreshAge = 30 * time.Minute

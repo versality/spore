@@ -187,7 +187,7 @@ func isHex(c rune) bool {
 //   - presence of a github.com / gitlab.com / codeberg.org URL.
 //
 // The bare-token check is deliberately strict: prose with embedded
-// colons (e.g. a backtick example like `` `slug: real-impl` ``) does
+// colons (e.g. a backtick example like “ `slug: real-impl` “) does
 // not look like a leading repo identifier and stays in-repo.
 func isCrossRepoRest(r string) bool {
 	if i := strings.IndexByte(r, ':'); i > 0 {

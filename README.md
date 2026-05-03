@@ -171,6 +171,35 @@ No-Nix fallback: spore is plain Go stdlib (no external deps), so a
 checkout works with `go run ./cmd/spore -- --help` or
 `go build -o spore ./cmd/spore` on any Go 1.25+ toolchain.
 
+## Developer workflow
+
+Use the flake dev shell for the same toolchain CI uses:
+
+```
+nix develop
+just check
+just build
+```
+
+From outside the shell, run `nix develop --command just check` as the
+one-command local validation gate. `just check` runs:
+
+- `gofmt` verification for Go sources.
+- `nixpkgs-fmt --check` for Nix sources.
+- `go vet ./...`.
+- `golangci-lint run ./...`.
+- `go run ./cmd/spore lint`.
+- `go test ./...`.
+- `govulncheck ./...`.
+- `nix flake check`.
+
+`just build` is the packaging/build gate: it builds `./cmd/spore` to
+`build/spore` with `go build -trimpath`, then runs `nix build .`.
+
+CI is GitHub Actions at `.github/workflows/ci.yml`. It installs Nix,
+enters the flake dev shell, and runs the same two commands:
+`just check` and `just build`.
+
 ## What it is
 
 spore is a seed that grows into a working agent harness. It ships a

@@ -17,9 +17,9 @@ import (
 const DefaultAgeDays = 14
 
 type Config struct {
-	StateDir string
+	StateDir  string
 	StateFile string
-	AgeDays  int
+	AgeDays   int
 }
 
 type Classification string
@@ -38,8 +38,8 @@ type Block struct {
 }
 
 type ScanResult struct {
-	Blocks       []Block
-	StaleCount   int
+	Blocks        []Block
+	StaleCount    int
 	StaleHeadings []string
 }
 

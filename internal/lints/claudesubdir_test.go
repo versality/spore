@@ -29,10 +29,10 @@ func TestClaudeSubdir_Dominated(t *testing.T) {
 			"`src/plugins/gamma/main.go` cage",
 			"`src/plugins/CLAUDE.md` rules",
 		}, "\n") + "\n",
-		"src/plugins/CLAUDE.md":      "# Plugins\nPlugin-specific rules.\n",
-		"src/plugins/alpha/main.go":  "package alpha\n",
-		"src/plugins/beta/main.go":   "package beta\n",
-		"src/plugins/gamma/main.go":  "package gamma\n",
+		"src/plugins/CLAUDE.md":     "# Plugins\nPlugin-specific rules.\n",
+		"src/plugins/alpha/main.go": "package alpha\n",
+		"src/plugins/beta/main.go":  "package beta\n",
+		"src/plugins/gamma/main.go": "package gamma\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {
@@ -56,10 +56,10 @@ func TestClaudeSubdir_OptOut(t *testing.T) {
 			"`src/plugins/gamma/main.go` cage",
 			"`src/plugins/CLAUDE.md` rules",
 		}, "\n") + "\n",
-		"src/plugins/CLAUDE.md":      "# Plugins\nPlugin-specific rules.\n",
-		"src/plugins/alpha/main.go":  "package alpha\n",
-		"src/plugins/beta/main.go":   "package beta\n",
-		"src/plugins/gamma/main.go":  "package gamma\n",
+		"src/plugins/CLAUDE.md":     "# Plugins\nPlugin-specific rules.\n",
+		"src/plugins/alpha/main.go": "package alpha\n",
+		"src/plugins/beta/main.go":  "package beta\n",
+		"src/plugins/gamma/main.go": "package gamma\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {
@@ -72,9 +72,9 @@ func TestClaudeSubdir_OptOut(t *testing.T) {
 
 func TestClaudeSubdir_BelowThreshold(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
-		"CLAUDE.md":               "# Small\n`src/plugins/one.go` only one ref\n",
-		"src/plugins/CLAUDE.md":   "# Plugins\nrules\n",
-		"src/plugins/one.go":      "package plugins\n",
+		"CLAUDE.md":             "# Small\n`src/plugins/one.go` only one ref\n",
+		"src/plugins/CLAUDE.md": "# Plugins\nrules\n",
+		"src/plugins/one.go":    "package plugins\n",
 	})
 	issues, err := ClaudeSubdir{}.Run(root)
 	if err != nil {

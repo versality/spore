@@ -4,14 +4,14 @@
 //
 // Two collection modes:
 //
-//   subscription  primary signal is Anthropic's OAuth /usage endpoint
-//                 (account-wide, sees every host's claude-code activity).
-//                 Falls back to ~/.claude/projects/*/*.jsonl cost-weighted
-//                 transcript aggregation when /usage is unreachable.
-//   api           short window read from response-header spool
-//                 ($AGENT_BUDGET_STATE_DIR/api-headers.jsonl); long
-//                 window falls back to transcript-est until Anthropic
-//                 exposes a weekly header.
+//	subscription  primary signal is Anthropic's OAuth /usage endpoint
+//	              (account-wide, sees every host's claude-code activity).
+//	              Falls back to ~/.claude/projects/*/*.jsonl cost-weighted
+//	              transcript aggregation when /usage is unreachable.
+//	api           short window read from response-header spool
+//	              ($AGENT_BUDGET_STATE_DIR/api-headers.jsonl); long
+//	              window falls back to transcript-est until Anthropic
+//	              exposes a weekly header.
 //
 // Mode is picked from $AGENT_BUDGET_MODE or auto-detected (recent
 // api-headers line wins). State at $AGENT_BUDGET_STATE_DIR/state.json

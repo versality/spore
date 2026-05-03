@@ -94,7 +94,7 @@ func TestFormatResult(t *testing.T) {
 		MergeEntry:        "2026-05-01T10:00:00+03:00 fix-auth->done",
 		FinalTool:         "wt-merge",
 		FinalText:         "Merged successfully",
-		LastTimestamp:      "2026-05-01T10:00:00Z",
+		LastTimestamp:     "2026-05-01T10:00:00Z",
 		FrontmatterStatus: "done",
 	}
 	out := r.Format()
