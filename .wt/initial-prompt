@@ -51,3 +51,29 @@ Acceptance:
 - Coverage is meaningfully better for the highest-risk code paths.
 - The final task note lists exactly which gates run locally and in CI.
 
+## Final note
+
+Local gates:
+
+- `nix develop --command just check`
+- `nix develop --command just build`
+
+`just check` runs `fmt-check`, `lint`, `test`, `vuln`, and `nix-check`.
+That covers Go formatting, Nix formatting, `go vet ./...`,
+`golangci-lint run ./...`, `go run ./cmd/spore lint`, `go test ./...`,
+`govulncheck ./...`, and `nix flake check`.
+
+`just build` runs `go-build` and `nix-build`. That covers
+`go build -trimpath -o build/spore ./cmd/spore` and `nix build .`.
+
+CI gates:
+
+- GitHub Actions `.github/workflows/ci.yml`
+- `nix develop --command just check`
+- `nix develop --command just build`
+
+Validated on 2026-05-03:
+
+- `nix develop --command just check` green.
+- `nix develop --command just build` green.
+
