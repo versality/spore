@@ -5,7 +5,6 @@
 # spore
 
 [![CI](https://github.com/versality/spore/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/versality/spore/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/versality/spore/branch/main/graph/badge.svg)](https://codecov.io/gh/versality/spore)
 
 Spore is a small, local harness for LLM coding agents. It plants rules,
 task files, hooks, validation gates, and tmux worker sessions into an
@@ -140,6 +139,8 @@ just build
 `just check` runs formatting checks, Go vet, golangci-lint, Spore's
 own lint suite, Go tests, govulncheck, and `nix flake check`.
 `just build` builds the Go binary and the flake package.
+`just coverage` writes local coverage reports under `coverage/` and is
+required in CI before the advisory Codecov upload step runs.
 
 Without entering the shell:
 

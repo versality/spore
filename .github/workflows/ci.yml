@@ -36,10 +36,12 @@ jobs:
 
       - name: Upload coverage
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage/coverage.out
           flags: go
           name: spore-go
-          fail_ci_if_error: true
+          slug: versality/spore
+          fail_ci_if_error: false
           use_oidc: true
