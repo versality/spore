@@ -25,6 +25,11 @@ lint:
 test:
     go test ./...
 
+coverage:
+    mkdir -p coverage
+    go test -covermode=atomic -coverprofile=coverage/coverage.out ./...
+    go tool cover -func=coverage/coverage.out | tee coverage/coverage.txt
+
 vuln:
     govulncheck ./...
 
