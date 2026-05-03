@@ -19,10 +19,11 @@
       perSystem = flake-utils.lib.eachDefaultSystem (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
 
           spore = pkgs.buildGoModule {
             pname = "spore";
-            version = "0.0.1";
+            inherit version;
             src = ./.;
             subPackages = [ "cmd/spore" ];
             vendorHash = null;

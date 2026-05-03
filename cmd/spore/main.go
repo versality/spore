@@ -28,6 +28,7 @@ Usage:
   spore <command> [flags]
 
 Commands:
+  version    Print the spore version.
   compose    Render a CLAUDE.md from a consumer's rule list.
   task       Manage tasks (new, ls, start, pause, block, done, tell).
   fleet      Run the worker fleet against the task queue (up/down/status).
@@ -100,6 +101,8 @@ func main() {
 	switch cmd {
 	case "-h", "--help", "help":
 		fmt.Print(usage)
+	case "-v", "--version", "version":
+		fmt.Println(spore.Version())
 	case "compose":
 		if err := runCompose(args); err != nil {
 			fmt.Fprintln(os.Stderr, "spore compose:", err)

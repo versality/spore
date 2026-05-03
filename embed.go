@@ -3,7 +3,20 @@
 // internal/; this top-level package is just an asset container.
 package spore
 
-import "embed"
+import (
+	"embed"
+	"strings"
+)
+
+// Version returns the release version embedded from the repository's
+// VERSION file.
+//
+//go:embed VERSION
+var versionFile string
+
+func Version() string {
+	return strings.TrimSpace(versionFile)
+}
 
 // BundledFlake is the minimal NixOS flake `spore infect` stages into a
 // temp directory and runs nixos-anywhere against when the operator
