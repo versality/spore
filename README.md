@@ -5,6 +5,7 @@
 # spore
 
 [![CI](https://github.com/versality/spore/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/versality/spore/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/versality/spore/branch/main/graph/badge.svg)](https://codecov.io/gh/versality/spore)
 
 Spore is a small, local harness for LLM coding agents. It plants rules,
 task files, hooks, validation gates, and tmux worker sessions into an
