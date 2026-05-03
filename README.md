@@ -18,15 +18,17 @@ being dogfooded on live projects.
 
 ## What It Feels Like
 
-You keep your repo, your tests, your shell, and your git history.
-Spore adds a lightweight operating loop around them:
+Spore keeps agent work inside the repo and tools you already trust. It
+adds just enough structure for agents to take real tasks without hiding
+their work in chat:
 
-- Work is written down as `tasks/<slug>.md`.
-- Each active task gets its own git worktree and tmux session.
-- A coordinator watches the queue and starts or reaps workers.
-- Hooks and lints stop obvious bad moves before task close.
-- Done means there is evidence: commits, changed files, tests, or a
-  written reason a proof does not apply.
+- tasks are explicit work orders, not remembered prompt context;
+- each active task gets its own git worktree and tmux session;
+- a coordinator starts workers, watches progress, and reaps stale
+  sessions;
+- hooks and lints stop obvious bad moves before task close;
+- done requires evidence: commits, changed files, tests, or a written
+  reason a proof does not apply.
 
 The result is closer to a disciplined local workshop than a hosted
 agent platform. You can attach to tmux, read the task file, inspect the
@@ -53,14 +55,20 @@ cd /path/to/project
 spore bootstrap
 ```
 
-`spore bootstrap` is re-entrant. Each run advances through the stage
-gates it can prove, then prints the current blocker:
+`spore bootstrap` is re-entrant. Each run checks what it can prove,
+records the completed gates, then prints the first blocker that still
+needs operator or repo work. In plain terms, bootstrap moves through:
 
-```text
-repo-mapped -> info-gathered -> tests-pass -> creds-wired ->
-readme-followed -> validation-green -> pilot-aligned ->
-worker-fleet-ready
-```
+1. map the repo and collect project facts;
+2. find the test and validation commands;
+3. document how credentials are supplied without storing secrets;
+4. confirm the README matches the real workflow;
+5. run validation and confirm the pilot/agent rules are aligned;
+6. enable the worker fleet.
+
+The CLI still uses short stage ids such as `repo-mapped`,
+`validation-green`, and `worker-fleet-ready` so agents can resume the
+same bootstrap without guessing.
 
 When the project is worker-ready, create work and start the fleet:
 
