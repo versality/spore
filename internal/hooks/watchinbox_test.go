@@ -283,3 +283,20 @@ func TestReadTellFile_MalformedYieldsEmpty(t *testing.T) {
 		t.Errorf("got (%q,%q,%q), want all empty", ts, src, body)
 	}
 }
+
+func TestReadTellFile_TaskTellSchema(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "tell.json")
+	writeTell(t, p, `{"slug":"worker","ts":"2026-05-04T10:00:00Z","msg":"please check status"}`)
+
+	ts, src, body := readTellFile(p)
+	if ts != "2026-05-04T10:00:00Z" {
+		t.Errorf("ts = %q", ts)
+	}
+	if src != "tell" {
+		t.Errorf("source = %q, want tell", src)
+	}
+	if body != "please check status" {
+		t.Errorf("body = %q", body)
+	}
+}

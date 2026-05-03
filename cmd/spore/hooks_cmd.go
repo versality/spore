@@ -165,11 +165,21 @@ func runHooksSettings() int {
 }
 
 func runHooksWatchInbox(args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox <slug>")
+	var err error
+	switch len(args) {
+	case 0:
+		inbox := os.Getenv("SKYBOT_INBOX")
+		if inbox == "" {
+			fmt.Fprintln(os.Stderr, "spore hooks watch-inbox: SKYBOT_INBOX is required when slug is omitted")
+			return 2
+		}
+		err = hooks.WatchInboxAt(inbox)
+	case 1:
+		err = hooks.WatchInbox(args[0])
+	default:
+		fmt.Fprintln(os.Stderr, "usage: spore hooks watch-inbox [slug]")
 		return 2
 	}
-	err := hooks.WatchInbox(args[0])
 	if err == hooks.ErrWake {
 		return 2
 	}
@@ -181,15 +191,23 @@ func runHooksWatchInbox(args []string) int {
 }
 
 func runHooksNotifyCoordinator(args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator <slug>")
+	switch len(args) {
+	case 0:
+		if err := hooks.NotifyCoordinatorEnv(); err != nil {
+			fmt.Fprintln(os.Stderr, "spore hooks notify-coordinator:", err)
+			return 1
+		}
+		return 0
+	case 1:
+		if err := hooks.NotifyCoordinator(args[0]); err != nil {
+			fmt.Fprintln(os.Stderr, "spore hooks notify-coordinator:", err)
+			return 1
+		}
+		return 0
+	default:
+		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator [project]")
 		return 2
 	}
-	if err := hooks.NotifyCoordinator(args[0]); err != nil {
-		fmt.Fprintln(os.Stderr, "spore hooks notify-coordinator:", err)
-		return 1
-	}
-	return 0
 }
 
 func repoRoot() (string, error) {

@@ -155,9 +155,17 @@ func readTellFile(path string) (ts, source, body string) {
 		Ts     string `json:"ts"`
 		Source string `json:"source"`
 		Body   string `json:"body"`
+		Slug   string `json:"slug"`
+		Msg    string `json:"msg"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(b), &ev); err != nil {
 		return
+	}
+	if ev.Source == "" && ev.Msg != "" {
+		ev.Source = "tell"
+	}
+	if ev.Body == "" {
+		ev.Body = ev.Msg
 	}
 	return ev.Ts, ev.Source, ev.Body
 }
