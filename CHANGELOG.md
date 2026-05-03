@@ -2,8 +2,8 @@
 
 ## 0.0.2 - 2026-05-04
 
-This is a small release note for a small solo repo: Spore can now run
-Codex-backed workers as a first-class task option while keeping the
+Spore 0.0.2 is a focused release: it can now run Codex-backed workers
+as a first-class task option while keeping the
 existing Claude Code path intact. Feedback and rough edges are welcome.
 
 - Added Codex worker support through `agent: codex`, with task-level
