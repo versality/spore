@@ -47,6 +47,12 @@ var BundledFlake embed.FS
 //go:embed all:bootstrap/skills
 var BundledSkills embed.FS
 
+// BundledHandover is the attach shell, agent wrappers, hooks, and
+// systemd user units installed by `spore infect --repo`.
+//
+//go:embed all:bootstrap/handover
+var BundledHandover embed.FS
+
 // BundledCoordinatorRole is the default role file the fleet reconciler
 // uses to boot the singleton coordinator agent. Consumers can override
 // by writing their own bootstrap/coordinator/role.md before bootstrap.

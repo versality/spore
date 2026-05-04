@@ -11,6 +11,9 @@ ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
 nixver="$(nixos-version 2>/dev/null)"
 fleet_state="disabled"
 [ -e "${XDG_STATE_HOME:-$HOME/.local/state}/spore/fleet-enabled" ] && fleet_state="enabled"
+agent_provider="${SPORE_COORDINATOR_PROVIDER:-claude}"
+agent_model="${SPORE_COORDINATOR_MODEL:-cli-default}"
+agent_effort="${SPORE_COORDINATOR_EFFORT:-high}"
 active=0
 total=0
 if [ -d "$project/tasks" ]; then
@@ -26,6 +29,7 @@ cat <<BANNER
   host    : $host  ($ip)
   os      : $nixver
   role    : $slug
+  agent   : $agent_provider  model: $agent_model  effort: $agent_effort
   fleet   : $fleet_state
   tasks   : $active active / $total total
 +--------------------------------------------------------------+
@@ -38,5 +42,8 @@ Spawn / inspect tasks with:
   spore fleet status
 
 Drop to shell below; the session stays alive (Ctrl-b d to detach).
+If this pane appeared after an agent login failure, run the selected
+agent's login command, then run:
+  spore fleet reconcile
 BANNER
 exec bash --login -i
