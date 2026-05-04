@@ -97,7 +97,7 @@ func SmokeArgv(c Config) []string {
 	}
 }
 
-// ResolveFlake returns the flakeRef (e.g. "/tmp/xyz#spore-bootstrap")
+// ResolveFlake returns the flakeRef (e.g. "path:/tmp/xyz#spore-bootstrap")
 // nixos-anywhere should be pointed at, plus a cleanup function the
 // caller must defer. When c.Flake is empty the bundled flake is
 // staged into a fresh tempdir with a generated local.nix; otherwise
@@ -114,7 +114,7 @@ func ResolveFlake(c Config, bundled fs.FS) (string, func(), error) {
 		if err != nil {
 			return "", nil, err
 		}
-		return dir + "#" + FlakeAttr, func() { _ = os.RemoveAll(dir) }, nil
+		return "path:" + dir + "#" + FlakeAttr, func() { _ = os.RemoveAll(dir) }, nil
 	}
 	if strings.Contains(c.Flake, "#") {
 		return c.Flake, func() {}, nil
