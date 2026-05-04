@@ -20,6 +20,10 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
+          commit =
+            if self ? rev then self.rev
+            else if self ? dirtyRev then self.dirtyRev
+            else "unknown";
 
           spore = pkgs.buildGoModule {
             pname = "spore";
@@ -27,6 +31,7 @@
             src = ./.;
             subPackages = [ "cmd/spore" ];
             vendorHash = null;
+            ldflags = [ "-X=github.com/versality/spore.buildCommit=${commit}" ];
             meta = {
               description = "Drop-in harness template for LLM-coding agents.";
               homepage = "https://github.com/versality/spore";

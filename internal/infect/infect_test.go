@@ -1,6 +1,8 @@
 package infect
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -218,4 +220,60 @@ func TestResolveFlakeUserSupplied(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunUsesResolvedPathFlakeRef(t *testing.T) {
+	tmp := t.TempDir()
+	priv := filepath.Join(tmp, "id")
+	if err := os.WriteFile(priv, []byte("priv"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(priv+".pub", []byte("ssh-ed25519 KKKK op\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls [][]string
+	runner := func(_ context.Context, argv []string, _, _ io.Writer) error {
+		calls = append(calls, append([]string(nil), argv...))
+		return nil
+	}
+
+	err := run(
+		context.Background(),
+		Config{IP: "203.0.113.7", SSHKey: priv},
+		fakeBundled(),
+		io.Discard,
+		io.Discard,
+		runner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("got %d runner calls, want nixos-anywhere and smoke check", len(calls))
+	}
+
+	flakeRef := argAfter(calls[0], "--flake")
+	if !strings.HasPrefix(flakeRef, "path:") {
+		t.Fatalf("flakeRef should use path: scheme: %s", flakeRef)
+	}
+	if strings.Contains(flakeRef, "git+file:///tmp") {
+		t.Fatalf("flakeRef leaked tmp git ref: %s", flakeRef)
+	}
+	stageDir := strings.TrimPrefix(strings.TrimSuffix(flakeRef, "#"+FlakeAttr), "path:")
+	if filepath.Base(stageDir) == "" || !strings.HasPrefix(filepath.Base(stageDir), "spore-bootstrap-flake-") {
+		t.Fatalf("flakeRef should point at the staged flake dir, got %s", flakeRef)
+	}
+	if got := calls[1][0]; got != "ssh" {
+		t.Fatalf("second call should be smoke check ssh, got %v", calls[1])
+	}
+}
+
+func argAfter(argv []string, key string) string {
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == key {
+			return argv[i+1]
+		}
+	}
+	return ""
 }

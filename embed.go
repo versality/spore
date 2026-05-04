@@ -14,8 +14,22 @@ import (
 //go:embed VERSION
 var versionFile string
 
+var buildCommit = "unknown"
+
 func Version() string {
 	return strings.TrimSpace(versionFile)
+}
+
+func BuildCommit() string {
+	return strings.TrimSpace(buildCommit)
+}
+
+func BuildVersion() string {
+	commit := BuildCommit()
+	if commit == "" || commit == "unknown" {
+		return Version() + " (commit unknown)"
+	}
+	return Version() + " (" + commit + ")"
 }
 
 // BundledFlake is the minimal NixOS flake `spore infect` stages into a

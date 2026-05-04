@@ -105,7 +105,7 @@ func main() {
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	case "-v", "--version", "version":
-		fmt.Println(spore.Version())
+		fmt.Println(spore.BuildVersion())
 	case "compose":
 		if err := runCompose(args); err != nil {
 			fmt.Fprintln(os.Stderr, "spore compose:", err)

@@ -211,6 +211,12 @@ func PublicKey(privateKeyPath string) (string, error) {
 // preserved in the returned error: callers that need to mirror it can
 // inspect with errors.As(err, *exec.ExitError).
 func Run(ctx context.Context, c Config, bundled fs.FS, stdout, stderr io.Writer) error {
+	return run(ctx, c, bundled, stdout, stderr, runStreaming)
+}
+
+type streamRunner func(context.Context, []string, io.Writer, io.Writer) error
+
+func run(ctx context.Context, c Config, bundled fs.FS, stdout, stderr io.Writer, runner streamRunner) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
@@ -222,12 +228,12 @@ func Run(ctx context.Context, c Config, bundled fs.FS, stdout, stderr io.Writer)
 	}
 	defer cleanup()
 
-	if err := runStreaming(ctx, Argv(c, flakeRef), stdout, stderr); err != nil {
+	if err := runner(ctx, Argv(c, flakeRef), stdout, stderr); err != nil {
 		return fmt.Errorf("nixos-anywhere: %w", err)
 	}
 
 	fmt.Fprintf(stdout, "[spore] smoke check: ssh %s@%s nixos-version\n", c.User, c.IP)
-	if err := runStreaming(ctx, SmokeArgv(c), stdout, stderr); err != nil {
+	if err := runner(ctx, SmokeArgv(c), stdout, stderr); err != nil {
 		return fmt.Errorf("smoke check: %w", err)
 	}
 	return nil

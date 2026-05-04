@@ -25,6 +25,24 @@ post-install root authorized key from `~/.ssh/id_ed25519.pub`, runs
 nixos-anywhere as `root@203.0.113.7`, and finishes with `ssh
 root@203.0.113.7 nixos-version`.
 
+### Running a local checkout before activation
+
+If a packaged `spore` on PATH is stale, run this from the checkout
+root:
+
+```
+nix run . -- infect 203.0.113.7 --ssh-key ~/.ssh/id_ed25519
+```
+
+Check the exact build first with:
+
+```
+nix run . -- version
+```
+
+The Nix-built CLI prints the release version plus the build commit when
+that commit is available.
+
 ### Full example
 
 ```
@@ -103,6 +121,12 @@ guidance.
 - `public key "<key>.pub" not found`: spore needs the public sibling
   of `--ssh-key` to write into the bundled flake's authorized-keys
   list. Run `ssh-keygen -y -f <key> > <key>.pub`.
+- `Warning: Identity file /tmp/.../nixos-anywhere not accessible`
+  before `### Uploading install SSH keys ###`: nixos-anywhere probes
+  its temporary install key path before it creates or copies that key.
+  The later `ssh-copy-id` line shows the generated `.pub` key it is
+  uploading. Treat the warning as harmless unless it is followed by
+  `Permission denied` or a failed nixos-anywhere exit.
 
 ## Exit codes
 
