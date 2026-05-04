@@ -41,6 +41,7 @@ func TestSmokeArgv(t *testing.T) {
 		"ssh",
 		"-i", "/k/id",
 		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "BatchMode=yes",
 		"root@203.0.113.7",
 		"nixos-version",
@@ -143,6 +144,22 @@ func fakeBundled() fstest.MapFS {
 	}
 }
 
+func fakeHandover() fstest.MapFS {
+	return fstest.MapFS{
+		"bootstrap/handover/spore-attach.sh":                       {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/greet-coordinator.sh":                  {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/greet-worker.sh":                       {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/spore-coordinator-launch.sh":           {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/spore-worker-brief.sh":                 {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/spore-fleet-tick.sh":                   {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/hooks/block-bg-bash.pl":                {Data: []byte("#!/usr/bin/env perl\n")},
+		"bootstrap/handover/hooks/load-state-md.pl":                {Data: []byte("#!/usr/bin/env perl\n")},
+		"bootstrap/handover/settings.json":                         {Data: []byte("{}\n")},
+		"bootstrap/handover/systemd/spore-fleet-reconcile.service": {Data: []byte("[Service]\n")},
+		"bootstrap/handover/systemd/spore-fleet-reconcile.timer":   {Data: []byte("[Timer]\n")},
+	}
+}
+
 func TestStage(t *testing.T) {
 	tmp := t.TempDir()
 	dir, err := Stage(fakeBundled(), tmp, "myhost", []string{"ssh-ed25519 KKKK op"})
@@ -242,6 +259,7 @@ func TestRunUsesResolvedPathFlakeRef(t *testing.T) {
 		context.Background(),
 		Config{IP: "203.0.113.7", SSHKey: priv},
 		fakeBundled(),
+		fakeHandover(),
 		io.Discard,
 		io.Discard,
 		runner,
@@ -266,6 +284,93 @@ func TestRunUsesResolvedPathFlakeRef(t *testing.T) {
 	}
 	if got := calls[1][0]; got != "ssh" {
 		t.Fatalf("second call should be smoke check ssh, got %v", calls[1])
+	}
+}
+
+func TestRsyncRepoArgvIncludesGitAndExcludesSecrets(t *testing.T) {
+	got := RsyncRepoArgv(
+		Config{IP: "203.0.113.7", SSHKey: "/home/me/.ssh/id_ed25519"},
+		"/home/me/project",
+		"root@203.0.113.7:/root/project/",
+	)
+	joined := strings.Join(got, "\x00")
+	for _, want := range []string{
+		"--include=.env.example",
+		"--exclude=.env*",
+		"--exclude=node_modules/",
+		"--exclude=target/",
+		"root@203.0.113.7:/root/project/",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("rsync argv missing %q: %v", want, got)
+		}
+	}
+	if strings.Contains(joined, ".git") {
+		t.Fatalf("rsync argv should not exclude .git: %v", got)
+	}
+}
+
+func TestRunWithRepoRunsHandoff(t *testing.T) {
+	tmp := t.TempDir()
+	priv := filepath.Join(tmp, "id")
+	if err := os.WriteFile(priv, []byte("priv"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(priv+".pub", []byte("ssh-ed25519 KKKK op\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(tmp, "project")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls [][]string
+	runner := func(_ context.Context, argv []string, _, _ io.Writer) error {
+		calls = append(calls, append([]string(nil), argv...))
+		return nil
+	}
+
+	err := run(
+		context.Background(),
+		Config{
+			IP:                "203.0.113.7",
+			SSHKey:            priv,
+			Repo:              repo,
+			CoordinatorAgent:  "codex",
+			CoordinatorModel:  "gpt-5.5",
+			CoordinatorEffort: "xhigh",
+		},
+		fakeBundled(),
+		fakeHandover(),
+		io.Discard,
+		io.Discard,
+		runner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 8 {
+		t.Fatalf("got %d runner calls, want install + smoke + handoff calls: %v", len(calls), calls)
+	}
+	if calls[4][0] != "rsync" {
+		t.Fatalf("fifth call should copy repo with rsync, got %v", calls[4])
+	}
+	if calls[6][0] != "scp" || !strings.HasSuffix(calls[6][len(calls[6])-2], string(filepath.Separator)+".") {
+		t.Fatalf("handover scp should copy staged contents, got %v", calls[6])
+	}
+	script := calls[7][len(calls[7])-1]
+	for _, want := range []string{
+		"SPORE_COORDINATOR_PROVIDER=codex",
+		"SPORE_COORDINATOR_MODEL=gpt-5.5",
+		"SPORE_COORDINATOR_EFFORT=xhigh",
+		"mv '/root/project' '/home/spore/project'",
+		"install -d -o spore -g users -m 0755 '/home/spore/project/tasks'",
+		"spore fleet enable && spore fleet reconcile",
+		"systemctl restart spore-coordinator.service",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("handover script missing %q:\n%s", want, script)
+		}
 	}
 }
 

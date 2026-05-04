@@ -1,4 +1,55 @@
 { lib, modulesPath, pkgs, ... }:
+let
+  sporeAttach = pkgs.writeShellScriptBin "spore-attach" ''
+    set -e
+
+    if [ "''${1:-}" = "-c" ]; then
+      set -- ''${2:-}
+      shift
+    fi
+
+    mode="''${1:-coord}"
+
+    attach_pilot() {
+      name="''${1:-default}"
+      exec ${pkgs.tmux}/bin/tmux new-session -A -s "spore/pilot/$name" ${pkgs.bashInteractive}/bin/bash -l
+    }
+
+    case "$mode" in
+      coord)
+        sessions="$(${pkgs.tmux}/bin/tmux ls -F '#{session_name}' 2>/dev/null | ${pkgs.gnugrep}/bin/grep '/coordinator$' || true)"
+        n="$(printf '%s' "$sessions" | ${pkgs.gnugrep}/bin/grep -c . || true)"
+        case "$n" in
+          1)
+            exec ${pkgs.tmux}/bin/tmux attach -t "$sessions"
+            ;;
+      0)
+        printf '%s\n' \
+          "spore-attach: no coordinator session running on this host." \
+          "spore-attach: dropping into a default pilot session so you can recover." \
+          "spore-attach: if Claude or Codex is not logged in yet, run its login command here first." \
+          "spore-attach: then run: spore fleet enable && spore fleet reconcile" >&2
+        attach_pilot default
+        ;;
+          *)
+            echo "spore-attach: multiple coordinator sessions present:" >&2
+            printf '  %s\n' $sessions >&2
+            echo "spore-attach: ssh in as root to reconcile." >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      pilot)
+        attach_pilot "''${2:-default}"
+        ;;
+      *)
+        echo "spore-attach: unknown mode: $mode" >&2
+        echo "usage: spore-attach [coord | pilot [<name>]]" >&2
+        exit 2
+        ;;
+    esac
+  '';
+in
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
@@ -39,11 +90,12 @@
   users.users.spore = {
     isNormalUser = true;
     home = "/home/spore";
-    shell = "/usr/local/bin/spore-attach";
+    shell = "${sporeAttach}/bin/spore-attach";
   };
 
   environment.systemPackages = with pkgs; [
     claude-code
+    codex
     git
     rsync
     curl
@@ -80,6 +132,7 @@
         "SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch"
         "SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief"
       ];
+      EnvironmentFile = "-/etc/spore/coordinator.env";
       ExecStart = "/usr/local/bin/spore-fleet-tick";
     };
   };

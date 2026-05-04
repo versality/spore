@@ -5,12 +5,17 @@
 install NixOS over SSH onto a freshly provisioned, root-reachable VM.
 spore does not reimplement nixos-anywhere; it stages a small flake,
 shells out to `nix run github:nix-community/nixos-anywhere`, streams
-the subprocess output, and runs a post-install ssh smoke check.
+the subprocess output, runs a post-install ssh smoke check, and can
+copy a local repo into the `spore` user's home for handoff.
 
 ## Invocation
 
 ```
-spore infect <ip> --ssh-key <path> [--flake <path-or-attr>]
+spore infect <ip> --ssh-key <path> [--repo <local-path>]
+                                     [--coordinator-agent claude|codex]
+                                     [--coordinator-model <model>]
+                                     [--coordinator-effort <effort>]
+                                     [--flake <path-or-attr>]
                                      [--hostname <name>] [--user <user>]
 ```
 
@@ -24,6 +29,46 @@ This stages the bundled flake at `bootstrap/flake/`, derives the
 post-install root authorized key from `~/.ssh/id_ed25519.pub`, runs
 nixos-anywhere as `root@203.0.113.7`, and finishes with `ssh
 root@203.0.113.7 nixos-version`.
+
+### One-command handoff
+
+```
+spore infect 203.0.113.7 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --repo ~/projects/myrepo \
+  --coordinator-agent claude \
+  --coordinator-model sonnet
+```
+
+This installs NixOS, copies the current `spore` binary to
+`/usr/local/bin/spore`, rsyncs `~/projects/myrepo` to
+`/home/spore/myrepo`, installs the attach shell and coordinator
+wrappers, creates `/home/spore/myrepo/tasks` when absent, enables
+worker reconciliation, and starts the coordinator timer. The same
+public key used for install is authorized for both `root` and `spore`.
+
+After it exits:
+
+```
+ssh -t -i ~/.ssh/id_ed25519 spore@203.0.113.7
+```
+
+The attach shell joins the singleton coordinator tmux session. If the
+selected agent has not been logged in yet, the pane stays open at that
+agent's login chooser. The selected provider, model, and effort are
+recorded in `/etc/spore/coordinator.env`; log in to the agent in that
+pane, then run `spore fleet reconcile`.
+
+To start the initial coordinator with Codex instead:
+
+```
+spore infect 203.0.113.7 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --repo ~/projects/myrepo \
+  --coordinator-agent codex \
+  --coordinator-model gpt-5.5 \
+  --coordinator-effort high
+```
 
 ### Running a local checkout before activation
 
@@ -48,6 +93,7 @@ that commit is available.
 ```
 spore infect 203.0.113.7 \
   --ssh-key ~/.ssh/id_ed25519 \
+  --repo ./my-app \
   --hostname web-1 \
   --user root \
   --flake ./my-config#hetzner
@@ -58,7 +104,11 @@ spore infect 203.0.113.7 \
 | Flag | Required | Default | Notes |
 |------|----------|---------|-------|
 | `<ip>` | yes |  | Positional. IPv4 or IPv6 reachable from this host. |
-| `--ssh-key` | yes |  | Path to a private SSH key. The `.pub` sibling must exist; spore reads it as the post-install root authorized key. nixos-anywhere also uses the private key (`-i`) to authenticate during install. |
+| `--ssh-key` | yes |  | Path to a private SSH key. The `.pub` sibling must exist; spore reads it as the post-install `root` and `spore` authorized key. nixos-anywhere also uses the private key (`-i`) to authenticate during install. |
+| `--repo` | no |  | Local checkout to rsync to `/home/spore/<basename>`. The copy includes `.git/`, includes `.env.example`, excludes `.env*` secrets, skips common dependency / build artifact directories, and creates an empty `tasks/` directory on the target when the checkout does not already have one. |
+| `--coordinator-agent` | no | `claude` | Initial coordinator provider: `claude` or `codex`. The choice is written to `/etc/spore/coordinator.env` and used by the systemd coordinator timer. |
+| `--coordinator-model` | no | CLI default | Model passed to the selected coordinator CLI. For example, `sonnet` for Claude Code or `gpt-5.5` for Codex. Empty means the CLI default. |
+| `--coordinator-effort` | no | `high` | Codex reasoning effort for the initial coordinator: `low`, `medium`, `high`, or `xhigh`. `very-high` is accepted as an alias for `xhigh`. Ignored by Claude. |
 | `--flake` | no | bundled | A flake path or full flake-ref. With `#attr` is taken verbatim; without `#attr` the bundled attr name `spore-bootstrap` is appended. When omitted the bundled flake at `bootstrap/flake/` is staged into a tempdir. |
 | `--hostname` | no | `nixos` | Written into the staged `local.nix` as `networking.hostName`. Ignored when `--flake` is supplied (custom flakes own their own hostname). |
 | `--user` | no | `root` | SSH user nixos-anywhere connects as. Non-root users must have password-less sudo on the target. |
@@ -66,7 +116,7 @@ spore infect 203.0.113.7 \
 ## Prerequisites
 
 - `nix` with flakes enabled on this machine (`nix run` must work).
-- `ssh` and `ssh-keygen` on PATH.
+- `ssh`, `ssh-keygen`, `scp`, and `rsync` on PATH.
 - Target host: x86_64 Linux, root-reachable over SSH, kexec-capable,
   >= 1 GiB RAM. Hetzner / DigitalOcean / Vultr / equivalent default
   cloud Linux images all qualify.
@@ -76,10 +126,10 @@ spore infect 203.0.113.7 \
 ## What the bundled flake provides
 
 `bootstrap/flake/` is the smallest viable NixOS config: openssh
-(key-only, no password, no root password login), GRUB EFI, and a
+(key-only, no password, no root password login), GRUB EFI, a `spore`
+operator user, git, tmux, rsync, curl, Claude Code, Codex, and a
 single-disk GPT layout (1M BIOS-boot, 512M ESP at `/boot`, ext4 at
-`/`). nixpkgs tracks `nixos-unstable`, disko follows nixpkgs, no
-`flake.lock` is shipped.
+`/`). nixpkgs tracks `nixos-unstable`, disko follows nixpkgs.
 
 The hostname and authorized-keys list are written into a generated
 `local.nix` that lives only inside the temp staging directory; the
@@ -92,10 +142,10 @@ guidance.
 - Provision the VM. Operator runs the cloud console / API.
 - Re-infect an existing NixOS host. Use `nixos-rebuild switch
   --target-host` against your real flake instead.
-- Wire secrets, agenix, or any project-specific module. The bundled
-  flake stops at "ssh works, root can log in".
+- Wire secrets, agenix, or any project-specific module.
 - Run the spore bootstrap stages on the freshly-installed server.
-  That is a separate flow.
+  The one-command handoff starts the coordinator surface; project
+  bootstrap remains an explicit repo-local flow.
 
 ## Failure hints
 
@@ -105,10 +155,12 @@ guidance.
   the VM. nixos-anywhere does not fall back to a password unless you
   also pass `SSHPASS` plus `--env-password` (spore does not surface
   these flags; pass a working key instead).
-- `Host key verification failed` from the smoke check: an old entry
-  for `<ip>` exists in `~/.ssh/known_hosts` from a previous install.
-  Remove it with `ssh-keygen -R <ip>`. The smoke check uses
-  `StrictHostKeyChecking=accept-new` so a first-time entry is fine.
+- `Host key verification failed` from nixos-anywhere before the
+  post-install smoke check: an old entry for `<ip>` exists in
+  `~/.ssh/known_hosts` from a previous install. Remove it with
+  `ssh-keygen -R <ip>`. Spore's own smoke and handoff SSH calls use an
+  isolated known-hosts file because re-infecting a target rotates host
+  keys by design.
 - `disko: target disk is not /dev/sda`: the bundled flake assumes
   `/dev/sda`. Provide a `--flake` of your own or override
   `disko.devices.disk.disk1.device` in a wrapping module. Hetzner
@@ -121,6 +173,14 @@ guidance.
 - `public key "<key>.pub" not found`: spore needs the public sibling
   of `--ssh-key` to write into the bundled flake's authorized-keys
   list. Run `ssh-keygen -y -f <key> > <key>.pub`.
+- `ssh spore@<ip>` lands in a recovery pane: the coordinator tmux
+  session did not survive. Most often the selected agent needs login.
+  Run the agent login command shown by that CLI, then run
+  `spore fleet reconcile` from the pane.
+- `codex: command not found` in the coordinator pane: the target flake
+  did not include Codex. The bundled flake includes it; custom flakes
+  must provide a `codex` binary on `PATH` before using
+  `--coordinator-agent codex`.
 - `Warning: Identity file /tmp/.../nixos-anywhere not accessible`
   before `### Uploading install SSH keys ###`: nixos-anywhere probes
   its temporary install key path before it creates or copies that key.

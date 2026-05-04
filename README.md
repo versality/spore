@@ -113,27 +113,39 @@ spore infect 203.0.113.7 \
   --flake ./nixos#web-1
 ```
 
-The intended kickstart path is one command that installs NixOS, copies
-the current repo to the box, and leaves the operator ready to run
-`spore bootstrap` there. Today `spore infect` only performs the NixOS
-install and SSH smoke check. Until repo-copy lands, the concise manual
-handoff is:
+The kickstart path is one command that installs NixOS, copies the
+current repo to the box, and starts the coordinator handoff surface
+under the `spore` user. Choose the initial coordinator provider and
+model explicitly:
 
 ```sh
-# local: copy this checkout, including .git, after infect succeeds
-rsync -az --exclude='.env*' --exclude='node_modules/' --exclude='tmp/' \
-  /path/to/project/ root@203.0.113.7:/root/project/
+spore infect 203.0.113.7 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --repo /path/to/project \
+  --coordinator-agent claude \
+  --coordinator-model sonnet
 
-# remote: install runtime tools, then bootstrap inside the copied repo
-ssh root@203.0.113.7 \
-  'nix profile install github:versality/spore nixpkgs#git \
-   --extra-experimental-features "nix-command flakes"'
-ssh -t root@203.0.113.7 'cd /root/project && spore bootstrap'
+ssh -t spore@203.0.113.7
 ```
 
+For a Codex-backed coordinator, use the Codex provider, model, and
+reasoning effort instead:
+
+```sh
+spore infect 203.0.113.7 \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --repo /path/to/project \
+  --coordinator-agent codex \
+  --coordinator-model gpt-5.5 \
+  --coordinator-effort high
+```
+
+If the selected agent needs interactive login, `ssh -t spore@<ip>`
+attaches to the coordinator tmux pane and leaves the agent login chooser
+visible.
+
 See [docs/infect.md](docs/infect.md) for full flag behavior and
-failure hints. The remaining one-command repo-copy work is tracked in
-[docs/todo/kickstart-onecommand.md](docs/todo/kickstart-onecommand.md).
+failure hints.
 
 ## Developer Entry
 

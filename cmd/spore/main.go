@@ -77,16 +77,26 @@ Subcommands:
 const infectUsage = `spore infect - bootstrap a fresh server with NixOS via nixos-anywhere
 
 Usage:
-  spore infect <ip> --ssh-key <path> [--flake <path-or-attr>] [--hostname <name>] [--user <user>]
+  spore infect <ip> --ssh-key <path> [--repo <local-path>] [--flake <path-or-attr>] [--hostname <name>] [--user <user>]
+                                      [--coordinator-agent claude|codex] [--coordinator-model <model>]
+                                      [--coordinator-effort <effort>]
 
 Flags:
   --ssh-key   Path to the private SSH key to install with (required).
-              The .pub sibling is installed as the post-install root key.
+              The .pub sibling is installed as the post-install root and spore key.
+  --repo      Local repo checkout to copy to /home/spore/<basename> after install.
+              The copy includes .git and excludes .env* secrets and build artifacts.
   --flake     Path or flake-ref (with optional #attr) to use. Defaults
               to the bundled minimal flake at bootstrap/flake.
   --hostname  networking.hostName for the bundled flake. Default "nixos".
               Ignored when --flake is supplied.
   --user      SSH user nixos-anywhere connects as. Default "root".
+  --coordinator-agent
+              Agent provider for the first coordinator. Default "claude".
+  --coordinator-model
+              Model passed to the coordinator agent. Empty uses that CLI's default.
+  --coordinator-effort
+              Codex reasoning effort for the coordinator. Default "high".
 
 WARNING: the target host is wiped during install. Only point this at a
 freshly provisioned VM that has no data worth keeping.
@@ -247,9 +257,13 @@ func isBoolFlag(fs *flag.FlagSet, name string) bool {
 func runInfect(args []string) int {
 	fs := flag.NewFlagSet("infect", flag.ContinueOnError)
 	sshKey := fs.String("ssh-key", "", "path to the private SSH key (required)")
+	repo := fs.String("repo", "", "local repo checkout to copy after install")
 	flake := fs.String("flake", "", "path or flake-ref (default: bundled minimal flake)")
 	hostname := fs.String("hostname", infect.DefaultHostname, "networking.hostName for the bundled flake")
 	user := fs.String("user", infect.DefaultUser, "SSH user nixos-anywhere connects as")
+	coordinatorAgent := fs.String("coordinator-agent", infect.DefaultCoordinatorAgent, "coordinator agent provider: claude or codex")
+	coordinatorModel := fs.String("coordinator-model", "", "model passed to the coordinator agent")
+	coordinatorEffort := fs.String("coordinator-effort", infect.DefaultCoordinatorEffort, "codex reasoning effort for the coordinator")
 	help := fs.Bool("h", false, "show help")
 	helpLong := fs.Bool("help", false, "show help")
 	fs.SetOutput(io.Discard)
@@ -272,15 +286,19 @@ func runInfect(args []string) int {
 		return 2
 	}
 	c := infect.Config{
-		IP:       fs.Arg(0),
-		SSHKey:   *sshKey,
-		Flake:    *flake,
-		Hostname: *hostname,
-		User:     *user,
+		IP:                fs.Arg(0),
+		SSHKey:            *sshKey,
+		Repo:              *repo,
+		Flake:             *flake,
+		Hostname:          *hostname,
+		User:              *user,
+		CoordinatorAgent:  *coordinatorAgent,
+		CoordinatorModel:  *coordinatorModel,
+		CoordinatorEffort: *coordinatorEffort,
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	err := infect.Run(ctx, c, spore.BundledFlake, os.Stdout, os.Stderr)
+	err := infect.Run(ctx, c, spore.BundledFlake, spore.BundledHandover, os.Stdout, os.Stderr)
 	if err == nil {
 		return 0
 	}

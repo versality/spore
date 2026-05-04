@@ -46,6 +46,12 @@ When the operator hands you `<ip>` and (optionally) a target repo:
 
 - SSH user during infect: `root`. SSH key: `~/.ssh/id_ed25519`.
   Post-infect operator SSH: `spore` (forced into coord pane).
+- Initial coordinator agent: `--coordinator-agent claude` unless the
+  operator asks for Codex. Pass `--coordinator-model <model>` when
+  the first coordinator/coordinator should pin a model; empty means the
+  selected CLI default. Use the Codex shape explicitly when requested:
+  `--coordinator-agent codex --coordinator-model gpt-5.5
+  --coordinator-effort high`.
 - Hostname: `nixos` (the bundled flake default; survives
   reinstall).
 - Disk: `/dev/sda` (`bootstrap/flake/disk-config.nix`). The infect
@@ -62,20 +68,17 @@ When the operator hands you `<ip>` and (optionally) a target repo:
 - `info-gathered.json`: write
   `{"tickets":{"tool":"none"},"knowledge":{"tool":"none"}}` unless
   the operator named a real ticketing or wiki tool.
-- Handover artifacts: install `bootstrap/handover/*.sh` to
-  `/usr/local/bin/`, `bootstrap/handover/hooks/*.pl` to
-  `/home/spore/.claude/hooks/`, and `bootstrap/handover/settings.json`
-  to `/home/spore/.claude/settings.json`. Persist
-  `SPORE_COORDINATOR_AGENT` and `SPORE_AGENT_BINARY` in
-  `/home/spore/.bashrc` (NixOS sshd does not source `/root/.bashrc`
-  and has no `/etc/profile.d`). Default
-  `SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief` and
-  `SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch`:
-  the wrappers exec the bundled `claude` with
-  `--dangerously-skip-permissions` and pipe `tasks/<slug>.md` /
-  `bootstrap/coordinator/role.md` in as headless prompt / interactive
-  seed respectively. The greet wrappers stay installed as a manual
-  fallback when claude is not yet authed.
+- Handover artifacts are embedded in the CLI and installed by
+  `spore infect --repo`: `bootstrap/handover/*.sh` to
+  `/usr/local/bin/`, hooks to `/home/spore/.claude/hooks/`, and
+  settings to `/home/spore/.claude/settings.json`. Persist
+  `SPORE_COORDINATOR_AGENT`, `SPORE_AGENT_BINARY`,
+  `SPORE_COORDINATOR_PROVIDER`, `SPORE_COORDINATOR_MODEL`, and
+  `SPORE_COORDINATOR_EFFORT` in `/etc/spore/coordinator.env`; the
+  spore user's `.bashrc` sources it for interactive recovery shells,
+  and the systemd coordinator service reads it via `EnvironmentFile`.
+  The coordinator wrapper launches Claude or Codex and falls back to
+  the greet wrapper when the selected agent needs first login.
 
 ## when to ask
 
@@ -91,77 +94,29 @@ Only when an action is operator-bound or genuinely ambiguous:
 ## the script (idempotent)
 
 1. `ssh-keygen -R <ip>` to clear stale host keys.
-2. `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o
-   /tmp/spore-linux-amd64 ./cmd/spore`.
-3. Launch infect in a tmux window so the operator can watch:
+2. Launch infect in a tmux window so the operator can watch:
    `tmux new-window -d -n infect "go run ./cmd/spore infect <ip>
-   --ssh-key ~/.ssh/id_ed25519 | tee /tmp/spore-infect.log"`.
+   --ssh-key ~/.ssh/id_ed25519 --repo <src> --coordinator-agent
+   claude --coordinator-model sonnet | tee /tmp/spore-infect.log"`.
    Wait via `Monitor` until `=== EXIT ===` lands.
-4. `scp /tmp/spore-linux-amd64 root@<ip>:/usr/local/bin/spore`,
-   `chmod +x` it.
-5. `rsync -az --exclude='log/*.log' --exclude='tmp/*'
-   --exclude='storage/*' --exclude='node_modules/' <src>/
-   root@<ip>:/root/<basename>/`. The dubious-ownership fix
-   landed in `internal/task` so no chown is needed.
-6. SSH in, `mkdir -p /root/.local/state/spore/<project>`, write
-   `info-gathered.json` with the defaults above.
-7. Run `spore bootstrap` with the five `--skip` flags listed
-   above. It walks the rest and lands at `worker-fleet-ready`.
-8. Install the handover artifacts (NixOS does not put
-   `/usr/local/bin` on the default PATH; see step 10):
-   - `scp bootstrap/handover/spore-attach.sh root@<ip>:/usr/local/bin/spore-attach`
-   - `scp bootstrap/handover/greet-coordinator.sh root@<ip>:/usr/local/bin/spore-greet-coordinator`
-   - `scp bootstrap/handover/greet-worker.sh root@<ip>:/usr/local/bin/spore-greet-worker`
-   - `scp bootstrap/handover/spore-coordinator-launch.sh root@<ip>:/usr/local/bin/spore-coordinator-launch`
-   - `scp bootstrap/handover/spore-worker-brief.sh root@<ip>:/usr/local/bin/spore-worker-brief`
-   - `scp bootstrap/handover/spore-fleet-tick.sh root@<ip>:/usr/local/bin/spore-fleet-tick`
-   `chmod +x` all six.
-   Then `mkdir -p /home/spore/.claude/hooks` and
-   `scp bootstrap/handover/hooks/{block-bg-bash,load-state-md}.pl
-   root@<ip>:/home/spore/.claude/hooks/`, `chmod +x` both. Drop the
-   user-scope settings template:
-   `scp bootstrap/handover/settings.json root@<ip>:/home/spore/.claude/settings.json`.
-   Drop the systemd user units that drive the periodic reconcile:
-   `mkdir -p /home/spore/.config/systemd/user`,
-   `scp bootstrap/handover/systemd/spore-fleet-reconcile.{service,timer}
-   root@<ip>:/home/spore/.config/systemd/user/`.
-9. Move the repo to spore's home and chown:
-   `mv /root/<basename> /home/spore/<basename>`,
-   `mv /root/.local/state/spore /home/spore/.local/state/spore`,
-   `chown -R spore:users /home/spore`.
-10. Write `/home/spore/.bashrc`. Point both agent vars at the
-    handover wrappers (which exec `claude` with the right flags and
-    pipe brief / role files in):
-    `export PATH=/usr/local/bin:$PATH`
-    `export SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch`
-    `export SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief`
-    `chown spore:users` it. To swap in the greet stand-ins (when
-    claude is not yet authed), the operator overrides those two vars
-    in their own shell before `spore fleet reconcile`.
-11. As root, enable lingering for the spore user so the systemd user
-    manager runs without an active SSH session:
-    `loginctl enable-linger spore`. Then, as spore
-    (`runuser -l spore -c '...'`):
-    `cd ~/<basename> && spore fleet enable && spore fleet reconcile
-    && systemctl --user daemon-reload
-    && systemctl --user enable --now spore-fleet-reconcile.timer`.
-    The tmux server and the user systemd instance now belong to spore;
-    root cannot see them via `tmux ls` / `systemctl --user list-units`,
-    and that is intentional. The timer fires every minute and respawns
-    the coordinator (and any worker whose task is still active) when
-    it dies.
-12. Locally, open the handover window:
-    `tmux new-window -d -n coord "ssh -t -o
-    ServerAliveInterval=30 spore@<ip>"`. The forced login shell
-    (`spore-attach`) does the tmux attach itself; do not pass an
-    explicit attach command.
+3. `spore infect --repo` copies the current binary to
+   `/usr/local/bin/spore`, rsyncs `<src>` to `/home/spore/<basename>`
+   with `.git/` included and `.env*` excluded, installs handover
+   assets, writes `/etc/spore/coordinator.env`, creates `tasks/` when
+   absent, enables lingering, enables the fleet flag, runs the first
+   reconcile, and restarts `spore-coordinator.service`.
+4. Locally, open the handover window:
+   `tmux new-window -d -n coord "ssh -t -o
+   ServerAliveInterval=30 spore@<ip>"`. The forced login shell
+   (`spore-attach`) does the tmux attach itself; do not pass an
+   explicit attach command.
 
 ## known gaps
 
-- The bundled flake includes `claude-code` but not its OAuth
-  credential. First operator login on the box still needs an
-  interactive `claude /login` once; the greet wrappers stand in
-  until that lands.
+- The bundled flake includes Claude Code and Codex but not their
+  credentials. First operator login on the box still needs an
+  interactive login once; `ssh -t spore@<ip>` should attach to the
+  coordinator pane and show the selected agent's login surface.
 - `creds-wired`, `readme-followed`, `validation-green` skip with
   warnings. Consumer projects that want clean stages must
   document the secret surface in their agent instructions, ship a README

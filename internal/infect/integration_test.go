@@ -25,7 +25,7 @@ func TestRunIntegration(t *testing.T) {
 		t.Skipf("set SPORE_INFECT_IT_KEY=<private-key-path> alongside SPORE_INFECT_IT_TARGET")
 	}
 	c := Config{IP: ip, SSHKey: key}
-	if err := Run(context.Background(), c, spore.BundledFlake, os.Stdout, os.Stderr); err != nil {
+	if err := Run(context.Background(), c, spore.BundledFlake, spore.BundledHandover, os.Stdout, os.Stderr); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }

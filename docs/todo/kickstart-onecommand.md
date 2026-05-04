@@ -1,20 +1,35 @@
-**Status**: open
+**Status**: done
 
 # kickstart: collapse the operator path to one command
 
 ## Goal
 
-The README's "Getting started" describes the intended operator path:
+The README's "Getting started" describes the operator path:
 
-1. `nix profile install github:versality/spore` (local)
-2. `spore infect <ip> --ssh-key <key> --repo <local-path>` (local)
-3. `spore bootstrap` (remote, re-entrant; agent prompts the operator
-   at gate-bound stages)
-4. `spore task new` + `spore fleet enable` (remote)
+1. `nix run <spore-checkout> -- infect <ip> --ssh-key <key>
+   --repo <local-path> --coordinator-agent claude|codex
+   --coordinator-model <model>` (local)
+2. `ssh -t spore@<ip>` (remote attach surface)
+3. If needed, log the selected agent in interactively, then run
+   `spore fleet reconcile` from the recovery pane.
 
-In v0 the agent legwork inside steps 2 and 3 leaks back to the
-operator. This doc tracks the gaps and the manual workaround so the
-public README does not need to enumerate the friction.
+The one-command path now owns the install, repo copy, spore CLI copy,
+handover scripts, initial coordinator provider/model env, and fleet
+reconcile timer.
+
+## Progress
+
+2026-05-04: Verified the one-command handoff against
+`188.245.113.128` with:
+
+```
+nix run . -- infect 188.245.113.128 --ssh-key ~/.ssh/id_ed25519 --repo /home/sky/projects/spore --coordinator-agent codex --coordinator-model gpt-5.5 --coordinator-effort high
+```
+
+Post-infect checks showed `spore@188.245.113.128` attaching to
+`spore/spore/coordinator`, the coordinator pane waiting at Codex's
+interactive login chooser, `/home/spore/spore/.git` present, and
+`/etc/spore/coordinator.env` recording `codex`, `gpt-5.5`, and `high`.
 
 ## Why `--repo` takes a local path, not a URL
 
@@ -32,49 +47,32 @@ A future iteration can add `--repo <url>` for the "I do not have a
 local clone" case, with `--ssh-agent` forwarding as the default
 auth path. Out of scope for v0.
 
-## Current workaround (v0)
+## Current flow
 
-Until the gaps below close, the operator runs these by hand after
-`spore infect` returns:
+`spore infect --repo` now performs the handoff directly:
 
-```
-# (local) cross-build and copy the spore binary
-GOOS=linux GOARCH=amd64 go build -o /tmp/spore-linux ./cmd/spore
-ssh root@<ip> 'mkdir -p /root/bin'
-scp /tmp/spore-linux root@<ip>:/root/bin/spore
+- installs NixOS with the bundled flake
+- authorizes the install key for both `root` and `spore`
+- copies the running spore binary to `/usr/local/bin/spore`
+- rsyncs the local checkout, including `.git/`, to
+  `/home/spore/<basename>`
+- excludes `.env*` secrets while preserving `.env.example`
+- creates an empty `tasks/` directory on the target when the checkout
+  does not already contain one, so first reconcile can spawn the
+  coordinator even for a kernel checkout
+- installs `bootstrap/handover/` scripts, hooks, settings, and user
+  units from embedded CLI assets
+- writes `/etc/spore/coordinator.env` with the selected provider,
+  model, and effort
+- enables the fleet flag, runs the first reconcile, and restarts
+  `spore-coordinator.service`
 
-# (remote) install git
-ssh root@<ip> 'nix profile install nixpkgs#git \
-  --extra-experimental-features "nix-command flakes"'
-
-# (local) rsync the local checkout, with sane excludes
-rsync -az --info=stats1 \
-  --exclude='.env' --exclude='.env.test' --exclude='.env.development' \
-  --exclude='.env.local' --exclude='node_modules/' \
-  --exclude='vendor/bundle/' --exclude='tmp/' --exclude='log/' \
-  --exclude='storage/' --exclude='public/assets/' --exclude='public/packs/' \
-  --exclude='.bundle/' --exclude='coverage/' \
-  ~/projects/myrepo/ root@<ip>:/root/project/
-
-# (remote) install claude-code so /spore-bootstrap can run on the box
-ssh root@<ip> 'nix profile install github:versality/spore#claude-code \
-  --extra-experimental-features "nix-command flakes"'
-
-# (remote) walk gates, drive skill-bound stages
-ssh -t root@<ip> 'cd /root/project && claude'
-# inside claude: /spore-bootstrap
-```
-
-If the agent flow is unavailable, the operator can write the
-sentinel JSON sentinel files directly per the runbook in
-`bootstrap/stages/<stage>.md`.
-
-## Gaps to close
+## Landed Scope
 
 ### 1. `spore infect --repo <local-path>`
 
 After the kexec / nixos-anywhere install completes, before exit,
-infect should:
+infect does:
 
 - rsync the working tree at `<local-path>` to `/root/project` on
   the box, including `.git/` so `repo-mapped` and the lints see
@@ -82,31 +80,34 @@ infect should:
 - apply the default exclude set: `.env*` (except `.env.example`),
   `node_modules/`, `vendor/bundle/`, `tmp/`, `log/`, `storage/`,
   `public/assets/`, `public/packs/`, `.bundle/`, `coverage/`,
-  build artifacts. A `--exclude` flag can extend the set.
-- chown `/root/project` to root after the transfer so git stops
-  complaining about dubious ownership (or rely on the lint-side
-  `safe.directory` patch already shipped)
-- ensure the spore CLI is on `PATH` at a stable location
+  and build artifacts
+- move the copied repo to `/home/spore/<basename>` and chown it to
+  `spore:users`
+- ensure the spore CLI is on `PATH` at `/usr/local/bin/spore`
 
 Acceptance: `spore infect <ip> --ssh-key <key> --repo <local-path>`
-lands the box in a state where `cd /root/project && spore bootstrap`
-works without further setup.
+lands the box in a state where `ssh -t spore@<ip>` reaches the
+coordinator attach surface or a clear first-login recovery pane.
 
 ### 2. Bundled flake bakes spore + runtime deps
 
 `bootstrap/flake/configuration.nix` adds to
 `environment.systemPackages`:
 
-- `spore` (this flake's `packages.<system>.default`)
-- `git` (currently absent; required by `repo-mapped` and every
-  git-based lint)
-- `claude-code` (this flake's `packages.<system>.claude-code`) so
+- `git` (required by `repo-mapped` and every git-based lint)
+- `claude-code` so
   `/spore-bootstrap` can run on the box without an extra install
+- `codex` so `--coordinator-agent codex` has a binary on the bundled
+  target
+- `tmux`, `rsync`, and the runtime tools the handoff scripts call
 
-Acceptance: a freshly-infected box has `spore`, `git`, and `claude`
-on `PATH` out of the box. No `nix profile install` step required.
+The running local spore binary is copied to `/usr/local/bin/spore`
+after install, so the target uses the exact checkout the operator
+ran.
 
-### 3. `info-gathered` and `readme-followed` driven without an agent
+## Deferred Follow-Up
+
+### `info-gathered` and `readme-followed` driven without an agent
 
 Today the spore-bootstrap skill uses `AskUserQuestion`, which only
 works when an agent (claude-code) is on the box driving the repo.
