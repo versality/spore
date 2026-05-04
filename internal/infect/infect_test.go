@@ -185,7 +185,10 @@ func TestResolveFlakeBundled(t *testing.T) {
 	if !strings.HasSuffix(ref, "#"+FlakeAttr) {
 		t.Fatalf("flakeRef should end with bundled attr: %s", ref)
 	}
-	stageDir := strings.TrimSuffix(ref, "#"+FlakeAttr)
+	if !strings.HasPrefix(ref, "path:") {
+		t.Fatalf("staged flakeRef should use path: scheme: %s", ref)
+	}
+	stageDir := strings.TrimPrefix(strings.TrimSuffix(ref, "#"+FlakeAttr), "path:")
 	if _, err := os.Stat(filepath.Join(stageDir, "local.nix")); err != nil {
 		t.Fatalf("staged local.nix missing: %v", err)
 	}
