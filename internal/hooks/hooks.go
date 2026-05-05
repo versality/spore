@@ -1,12 +1,15 @@
-// Package hooks holds spore's Claude-Code hook entry points. Each
-// event (PreToolUse, Stop, ...) maps to a Go function that takes the
-// hook request, evaluates whatever policy applies, and returns a
-// decision the harness writes back to claude-code on stdout.
+// Package hooks holds spore's hook entry points. Each event
+// (PreToolUse, Stop, ...) maps to a Go function that takes the hook
+// request, evaluates whatever policy applies, and returns a decision
+// the harness writes back to the calling agent on stdout. Claude Code
+// and Codex share the same JSON envelope shape, so the same entry
+// points serve both.
 //
 // The kernel ships JSON-protocol types, a PreToolUse decider that
 // blocks forbidden bash patterns, and a no-op Stop. Wiring them as
-// actual claude-code hooks is up to the consumer (settings.json
-// hooks block); the kernel just provides the implementations.
+// actual hooks is up to the consumer (`.claude/settings.json` for
+// Claude Code, `.codex/hooks.json` for Codex); the kernel just
+// provides the implementations.
 package hooks
 
 import "encoding/json"

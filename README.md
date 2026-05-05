@@ -273,8 +273,9 @@ Main extension points:
   worker sessions and drives the matter sync prelude.
 - [internal/matter/](internal/matter/) is the plugin layer for
   external work sources (e.g. [linear](internal/matter/linear/)).
-- [internal/hooks/](internal/hooks/) emits and runs Claude Code hook
-  bindings.
+- [internal/hooks/](internal/hooks/) emits and runs Claude Code and
+  Codex hook bindings; both agents share the same JSON shape, wired
+  through `.claude/settings.json` and `.codex/hooks.json`.
 - [internal/lints/](internal/lints/) holds portable repo lints.
 - [internal/composer/](internal/composer/) renders instruction files
   from rule fragments in [rules/](rules/).

@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "spore coordinator token-monitor",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
+            "command": "spore worker token-monitor",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
+            "command": "spore fleet replenish-hook",
+            "timeout": 30,
+            "type": "command"
+          },
+          {
+            "asyncRewake": true,
+            "command": "spore hooks watch-inbox",
+            "timeout": 604800,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
