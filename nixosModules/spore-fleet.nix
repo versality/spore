@@ -86,6 +86,26 @@ let
     echo "spore-fleet-graceful: re-enabling kill-switch" >&2
     "$sporecli" fleet enable
   '';
+
+  matterLinear = cfg.matter.linear;
+
+  matterLinearTOML = pkgs.writeText "spore-matter-linear.toml" ''
+    [matter.linear]
+    team = "${matterLinear.team}"
+    ready_state = "${matterLinear.readyState}"
+    in_progress_state = "${matterLinear.inProgressState}"
+    done_state = "${matterLinear.doneState}"
+    api_key_file = "linear-api-key"
+    endpoint = "${matterLinear.endpoint}"
+  '';
+
+  matterEnv = lib.optionalAttrs matterLinear.enable {
+    SPORE_MATTER_TOML = toString matterLinearTOML;
+  };
+
+  matterCredentials = lib.optionalAttrs matterLinear.enable {
+    linear-api-key = matterLinear.apiKeySecret;
+  };
 in
 {
   options.services.spore-fleet = {
@@ -259,6 +279,69 @@ in
         '';
       };
     };
+
+    matter.linear = {
+      enable = lib.mkEnableOption "Linear ticket source for the fleet reconciler";
+
+      team = lib.mkOption {
+        type = lib.types.str;
+        example = "MAR";
+        description = ''
+          Linear team key. Only issues belonging to this team are
+          adopted. Wired through `[matter.linear] team` in the
+          generated spore.toml drop-in.
+        '';
+      };
+
+      readyState = lib.mkOption {
+        type = lib.types.str;
+        default = "Ready";
+        description = ''
+          Workflow state name the reconciler polls for adoption.
+          Must match the team's Linear workflow exactly.
+        '';
+      };
+
+      inProgressState = lib.mkOption {
+        type = lib.types.str;
+        default = "In Progress";
+        description = ''
+          Workflow state the reconciler moves an adopted issue into
+          right after creating its on-disk task file.
+        '';
+      };
+
+      doneState = lib.mkOption {
+        type = lib.types.str;
+        default = "Done";
+        description = ''
+          Workflow state the reconciler pushes an issue to once its
+          on-disk task flips to status=done.
+        '';
+      };
+
+      apiKeySecret = lib.mkOption {
+        type = lib.types.path;
+        example = lib.literalExpression "config.age.secrets.linear-api-key.path";
+        description = ''
+          Path to the Linear API key. Decrypted at activation time
+          (e.g. agenix at /run/agenix/<name>) and exposed to the
+          reconciler via systemd LoadCredential under the name
+          `linear-api-key`. The kernel reads it through
+          $CREDENTIALS_DIRECTORY/linear-api-key, so the Nix store
+          never sees the secret.
+        '';
+      };
+
+      endpoint = lib.mkOption {
+        type = lib.types.str;
+        default = "https://api.linear.app/graphql";
+        description = ''
+          Linear GraphQL endpoint. Override only for self-hosted
+          proxies or test stubs.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -309,7 +392,7 @@ in
                 pkgs.git
                 pkgs.tmux
               ];
-            } // cfg.extraEnv
+            } // matterEnv // cfg.extraEnv
           );
           NoNewPrivileges = true;
           LockPersonality = true;
@@ -317,7 +400,7 @@ in
           ReadWritePaths = [ (toString cfg.projectRoot) ];
           LoadCredential = lib.mapAttrsToList
             (name: path: "${name}:${toString path}")
-            cfg.credentialFiles;
+            (cfg.credentialFiles // matterCredentials);
         };
       };
 

@@ -10,6 +10,8 @@ import (
 
 	"github.com/versality/spore/internal/budget"
 	"github.com/versality/spore/internal/fleet"
+	"github.com/versality/spore/internal/matter"
+	"github.com/versality/spore/internal/matter/linear"
 	"github.com/versality/spore/internal/task"
 )
 
@@ -23,9 +25,11 @@ Usage:
   spore fleet status
 
 Subcommands:
-  reconcile       Run a single reconcile pass: list status=active tasks; for
-                  each one without a live tmux session, ensure the worktree
-                  and spawn a session; for each spore-prefix tmux session
+  reconcile       Run a single reconcile pass: when [matter.linear] is
+                  set in spore.toml, poll Linear for ready/done updates
+                  first; then list status=active tasks; for each one
+                  without a live tmux session, ensure the worktree and
+                  spawn a session; for each spore-prefix tmux session
                   whose task is no longer active, kill it. Idempotent;
                   exits 0 when there is nothing to do. Short-circuits when
                   the kill-switch flag is missing.
@@ -93,6 +97,10 @@ func runFleetReconcile(args []string) error {
 	}
 	resolved, err := resolveMaxWorkers(*maxWorkers, root)
 	if err != nil {
+		return err
+	}
+
+	if err := runMatterSync(root, "tasks", os.Stdout); err != nil {
 		return err
 	}
 
@@ -243,6 +251,13 @@ func runFleetReplenishHook(args []string) error {
 		return nil
 	}
 
+	if err := runMatterSync(root, "tasks", os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "replenish-hook:", err)
+		// Continue: a failing matter sync must not skip the
+		// existing reconcile, otherwise an outage at Linear stalls
+		// every on-disk task too.
+	}
+
 	res, err := fleet.Reconcile(fleet.Config{
 		TasksDir:    "tasks",
 		ProjectRoot: root,
@@ -257,6 +272,43 @@ func runFleetReplenishHook(args []string) error {
 	}
 	fmt.Printf("replenish-hook: active=%d spawned=%d kept=%d reaped=%d skipped=%d\n",
 		len(res.Active), len(res.Spawned), len(res.Kept), len(res.Reaped), len(res.Skipped))
+	return nil
+}
+
+// runMatterSync invokes every matter Source configured in spore.toml
+// before the fleet reconciler runs. Each Source pulls ready intents
+// onto disk as tasks/<slug>.md and pushes done status back. A missing
+// or empty configuration is a no-op; an explicit configuration error
+// (missing team, bad credential ref, network failure) bubbles up so
+// the operator sees it. Output is one line per source so reconcile's
+// own status line stays the lead.
+func runMatterSync(projectRoot, tasksDir string, out io.Writer) error {
+	cfg, err := matter.LoadLinearConfig(projectRoot)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return nil
+	}
+	src, err := linear.New(*cfg)
+	if err != nil {
+		return err
+	}
+	stats, err := src.Sync(projectRoot, tasksDir)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "matter[%s]: created=%d adopted=%d pushed_done=%d\n",
+		stats.Source, len(stats.Created), len(stats.AdoptedReady), len(stats.PushedDone))
+	if len(stats.Created) > 0 {
+		fmt.Fprintf(out, "  created: %s\n", strings.Join(stats.Created, ", "))
+	}
+	if len(stats.AdoptedReady) > 0 {
+		fmt.Fprintf(out, "  adopted: %s\n", strings.Join(stats.AdoptedReady, ", "))
+	}
+	if len(stats.PushedDone) > 0 {
+		fmt.Fprintf(out, "  pushed_done: %s\n", strings.Join(stats.PushedDone, ", "))
+	}
 	return nil
 }
 
