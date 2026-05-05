@@ -1,6 +1,7 @@
 package linear
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -57,6 +58,19 @@ func (s *stubLinear) addReady(id, identifier, title, desc string) *stubIssue {
 	}
 	s.issues[id] = iss
 	return iss
+}
+
+// findByIdentifier returns the stubIssue matching the human
+// identifier (e.g. "MAR-12"). issueUpdate is called with the
+// identifier in adoptIssue->transitionIssue and OnDone, but the stub
+// keys its map by ID; the lookup walks the map.
+func (s *stubLinear) findByIdentifier(ident string) *stubIssue {
+	for _, iss := range s.issues {
+		if iss.Identifier == ident {
+			return iss
+		}
+	}
+	return nil
 }
 
 func (s *stubLinear) handler() http.HandlerFunc {
@@ -149,6 +163,12 @@ func (s *stubLinear) respondIssueUpdate(w http.ResponseWriter, vars map[string]a
 	stateID, _ := vars["stateId"].(string)
 	iss, ok := s.issues[id]
 	if !ok {
+		// adoptIssue passes the human identifier (e.g. MAR-12) when
+		// transitioning new issues to in_progress, so fall back to
+		// an identifier lookup before erroring.
+		iss = s.findByIdentifier(id)
+	}
+	if iss == nil {
 		http.Error(w, "no such issue: "+id, http.StatusNotFound)
 		return
 	}
@@ -161,6 +181,23 @@ func (s *stubLinear) respondIssueUpdate(w http.ResponseWriter, vars map[string]a
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+func newSource(t *testing.T, srvURL string) *Source {
+	t.Helper()
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	src, err := NewFromConfig(Config{
+		Team:            "MAR",
+		ReadyState:      "Ready",
+		InProgressState: "In Progress",
+		DoneState:       "Done",
+		APIKeyEnv:       "LINEAR_API_KEY",
+		Endpoint:        srvURL,
+	})
+	if err != nil {
+		t.Fatalf("NewFromConfig: %v", err)
+	}
+	return src
+}
+
 func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
 	stub := newStub(t)
 	stub.addReady("issue-uuid-1", "MAR-12", "Wire up onboarding email", "Send welcome email on signup.")
@@ -170,34 +207,14 @@ func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
 	defer srv.Close()
 
 	root := t.TempDir()
-	tasksDir := filepath.Join(root, "tasks")
-	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	src := newSource(t, srv.URL)
 
-	t.Setenv("LINEAR_API_KEY", "lin_test")
-	cfg := matter.LinearConfig{
-		Team:            "MAR",
-		ReadyState:      "Ready",
-		InProgressState: "In Progress",
-		DoneState:       "Done",
-		APIKeyEnv:       "LINEAR_API_KEY",
-		Endpoint:        srv.URL,
-	}
-	src, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	stats, err := src.Sync(root, "tasks")
+	created, updated, err := src.Sync(context.Background(), root)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
-	if got, want := len(stats.Created), 2; got != want {
-		t.Fatalf("Created = %d, want %d (got %v)", got, want, stats.Created)
-	}
-	if got, want := stats.AdoptedReady, []string{"MAR-12", "MAR-13"}; !equal(got, want) {
-		t.Errorf("AdoptedReady = %v, want %v", got, want)
+	if created != 2 || updated != 0 {
+		t.Errorf("Sync = (created=%d, updated=%d), want (2, 0)", created, updated)
 	}
 
 	for id, iss := range stub.issues {
@@ -206,32 +223,46 @@ func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
 		}
 	}
 
-	for _, slug := range stats.Created {
-		raw, err := os.ReadFile(filepath.Join(tasksDir, slug+".md"))
+	tasksDir := filepath.Join(root, "tasks")
+	files, err := os.ReadDir(tasksDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("want 2 task files, got %d", len(files))
+	}
+	for _, f := range files {
+		raw, err := os.ReadFile(filepath.Join(tasksDir, f.Name()))
 		if err != nil {
-			t.Fatalf("read %s: %v", slug, err)
+			t.Fatal(err)
 		}
 		m, body, err := frontmatter.Parse(raw)
 		if err != nil {
-			t.Fatalf("parse %s: %v", slug, err)
+			t.Fatalf("parse %s: %v", f.Name(), err)
 		}
 		if m.Status != "active" {
-			t.Errorf("%s: status = %q, want active", slug, m.Status)
+			t.Errorf("%s: status = %q, want active", f.Name(), m.Status)
 		}
-		if !strings.HasPrefix(m.Extra["linear"], "MAR-") {
-			t.Errorf("%s: linear extra = %q", slug, m.Extra["linear"])
+		if m.Extra[matter.MatterKey] != "linear" {
+			t.Errorf("%s: matter = %q, want linear", f.Name(), m.Extra[matter.MatterKey])
+		}
+		if !strings.HasPrefix(m.Extra[matter.MatterIDKey], "MAR-") {
+			t.Errorf("%s: matter_id = %q", f.Name(), m.Extra[matter.MatterIDKey])
+		}
+		if !strings.HasPrefix(m.Extra[matter.MatterURLKey], "https://linear.app/") {
+			t.Errorf("%s: matter_url = %q", f.Name(), m.Extra[matter.MatterURLKey])
 		}
 		if !strings.Contains(string(body), "Linear: https://linear.app/") {
-			t.Errorf("%s: body missing Linear URL: %s", slug, body)
+			t.Errorf("%s: body missing Linear URL: %s", f.Name(), body)
 		}
 	}
 
-	stats2, err := src.Sync(root, "tasks")
+	c2, u2, err := src.Sync(context.Background(), root)
 	if err != nil {
 		t.Fatalf("Sync (idempotent pass): %v", err)
 	}
-	if len(stats2.Created)+len(stats2.AdoptedReady) != 0 {
-		t.Errorf("expected no-op second pass, got %+v", stats2)
+	if c2 != 0 || u2 != 0 {
+		t.Errorf("expected no-op second pass, got (created=%d, updated=%d)", c2, u2)
 	}
 }
 
@@ -250,32 +281,23 @@ func TestSyncPushesDoneTasks(t *testing.T) {
 	}
 	m := frontmatter.Meta{
 		Status: "done", Slug: "ship-checkout", Title: "Ship checkout",
-		Extra: map[string]string{"linear": "issue-uuid-7"},
+		Extra: map[string]string{
+			matter.MatterKey:   "linear",
+			matter.MatterIDKey: "MAR-21",
+		},
 	}
 	if err := os.WriteFile(filepath.Join(tasksDir, "ship-checkout.md"),
 		frontmatter.Write(m, []byte("\nbody\n")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	t.Setenv("LINEAR_API_KEY", "lin_test")
-	src, err := New(matter.LinearConfig{
-		Team:            "MAR",
-		ReadyState:      "Ready",
-		InProgressState: "In Progress",
-		DoneState:       "Done",
-		APIKeyEnv:       "LINEAR_API_KEY",
-		Endpoint:        srv.URL,
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	stats, err := src.Sync(root, "tasks")
+	src := newSource(t, srv.URL)
+	created, updated, err := src.Sync(context.Background(), root)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
-	if got, want := stats.PushedDone, []string{"ship-checkout"}; !equal(got, want) {
-		t.Errorf("PushedDone = %v, want %v", got, want)
+	if created != 0 || updated != 1 {
+		t.Errorf("Sync = (created=%d, updated=%d), want (0, 1)", created, updated)
 	}
 	if iss.StateID != stub.states["Done"] {
 		t.Errorf("issue state = %q, want Done", iss.StateID)
@@ -293,12 +315,100 @@ func TestSyncPushesDoneTasks(t *testing.T) {
 		t.Errorf("linear_done = %q, want yes", m2.Extra["linear_done"])
 	}
 
-	stats2, err := src.Sync(root, "tasks")
+	c2, u2, err := src.Sync(context.Background(), root)
 	if err != nil {
 		t.Fatalf("Sync second pass: %v", err)
 	}
-	if len(stats2.PushedDone) != 0 {
-		t.Errorf("second pass should not push again, got %v", stats2.PushedDone)
+	if c2 != 0 || u2 != 0 {
+		t.Errorf("second pass should not push again, got (created=%d, updated=%d)", c2, u2)
+	}
+}
+
+func TestSyncRecognisesLegacyLinearKey(t *testing.T) {
+	stub := newStub(t)
+	iss := stub.addReady("issue-uuid-8", "MAR-30", "Legacy task", "")
+	iss.StateID = stub.states["In Progress"]
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-rename frontmatter shape: only the legacy `linear:` key.
+	m := frontmatter.Meta{
+		Status: "done", Slug: "legacy-task", Title: "Legacy task",
+		Extra: map[string]string{"linear": "MAR-30"},
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "legacy-task.md"),
+		frontmatter.Write(m, []byte("\nbody\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	src := newSource(t, srv.URL)
+	if _, _, err := src.Sync(context.Background(), root); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if iss.StateID != stub.states["Done"] {
+		t.Errorf("legacy task should have pushed Done, got state %q", iss.StateID)
+	}
+}
+
+func TestOnDonePushesImmediately(t *testing.T) {
+	stub := newStub(t)
+	iss := stub.addReady("issue-uuid-9", "MAR-42", "Ship matter plugin", "")
+	iss.StateID = stub.states["In Progress"]
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnDone(context.Background(), "ship-matter-plugin", map[string]string{
+		matter.MatterKey:   "linear",
+		matter.MatterIDKey: "MAR-42",
+	})
+	if err != nil {
+		t.Fatalf("OnDone: %v", err)
+	}
+	if iss.StateID != stub.states["Done"] {
+		t.Errorf("OnDone should have moved issue to Done, got %q", iss.StateID)
+	}
+}
+
+func TestOnDoneIgnoresUnrelatedMatter(t *testing.T) {
+	stub := newStub(t)
+	stub.addReady("issue-uuid-10", "MAR-99", "Wrong adapter", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	// matter=jira: not us, even though matter_id is set.
+	err := src.OnDone(context.Background(), "wrong-adapter", map[string]string{
+		matter.MatterKey:   "jira",
+		matter.MatterIDKey: "MAR-99",
+	})
+	if err != nil {
+		t.Fatalf("OnDone: %v", err)
+	}
+	if stub.calls != 0 {
+		t.Errorf("OnDone should make 0 GraphQL calls when matter != linear, got %d", stub.calls)
+	}
+}
+
+func TestOnDoneNoOpWithoutID(t *testing.T) {
+	stub := newStub(t)
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	if err := src.OnDone(context.Background(), "no-id", map[string]string{}); err != nil {
+		t.Fatalf("OnDone: %v", err)
+	}
+	if stub.calls != 0 {
+		t.Errorf("want 0 calls, got %d", stub.calls)
 	}
 }
 
@@ -309,20 +419,8 @@ func TestSyncErrorsOnUnknownState(t *testing.T) {
 	srv := httptest.NewServer(stub.handler())
 	defer srv.Close()
 
-	t.Setenv("LINEAR_API_KEY", "lin_test")
-	src, err := New(matter.LinearConfig{
-		Team:            "MAR",
-		ReadyState:      "Ready",
-		InProgressState: "In Progress",
-		DoneState:       "Done",
-		APIKeyEnv:       "LINEAR_API_KEY",
-		Endpoint:        srv.URL,
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	root := t.TempDir()
-	if _, err := src.Sync(root, "tasks"); err == nil {
+	src := newSource(t, srv.URL)
+	if _, _, err := src.Sync(context.Background(), t.TempDir()); err == nil {
 		t.Fatal("expected error for missing Ready state")
 	}
 }
@@ -335,30 +433,60 @@ func TestGraphQLSurfacesGraphErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	t.Setenv("LINEAR_API_KEY", "lin_test")
-	src, err := New(matter.LinearConfig{
-		Team:      "MAR",
-		APIKeyEnv: "LINEAR_API_KEY",
-		Endpoint:  srv.URL,
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	root := t.TempDir()
-	_, err = src.Sync(root, "tasks")
+	src := newSource(t, srv.URL)
+	_, _, err := src.Sync(context.Background(), t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "rate limited") {
 		t.Fatalf("expected rate-limited error, got %v", err)
 	}
 }
 
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+func TestParseConfigDefaultsAndValidation(t *testing.T) {
+	// missing team -> error
+	if _, err := parseConfig(matter.Config{
+		Name: "linear",
+		Options: map[string]string{
+			"api_key_env": "LINEAR_API_KEY",
+		},
+	}); err == nil {
+		t.Error("missing team should error")
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+
+	// missing api_key source -> error
+	if _, err := parseConfig(matter.Config{
+		Name:    "linear",
+		Options: map[string]string{"team": "MAR"},
+	}); err == nil {
+		t.Error("missing api_key_* should error")
+	}
+
+	// credential_api_key counts as api_key_file
+	cfg, err := parseConfig(matter.Config{
+		Name: "linear",
+		Options: map[string]string{
+			"team":               "MAR",
+			"credential_api_key": "/run/credentials/x",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APIKeyFile != "/run/credentials/x" {
+		t.Errorf("credential_api_key not adopted: %#v", cfg)
+	}
+	if cfg.ReadyState != "Ready" || cfg.DoneState != "Done" {
+		t.Errorf("defaults not applied: %#v", cfg)
+	}
+}
+
+func TestRegisteredViaInit(t *testing.T) {
+	found := false
+	for _, n := range matter.Registered() {
+		if n == "linear" {
+			found = true
+			break
 		}
 	}
-	return true
+	if !found {
+		t.Errorf("linear should self-register via init(); registered = %v", matter.Registered())
+	}
 }

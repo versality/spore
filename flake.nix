@@ -207,6 +207,14 @@
                   '';
                   claudeCodePackage = pkgs.writeShellScriptBin "claude" "exit 0";
                   gracefulDeploy.timeout = 5;
+                  matters.linear = {
+                    enable = true;
+                    settings = {
+                      team = "MAR";
+                      ready_state = "Ready";
+                    };
+                    credentialFiles.api_key = pkgs.writeText "fake-linear-key" "lin_api_test";
+                  };
                 };
 
                 systemd.tmpfiles.rules = [
@@ -235,6 +243,29 @@
                   machine.succeed(usercmd("is-active spore-fleet-reconcile.timer"))
                   machine.succeed(usercmd("is-active spore-fleet-reconcile-flag.path"))
                   machine.succeed(usercmd("is-active spore-fleet-reconcile-tasks.path"))
+
+                  # The matters.linear option must surface as the
+                  # env-var contract the matter loader reads. Inspect
+                  # the rendered unit env directly so the wire format
+                  # stays pinned.
+                  env = machine.succeed(usercmd(
+                      "show spore-fleet-reconcile.service -p Environment"))
+                  for needle in [
+                      "SPORE_MATTER_LINEAR__ENABLED=1",
+                      "SPORE_MATTER_LINEAR__TEAM=MAR",
+                      "SPORE_MATTER_LINEAR__READY_STATE=Ready",
+                      # systemd resolves %d to $CREDENTIALS_DIRECTORY at
+                      # `show` time, so just pin the suffix.
+                      "/matter-linear-api_key",
+                  ]:
+                      assert needle in env, f"missing {needle!r} in:\n{env}"
+                  # `systemctl show -p LoadCredential` returns
+                  # [unprintable] for binary values; read the unit
+                  # file off disk instead. home-manager renders user
+                  # units under ~/.config/systemd/user/.
+                  unit = machine.succeed(
+                      "cat /home/spore-test/.config/systemd/user/spore-fleet-reconcile.service")
+                  assert "LoadCredential=matter-linear-api_key:" in unit, unit
 
                   # Graceful-deploy: pre-script disables the kill-switch
                   # and tells every active worker to wrap up; post-script

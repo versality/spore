@@ -5,11 +5,23 @@
 //     GraphQL call, cached in the Source between passes since state
 //     IDs are stable).
 //  2. List issues in ready_state for team. For each issue not yet
-//     present on disk (no tasks/<slug>.md carries `linear: <id>`),
+//     present on disk (no tasks/<slug>.md carries `matter_id: <id>`),
 //     create a tasks/<slug>.md and push the issue ready->in-progress.
 //  3. Walk tasks/. For every status=done task that carries
-//     `linear: <id>` and is missing `linear_done: yes`, push the issue
-//     to done_state and stamp `linear_done: yes`.
+//     `matter_id: <id>` and is missing `linear_done: yes`, push the
+//     issue to done_state and stamp `linear_done: yes`. This is the
+//     safety-net path; the synchronous push happens via OnDone the
+//     moment the task flips to done.
+//
+// The adapter registers itself under the name "linear" via init(),
+// so importing this package is enough to make `[matter.linear]` (or
+// SPORE_MATTER_LINEAR__*) wiring activate.
+//
+// Frontmatter convention. Tasks created by this adapter carry the
+// generic matter keys (matter, matter_id, matter_url) plus the
+// adapter-private `linear_done` stamp once the upstream Done push
+// has succeeded. Reads also accept the legacy `linear:` /
+// `linear_url:` keys so tasks created before the rename keep working.
 //
 // All HTTP traffic flows through a single endpoint and a single
 // Authorization header so a test can swap in an httptest server.
@@ -17,6 +29,7 @@ package linear
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,16 +45,48 @@ import (
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
-const sourceName = "linear"
+const (
+	sourceName     = "linear"
+	defaultTimeout = 30 * time.Second
+
+	// linearDoneKey is the per-task frontmatter stamp Sync writes
+	// after a successful Done push so future passes skip the issue.
+	linearDoneKey   = "linear_done"
+	linearDoneValue = "yes"
+
+	// legacy frontmatter keys, accepted on read for tasks that
+	// pre-date the matter/matter_id rename.
+	legacyIDKey  = "linear"
+	legacyURLKey = "linear_url"
+)
+
+func init() {
+	matter.Register(sourceName, New)
+}
 
 // HTTPDoer is satisfied by *http.Client; tests can swap a stub.
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// Source is the Linear adapter. Construct with New.
+// Config is the parsed [matter.linear] section. It is a snapshot of
+// the adapter-specific fields the plug-point loader hands us, after
+// type-checking and defaulting. Tests build it directly to avoid the
+// matter.Config -> parseConfig roundtrip.
+type Config struct {
+	Team            string
+	ReadyState      string
+	InProgressState string
+	DoneState       string
+	APIKeyEnv       string
+	APIKeyFile      string
+	Endpoint        string
+}
+
+// Source is the Linear adapter. Construct via New (with a parsed
+// matter.Config) or NewFromConfig (with a typed Config).
 type Source struct {
-	cfg    matter.LinearConfig
+	cfg    Config
 	client HTTPDoer
 	apiKey string
 	// stateIDs caches workflow-state name -> id for the configured
@@ -58,18 +103,28 @@ func WithHTTPClient(c HTTPDoer) Option {
 	return func(s *Source) { s.client = c }
 }
 
-// New builds a Linear Source from a parsed matter.LinearConfig. The
-// API key is resolved eagerly so a misconfiguration fails the
-// reconcile pass loudly rather than at the first GraphQL call.
-func New(cfg matter.LinearConfig, opts ...Option) (*Source, error) {
-	key, err := cfg.ResolveAPIKey()
+// New is the matter.Factory entry point. It parses c.Options into a
+// typed Config, resolves the API key eagerly so a misconfiguration
+// fails the reconcile pass loudly, and returns a *Source.
+func New(c matter.Config) (matter.Matter, error) {
+	cfg, err := parseConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	return NewFromConfig(cfg)
+}
+
+// NewFromConfig builds a Source from an already-typed Config. Useful
+// for tests that want to skip the matter.Config plumbing.
+func NewFromConfig(cfg Config, opts ...Option) (*Source, error) {
+	key, err := resolveAPIKey(cfg)
 	if err != nil {
 		return nil, err
 	}
 	s := &Source{
 		cfg:    cfg,
 		apiKey: key,
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{Timeout: defaultTimeout},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -80,83 +135,151 @@ func New(cfg matter.LinearConfig, opts ...Option) (*Source, error) {
 // Name returns "linear".
 func (*Source) Name() string { return sourceName }
 
-// Sync runs one full pass. See package doc for the sequence.
-func (s *Source) Sync(projectRoot, tasksDir string) (matter.Stats, error) {
-	stats := matter.Stats{Source: sourceName}
-	absTasks := tasksDir
-	if !filepath.IsAbs(absTasks) {
-		absTasks = filepath.Join(projectRoot, tasksDir)
-	}
-	if err := os.MkdirAll(absTasks, 0o755); err != nil {
-		return stats, err
+// Sync runs one full pass. See package doc for the sequence. The
+// returned counters cover this pass only (re-syncing an unchanged
+// upstream reports 0 / 0).
+func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated int, err error) {
+	tasksDir := filepath.Join(projectRoot, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		return 0, 0, err
 	}
 
 	if err := s.loadStateIDs(); err != nil {
-		return stats, err
+		return 0, 0, err
 	}
 	readyID, ok := s.stateIDs[s.cfg.ReadyState]
 	if !ok {
-		return stats, fmt.Errorf("matter.linear: ready_state %q not found in team %s", s.cfg.ReadyState, s.cfg.Team)
+		return 0, 0, fmt.Errorf("matter.linear: ready_state %q not found in team %s", s.cfg.ReadyState, s.cfg.Team)
 	}
 	inProgressID, ok := s.stateIDs[s.cfg.InProgressState]
 	if !ok {
-		return stats, fmt.Errorf("matter.linear: in_progress_state %q not found in team %s", s.cfg.InProgressState, s.cfg.Team)
+		return 0, 0, fmt.Errorf("matter.linear: in_progress_state %q not found in team %s", s.cfg.InProgressState, s.cfg.Team)
 	}
 	doneID, ok := s.stateIDs[s.cfg.DoneState]
 	if !ok {
-		return stats, fmt.Errorf("matter.linear: done_state %q not found in team %s", s.cfg.DoneState, s.cfg.Team)
+		return 0, 0, fmt.Errorf("matter.linear: done_state %q not found in team %s", s.cfg.DoneState, s.cfg.Team)
 	}
 
-	known, err := indexLinearTasks(absTasks)
+	known, err := indexLinearTasks(tasksDir)
 	if err != nil {
-		return stats, err
+		return 0, 0, err
 	}
 
 	ready, err := s.listIssuesByState(readyID)
 	if err != nil {
-		return stats, err
+		return 0, 0, err
 	}
 	for _, issue := range ready {
 		if _, dup := known[issue.Identifier]; dup {
 			continue
 		}
-		slug, err := s.adoptIssue(absTasks, issue)
+		slug, err := s.adoptIssue(tasksDir, issue)
 		if err != nil {
-			return stats, fmt.Errorf("matter.linear: adopt %s: %w", issue.Identifier, err)
+			return created, updated, fmt.Errorf("matter.linear: adopt %s: %w", issue.Identifier, err)
 		}
 		if err := s.transitionIssue(issue.ID, inProgressID); err != nil {
-			return stats, fmt.Errorf("matter.linear: transition %s -> in_progress: %w", issue.Identifier, err)
+			return created, updated, fmt.Errorf("matter.linear: transition %s -> in_progress: %w", issue.Identifier, err)
 		}
-		stats.Created = append(stats.Created, slug)
-		stats.AdoptedReady = append(stats.AdoptedReady, issue.Identifier)
+		created++
 		known[issue.Identifier] = slug
 	}
 
-	doneSlugs, err := pendingDonePushes(absTasks)
+	donePending, err := pendingDonePushes(tasksDir)
 	if err != nil {
-		return stats, err
+		return created, updated, err
 	}
-	for _, p := range doneSlugs {
-		if err := s.transitionIssue(p.linearID, doneID); err != nil {
-			return stats, fmt.Errorf("matter.linear: transition %s -> done: %w", p.identifier, err)
+	for _, p := range donePending {
+		if err := s.transitionIssue(p.identifier, doneID); err != nil {
+			return created, updated, fmt.Errorf("matter.linear: transition %s -> done: %w", p.identifier, err)
 		}
-		if err := stampLinearDone(absTasks, p.slug); err != nil {
-			return stats, fmt.Errorf("matter.linear: stamp %s linear_done: %w", p.slug, err)
+		if err := stampLinearDone(tasksDir, p.slug); err != nil {
+			return created, updated, fmt.Errorf("matter.linear: stamp %s linear_done: %w", p.slug, err)
 		}
-		stats.PushedDone = append(stats.PushedDone, p.slug)
+		updated++
 	}
+	return created, updated, nil
+}
 
-	sort.Strings(stats.Created)
-	sort.Strings(stats.AdoptedReady)
-	sort.Strings(stats.PushedDone)
-	return stats, nil
+// OnDone is the synchronous push for a task that just flipped to
+// done. Sync's done-walk is the fallback when this hook misses (the
+// reconciler was off, the adapter was down, the task was edited
+// outside spore task done). The push is idempotent on Linear's side,
+// so the next Sync re-pushing as a no-op is harmless.
+func (s *Source) OnDone(ctx context.Context, slug string, meta map[string]string) error {
+	id := issueIDFromMeta(meta)
+	if id == "" {
+		return nil
+	}
+	if err := s.loadStateIDs(); err != nil {
+		return err
+	}
+	doneID, ok := s.stateIDs[s.cfg.DoneState]
+	if !ok {
+		return fmt.Errorf("matter.linear: done_state %q not found in team %s", s.cfg.DoneState, s.cfg.Team)
+	}
+	return s.transitionIssue(id, doneID)
+}
+
+// parseConfig translates a generic matter.Config into the typed
+// Config. credential_api_key is the storage shape the NixOS module's
+// matters.linear.credentialFiles.api_key option renders into via
+// SPORE_MATTER_LINEAR__CREDENTIAL_API_KEY=$CREDENTIALS_DIRECTORY/...,
+// so it counts as an api_key_file source.
+func parseConfig(c matter.Config) (Config, error) {
+	cfg := Config{
+		Team:            c.Option("team", ""),
+		ReadyState:      c.Option("ready_state", "Ready"),
+		InProgressState: c.Option("in_progress_state", "In Progress"),
+		DoneState:       c.Option("done_state", "Done"),
+		APIKeyEnv:       c.Option("api_key_env", ""),
+		APIKeyFile:      c.Option("api_key_file", ""),
+		Endpoint:        c.Option("endpoint", "https://api.linear.app/graphql"),
+	}
+	if cfg.APIKeyFile == "" {
+		cfg.APIKeyFile = c.Option("credential_api_key", "")
+	}
+	if cfg.Team == "" {
+		return cfg, fmt.Errorf("matter.linear: team is required (e.g. team = \"MAR\")")
+	}
+	if cfg.APIKeyEnv == "" && cfg.APIKeyFile == "" {
+		return cfg, fmt.Errorf("matter.linear: api_key_env, api_key_file, or credential_api_key is required")
+	}
+	return cfg, nil
+}
+
+// resolveAPIKey reads the Linear API key from APIKeyFile when set
+// (joined under $CREDENTIALS_DIRECTORY when the path is relative),
+// else from APIKeyEnv. Returns the trimmed key.
+func resolveAPIKey(cfg Config) (string, error) {
+	if cfg.APIKeyFile != "" {
+		p := cfg.APIKeyFile
+		if !filepath.IsAbs(p) {
+			if dir := os.Getenv("CREDENTIALS_DIRECTORY"); dir != "" {
+				p = filepath.Join(dir, p)
+			}
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "", fmt.Errorf("matter.linear: read api_key_file %s: %w", p, err)
+		}
+		key := strings.TrimSpace(string(b))
+		if key == "" {
+			return "", fmt.Errorf("matter.linear: api_key_file %s is empty", p)
+		}
+		return key, nil
+	}
+	key := strings.TrimSpace(os.Getenv(cfg.APIKeyEnv))
+	if key == "" {
+		return "", fmt.Errorf("matter.linear: env %s is empty or unset", cfg.APIKeyEnv)
+	}
+	return key, nil
 }
 
 // adoptIssue writes a new tasks/<slug>.md for issue and returns the
 // slug it allocated. Title-derived; collisions are resolved via
 // task.Allocate. The Linear identifier (e.g. MAR-42) lands in the
-// frontmatter `linear` extra so subsequent Sync passes know the issue
-// is already on disk.
+// generic matter_id frontmatter slot so the next Sync (and OnDone)
+// can find the issue without scanning.
 func (s *Source) adoptIssue(absTasks string, issue linearIssue) (string, error) {
 	base := task.Slugify(issue.Title)
 	if base == "" {
@@ -172,12 +295,12 @@ func (s *Source) adoptIssue(absTasks string, issue linearIssue) (string, error) 
 		Title:   issue.Title,
 		Created: time.Now().UTC().Format("2006-01-02"),
 		Extra: map[string]string{
-			"linear":     issue.Identifier,
-			"linear_url": issue.URL,
+			matter.MatterKey:   sourceName,
+			matter.MatterIDKey: issue.Identifier,
 		},
 	}
-	if issue.URL == "" {
-		delete(m.Extra, "linear_url")
+	if issue.URL != "" {
+		m.Extra[matter.MatterURLKey] = issue.URL
 	}
 	body := buildBriefBody(issue)
 	path := filepath.Join(absTasks, slug+".md")
@@ -210,12 +333,13 @@ func buildBriefBody(issue linearIssue) []byte {
 type linearTaskRow struct {
 	slug       string
 	identifier string
-	linearID   string
 }
 
 // indexLinearTasks scans tasksDir and returns identifier -> slug for
-// every tasks/<slug>.md that carries a `linear:` extra. Used to skip
-// re-adopting issues already present on disk.
+// every task that carries a Linear matter id. Used to skip
+// re-adopting issues already present on disk. Reads both the
+// generic matter_id key and the legacy linear: key so a kernel
+// upgrade does not orphan pre-rename tasks.
 func indexLinearTasks(tasksDir string) (map[string]string, error) {
 	out := map[string]string{}
 	entries, err := os.ReadDir(tasksDir)
@@ -237,7 +361,7 @@ func indexLinearTasks(tasksDir string) (map[string]string, error) {
 		if err != nil {
 			continue
 		}
-		id := m.Extra["linear"]
+		id := linearIDFromMeta(m.Extra)
 		if id == "" {
 			continue
 		}
@@ -246,8 +370,8 @@ func indexLinearTasks(tasksDir string) (map[string]string, error) {
 	return out, nil
 }
 
-// pendingDonePushes returns rows for tasks where status=done,
-// linear is set, and linear_done is not yet stamped.
+// pendingDonePushes returns rows for tasks where status=done, the
+// linear matter id is set, and linear_done is not yet stamped.
 func pendingDonePushes(tasksDir string) ([]linearTaskRow, error) {
 	var rows []linearTaskRow
 	entries, err := os.ReadDir(tasksDir)
@@ -272,18 +396,14 @@ func pendingDonePushes(tasksDir string) ([]linearTaskRow, error) {
 		if m.Status != "done" {
 			continue
 		}
-		ident := m.Extra["linear"]
-		if ident == "" {
+		id := linearIDFromMeta(m.Extra)
+		if id == "" {
 			continue
 		}
-		if m.Extra["linear_done"] == "yes" {
+		if m.Extra[linearDoneKey] == linearDoneValue {
 			continue
 		}
-		rows = append(rows, linearTaskRow{
-			slug:       m.Slug,
-			identifier: ident,
-			linearID:   ident,
-		})
+		rows = append(rows, linearTaskRow{slug: m.Slug, identifier: id})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].slug < rows[j].slug })
 	return rows, nil
@@ -305,8 +425,33 @@ func stampLinearDone(tasksDir, slug string) error {
 	if m.Extra == nil {
 		m.Extra = map[string]string{}
 	}
-	m.Extra["linear_done"] = "yes"
+	m.Extra[linearDoneKey] = linearDoneValue
 	return os.WriteFile(path, frontmatter.Write(m, body), 0o644)
+}
+
+// linearIDFromMeta returns the upstream issue identifier from the
+// task's frontmatter, preferring the generic matter_id slot but
+// falling back to the legacy `linear:` key. Returns "" when the task
+// has no Linear linkage or names a different matter.
+func linearIDFromMeta(extra map[string]string) string {
+	if extra == nil {
+		return ""
+	}
+	if name := extra[matter.MatterKey]; name != "" && name != sourceName {
+		return ""
+	}
+	if id := extra[matter.MatterIDKey]; id != "" {
+		return id
+	}
+	return extra[legacyIDKey]
+}
+
+// issueIDFromMeta is the OnDone counterpart of linearIDFromMeta. It
+// is identical today but kept separate so future divergences (e.g.
+// preferring matter_url over matter_id for upstreams that key on
+// URL) stay scoped to one call site.
+func issueIDFromMeta(extra map[string]string) string {
+	return linearIDFromMeta(extra)
 }
 
 // transitionIssue maps the issueUpdate mutation. Linear treats the
