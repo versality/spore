@@ -39,7 +39,7 @@ Commands:
   lint       Run portable lints over the working tree.
   hooks      Install or run claude-code / git hooks.
   budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
-  coordinator  Coordinator support (state-debt, verify-done, loop-guard).
+  coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
