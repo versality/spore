@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/versality/spore/internal/codexpolicy"
-	"github.com/versality/spore/internal/evidence"
+	"github.com/versality/spore/codexpolicy"
+	"github.com/versality/spore/evidence"
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/frontmatter"
 )

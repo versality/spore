@@ -1,7 +1,7 @@
 # evidence contract
 
 Spore tasks declare what proof their done flip needs and the body
-provides it. The structural verifier in `internal/evidence/` runs
+provides it. The structural verifier in `evidence/` runs
 inside the done gate and the `task-evidence` lint, refusing flips it
 cannot reconcile.
 
