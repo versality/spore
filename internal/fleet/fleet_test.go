@@ -172,6 +172,92 @@ func TestEnableDisableFlag(t *testing.T) {
 	}
 }
 
+func TestReconcileAssignsAgentFromMix(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+
+	if err := os.WriteFile(filepath.Join(dirs.project, "spore.toml"), []byte(`
+[fleet.workers]
+default = "claude"
+
+[fleet.workers.ratio]
+claude = 70
+codex = 30
+
+[fleet.workers.rules]
+mechanical = "codex"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// alpha/beta/gamma have no agent set; the rule pins delta to codex
+	// regardless of ratio; epsilon already has agent: claude pinned and
+	// must not be rewritten.
+	writeTask(t, dirs.tasks, "alpha", "active")
+	writeTask(t, dirs.tasks, "beta", "active")
+	writeTask(t, dirs.tasks, "gamma", "active")
+	writeTaskWithExtra(t, dirs.tasks, "delta", "active", "complexity", "mechanical")
+	writeTaskWithAgent(t, dirs.tasks, "epsilon", "active", "claude")
+
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  10,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got, want := r.Spawned, []string{"alpha", "beta", "delta", "epsilon", "gamma"}; !equalSlices(got, want) {
+		t.Fatalf("Spawned = %v, want %v", got, want)
+	}
+
+	gotAgents := map[string]string{}
+	for _, slug := range r.Spawned {
+		raw, err := os.ReadFile(filepath.Join(dirs.tasks, slug+".md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, _, err := frontmatter.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotAgents[slug] = m.Agent
+	}
+
+	// Rule pin: complexity=mechanical -> codex.
+	if gotAgents["delta"] != "codex" {
+		t.Errorf("delta agent = %q, want codex (rule)", gotAgents["delta"])
+	}
+	// Explicit pin survives.
+	if gotAgents["epsilon"] != "claude" {
+		t.Errorf("epsilon agent = %q, want claude (explicit)", gotAgents["epsilon"])
+	}
+	// Among alpha/beta/gamma (3 spawns under 70/30 with delta=codex
+	// already counted as the running codex), the balancer picks claude
+	// for two and may pick codex for the third. Each must be a known
+	// agent and the totals must respect the target split: at least 2
+	// claude across the unrestricted three is our floor.
+	claudeAmongFree := 0
+	for _, slug := range []string{"alpha", "beta", "gamma"} {
+		switch a := gotAgents[slug]; a {
+		case "claude":
+			claudeAmongFree++
+		case "codex":
+		default:
+			t.Errorf("%s agent = %q, want claude or codex", slug, a)
+		}
+	}
+	if claudeAmongFree < 2 {
+		t.Errorf("free spawns leaned claude=%d (want >= 2 from 70/30 with one codex already from rule)", claudeAmongFree)
+	}
+}
+
 func TestLoadMaxWorkersTOML(t *testing.T) {
 	root := t.TempDir()
 	if got, err := LoadMaxWorkers(root); err != nil || got != DefaultMaxWorkers {
@@ -235,6 +321,27 @@ func mustEnable(t *testing.T) {
 func writeTask(t *testing.T, tasksDir, slug, status string) {
 	t.Helper()
 	m := frontmatter.Meta{Status: status, Slug: slug, Title: slug}
+	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), frontmatter.Write(m, nil), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTaskWithAgent(t *testing.T, tasksDir, slug, status, agent string) {
+	t.Helper()
+	m := frontmatter.Meta{Status: status, Slug: slug, Title: slug, Agent: agent}
+	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), frontmatter.Write(m, nil), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTaskWithExtra(t *testing.T, tasksDir, slug, status, key, val string) {
+	t.Helper()
+	m := frontmatter.Meta{
+		Status: status,
+		Slug:   slug,
+		Title:  slug,
+		Extra:  map[string]string{key: val},
+	}
 	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), frontmatter.Write(m, nil), 0o644); err != nil {
 		t.Fatal(err)
 	}

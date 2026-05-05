@@ -24,6 +24,7 @@ import (
 
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 // DefaultMaxWorkers is the fallback concurrency cap when no override
@@ -155,6 +156,12 @@ func Reconcile(cfg Config) (Result, error) {
 	sort.Strings(actives)
 	res.Active = actives
 
+	workersCfg, err := LoadWorkersConfig(cfg.ProjectRoot)
+	if err != nil {
+		return res, err
+	}
+	agentCounts := agentCountsFromMetas(metas, runningSet)
+
 	for _, slug := range actives {
 		if runningSet[slug] {
 			continue
@@ -163,11 +170,16 @@ func Reconcile(cfg Config) (Result, error) {
 			res.Skipped = append(res.Skipped, slug)
 			continue
 		}
+		picked, err := assignAgent(cfg.TasksDir, slug, workersCfg, agentCounts)
+		if err != nil {
+			return res, fmt.Errorf("assign agent %s: %w", slug, err)
+		}
 		if _, err := task.Ensure(cfg.TasksDir, slug); err != nil {
 			return res, fmt.Errorf("ensure %s: %w", slug, err)
 		}
 		res.Spawned = append(res.Spawned, slug)
 		runningSet[slug] = true
+		agentCounts[picked]++
 	}
 
 	sort.Strings(res.Spawned)
@@ -175,6 +187,49 @@ func Reconcile(cfg Config) (Result, error) {
 	sort.Strings(res.Kept)
 	sort.Strings(res.Skipped)
 	return res, nil
+}
+
+// agentCountsFromMetas tallies the agent name carried in the
+// frontmatter of every running worker, plus an empty-key bucket for
+// running workers whose task has no `agent:` set yet (so the ratio
+// balancer never overcounts a known agent based on a task spawned
+// before this commit landed). The empty-key bucket is included in the
+// totals selectByRatio sees so an unassigned legacy worker does not
+// inflate its counterpart's deficit.
+func agentCountsFromMetas(metas []frontmatter.Meta, running map[string]bool) map[string]int {
+	out := map[string]int{}
+	for _, m := range metas {
+		if !running[m.Slug] {
+			continue
+		}
+		out[m.Agent]++
+	}
+	return out
+}
+
+// assignAgent applies SelectAgent to the task at <tasksDir>/<slug>.md,
+// then writes the chosen agent back into the file's frontmatter when
+// it would change. Returns the agent name. A task whose `agent:` is
+// already set short-circuits without touching the file.
+func assignAgent(tasksDir, slug string, cfg WorkersConfig, counts map[string]int) (string, error) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	m, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("parse %s: %w", path, err)
+	}
+	picked := SelectAgent(m, cfg, counts)
+	if m.Agent == picked {
+		return picked, nil
+	}
+	m.Agent = picked
+	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
+		return "", err
+	}
+	return picked, nil
 }
 
 // syncMatters runs Sync against every enabled matter under
