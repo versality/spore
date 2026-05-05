@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Fixed `spore coordinator start` lying about success when the agent
+  binary failed to exec. `driverToBinary("claude")` returned the
+  package name `claude-code` instead of the actual binary name
+  `claude`, so the inner shell command died on `exec` and tmux tore
+  the session down before any `has-session` check ever ran. Two
+  changes: (1) "claude" now maps to `claude` (the kernel default
+  fallback also moves to `claude`); (2) `EnsureCoordinator` now
+  waits a short settle window after `tmux new-session -d` and
+  re-checks the session, returning a real error if the spawn died.
+
 ## 0.0.3 - 2026-05-05
 
 Spore 0.0.3 lands the universal coordinator entry point. "How do I
