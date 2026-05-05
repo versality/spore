@@ -6,9 +6,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/versality/spore/internal/task"
 )
+
+// coordinatorSpawnSettleDelay is the wait between `tmux new-session -d`
+// and the post-spawn `has-session` check. tmux returns success the
+// moment its server has registered the session, before the inner shell
+// has had a chance to `exec` the agent. A typo in the agent binary
+// (e.g. `claude-code` when only `claude` is installed) causes the
+// child to die within a few ms, after which the session is gone. The
+// settle window catches that case so EnsureCoordinator surfaces a real
+// error instead of lying with "spawned".
+const coordinatorSpawnSettleDelay = 150 * time.Millisecond
 
 // CoordinatorSlug is the reserved session slug for the singleton
 // coordinator agent. Workers cannot use it; the fleet reconciler
@@ -107,6 +118,17 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
 	}
+	// tmux registers the session before the inner shell execs the
+	// agent. Wait briefly, then confirm the session survived; an
+	// agent binary that fails to exec tears the session down within
+	// a few ms.
+	time.Sleep(coordinatorSpawnSettleDelay)
+	if !hasSession(session) {
+		return "", false, fmt.Errorf(
+			"coordinator session %s died on spawn (agent=%q): the inner exec failed before the session could settle. Check that the agent binary is on PATH",
+			session, agent,
+		)
+	}
 	return session, true, nil
 }
 
@@ -114,7 +136,7 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 // Precedence: SPORE_COORDINATOR_AGENT (lets operators run a different
 // agent for the singleton coordinator) > SPORE_AGENT_BINARY (the same
 // var workers honour) > spore.toml [coordinator].driver mapped to a
-// known binary > "claude-code" (the kernel default).
+// known binary > "claude" (the kernel default).
 func coordinatorAgent(cfg CoordinatorConfig) string {
 	if a := os.Getenv(CoordinatorAgentEnv); a != "" {
 		return a
@@ -125,7 +147,7 @@ func coordinatorAgent(cfg CoordinatorConfig) string {
 	if a := driverToBinary(cfg.Driver); a != "" {
 		return a
 	}
-	return "claude-code"
+	return "claude"
 }
 
 // coordinatorProvider returns the provider name for launcher scripts
@@ -150,16 +172,17 @@ func coordinatorModel(cfg CoordinatorConfig) string {
 }
 
 // driverToBinary maps a friendly driver name to the binary to exec.
-// "claude" -> "claude-code", "codex" -> "codex". Unknown values pass
-// through verbatim so a project can wire a launcher script by name.
-// Empty input returns empty so the caller falls through to the next
-// precedence level.
+// "claude" -> "claude" (the Anthropic CLI binary name; the package is
+// often called "claude-code" but its bin/ entry is "claude"), "codex"
+// -> "codex". Unknown values pass through verbatim so a project can
+// wire a launcher script by name. Empty input returns empty so the
+// caller falls through to the next precedence level.
 func driverToBinary(driver string) string {
 	switch driver {
 	case "":
 		return ""
 	case "claude":
-		return "claude-code"
+		return "claude"
 	default:
 		return driver
 	}

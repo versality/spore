@@ -130,10 +130,10 @@ func TestCoordinatorAgentPrecedence(t *testing.T) {
 	}{
 		{name: "coord_wins", coordEnv: "agent-A", workerEnv: "agent-B", driver: "codex", want: "agent-A"},
 		{name: "worker_fallback", coordEnv: "", workerEnv: "agent-B", driver: "codex", want: "agent-B"},
-		{name: "driver_claude", coordEnv: "", workerEnv: "", driver: "claude", want: "claude-code"},
+		{name: "driver_claude", coordEnv: "", workerEnv: "", driver: "claude", want: "claude"},
 		{name: "driver_codex", coordEnv: "", workerEnv: "", driver: "codex", want: "codex"},
 		{name: "driver_passthrough", coordEnv: "", workerEnv: "", driver: "/usr/local/bin/spore-coordinator-launch", want: "/usr/local/bin/spore-coordinator-launch"},
-		{name: "default", coordEnv: "", workerEnv: "", driver: "", want: "claude-code"},
+		{name: "default", coordEnv: "", workerEnv: "", driver: "", want: "claude"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -162,6 +162,36 @@ func TestCoordinatorStartStopStatus(t *testing.T) {
 	}
 }
 
+// TestCoordinatorStartReportsDeadAgent guards the post-spawn settle
+// check in EnsureCoordinator: when the agent binary fails to exec,
+// tmux still registers the session momentarily, then tears it down.
+// The CLI must surface that as a non-zero exit instead of printing
+// "spawned" while no session exists.
+func TestCoordinatorStartReportsDeadAgent(t *testing.T) {
+	requireToolchain(t)
+
+	root := gitInitProject(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SPORE_COORDINATOR_AGENT", "spore-no-such-binary-zzz")
+	chdirToRoot(t, root)
+
+	session := fleet.CoordinatorSessionName(root)
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+	})
+
+	code, out, errOut := captureFn(t, func() int { return runCoordinatorStart(nil) })
+	if code == 0 {
+		t.Fatalf("start with missing agent: exit=0 (want non-zero); stdout=%q stderr=%q", out, errOut)
+	}
+	if !strings.Contains(errOut, "died on spawn") {
+		t.Errorf("stderr missing 'died on spawn': %q", errOut)
+	}
+	if fleet.CoordinatorAlive(root) {
+		t.Errorf("session %q must not be alive when agent failed to exec", session)
+	}
+}
+
 func TestCoordinatorStatusShowsTOML(t *testing.T) {
 	requireToolchain(t)
 
