@@ -24,7 +24,7 @@ import (
 // Session is the tmux session name the spawner registered for this
 // task. The kernel's own ensureSession path uses the computed
 // "spore/<project>/<slug>" name, but downstream spawners that mint
-// their own session names (e.g. "🐈 acme-project/foo [opus]") write
+// their own session names (e.g. "🐈 acme/my-task [opus]") write
 // the real name here so reap/done/merge can target the live session
 // instead of a stale computed one.
 type Meta struct {

@@ -119,18 +119,18 @@ func TestParseFirstClassFieldRoundTrip(t *testing.T) {
 }
 
 func TestSessionFieldRoundTrip(t *testing.T) {
-	in := []byte("---\nstatus: active\nslug: x\nsession: \"🐈 acme-project/foo [opus]\"\n---\nbody\n")
+	in := []byte("---\nstatus: active\nslug: x\nsession: \"🐈 acme/my-task [opus]\"\n---\nbody\n")
 	m, body, err := Parse(in)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if m.Session != "🐈 acme-project/foo [opus]" {
-		t.Errorf("Session = %q, want %q", m.Session, "🐈 acme-project/foo [opus]")
+	if m.Session != "🐈 acme/my-task [opus]" {
+		t.Errorf("Session = %q, want %q", m.Session, "🐈 acme/my-task [opus]")
 	}
 	out := Write(m, body)
 	// session is unquoted on Write (the parser strips one optional
 	// pair of double quotes), so the round trip emits the bare value.
-	want := "---\nstatus: active\nslug: x\nsession: 🐈 acme-project/foo [opus]\n---\nbody\n"
+	want := "---\nstatus: active\nslug: x\nsession: 🐈 acme/my-task [opus]\n---\nbody\n"
 	if string(out) != want {
 		t.Errorf("Write mismatch\nwant:\n%s\ngot:\n%s", want, out)
 	}
