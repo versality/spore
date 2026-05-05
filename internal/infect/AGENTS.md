@@ -48,7 +48,7 @@ When the operator hands you `<ip>` and (optionally) a target repo:
   Post-infect operator SSH: `spore` (forced into coord pane).
 - Initial coordinator agent: `--coordinator-agent claude` unless the
   operator asks for Codex. Pass `--coordinator-model <model>` when
-  the first coordinator/coordinator should pin a model; empty means the
+  the first coordinator should pin a model; empty means the
   selected CLI default. Use the Codex shape explicitly when requested:
   `--coordinator-agent codex --coordinator-model gpt-5.5
   --coordinator-effort high`.

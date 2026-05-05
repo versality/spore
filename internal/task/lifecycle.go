@@ -533,7 +533,7 @@ func tmuxSessionName(projectRoot, slug string) string {
 // taskTmuxSession returns the tmux session name to target for slug
 // when killing or probing the rower's session. The frontmatter
 // `session:` field wins when set (the spawner registers the real
-// session name there, e.g. "🐈 acme-project/foo [opus]"); otherwise
+// session name there, e.g. "🐈 acme/my-task [opus]"); otherwise
 // the kernel's computed "spore/<project>/<slug>" name is used. A
 // task file that fails to read or parse falls back to the computed
 // name so a corrupt brief never blocks cleanup.
