@@ -190,34 +190,70 @@
                   enable = true;
                   user = "spore-test";
                   projectRoot = "/home/spore-test/project";
+                  # Stub spore CLI: log every invocation to a per-user
+                  # trace file the test inspects after the activation
+                  # scripts run, then handle the subset of subcommands
+                  # the graceful-deploy hooks invoke.
                   package = pkgs.writeShellScriptBin "spore" ''
+                    trace="''${HOME:-/tmp}/spore-stub.log"
+                    echo "$*" >> "$trace"
                     case "$1 $2" in
                       "fleet reconcile") echo "stub: reconcile" ; exit 0 ;;
+                      "fleet enable") : > "''${HOME}/.local/state/spore/fleet-enabled" ; exit 0 ;;
+                      "fleet disable") rm -f "''${HOME}/.local/state/spore/fleet-enabled" ; exit 0 ;;
+                      "task tell") shift 2; echo "stub: tell $*" ; exit 0 ;;
                       *) echo "stub spore: unknown $*" >&2; exit 1 ;;
                     esac
                   '';
                   claudeCodePackage = pkgs.writeShellScriptBin "claude" "exit 0";
+                  gracefulDeploy.timeout = 5;
                 };
 
                 systemd.tmpfiles.rules = [
                   "d /home/spore-test/project 0750 spore-test users -"
+                  "d /home/spore-test/.local 0755 spore-test users -"
+                  "d /home/spore-test/.local/state 0755 spore-test users -"
+                  "d /home/spore-test/.local/state/spore 0755 spore-test users -"
                 ];
               };
-              testScript = ''
-                machine.wait_for_unit("multi-user.target")
-                machine.wait_for_unit("default.target", user="spore-test")
-                # Talk to the lingered user instance via systemctl
-                # --machine so the call uses the right XDG_RUNTIME_DIR
-                # without an interactive login.
-                def usercmd(cmd):
-                    return f"systemctl --machine=spore-test@.host --user {cmd}"
-                # Oneshot; trigger it and assert exit 0 plus that the
-                # timer + path watchers are active.
-                machine.succeed(usercmd("start spore-fleet-reconcile.service"))
-                machine.succeed(usercmd("is-active spore-fleet-reconcile.timer"))
-                machine.succeed(usercmd("is-active spore-fleet-reconcile-flag.path"))
-                machine.succeed(usercmd("is-active spore-fleet-reconcile-tasks.path"))
-              '';
+              testScript = { nodes, ... }:
+                let
+                  preScript = nodes.machine.services.spore-fleet.gracefulDeploy.preScript;
+                  postScript = nodes.machine.services.spore-fleet.gracefulDeploy.postScript;
+                in
+                ''
+                  machine.wait_for_unit("multi-user.target")
+                  machine.wait_for_unit("default.target", user="spore-test")
+                  # Talk to the lingered user instance via systemctl
+                  # --machine so the call uses the right XDG_RUNTIME_DIR
+                  # without an interactive login.
+                  def usercmd(cmd):
+                      return f"systemctl --machine=spore-test@.host --user {cmd}"
+                  # Oneshot; trigger it and assert exit 0 plus that the
+                  # timer + path watchers are active.
+                  machine.succeed(usercmd("start spore-fleet-reconcile.service"))
+                  machine.succeed(usercmd("is-active spore-fleet-reconcile.timer"))
+                  machine.succeed(usercmd("is-active spore-fleet-reconcile-flag.path"))
+                  machine.succeed(usercmd("is-active spore-fleet-reconcile-tasks.path"))
+
+                  # Graceful-deploy: pre-script disables the kill-switch
+                  # and tells every active worker to wrap up; post-script
+                  # re-enables it. With no live tmux sessions the pre-
+                  # script exits after the disable + "no active workers"
+                  # branch and never blocks on the timeout.
+                  machine.succeed("touch /home/spore-test/.local/state/spore/fleet-enabled")
+                  machine.succeed("chown spore-test:users /home/spore-test/.local/state/spore/fleet-enabled")
+                  machine.succeed("${preScript}")
+                  machine.fail("test -e /home/spore-test/.local/state/spore/fleet-enabled")
+                  machine.succeed("${postScript}")
+                  machine.succeed("test -e /home/spore-test/.local/state/spore/fleet-enabled")
+
+                  # The pre-script must have invoked `spore fleet disable`
+                  # via the stub; the trace confirms re-exec as the user
+                  # and cwd handling worked.
+                  machine.succeed("grep -q 'fleet disable' /home/spore-test/spore-stub.log")
+                  machine.succeed("grep -q 'fleet enable' /home/spore-test/spore-stub.log")
+                '';
             };
           };
 

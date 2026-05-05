@@ -3,6 +3,89 @@
 let
   cfg = config.services.spore-fleet;
   stateRel = ".local/state/spore/fleet-enabled";
+
+  # Common preamble: re-exec as cfg.user with a clean systemd-user
+  # environment when invoked as root (system.activationScripts and
+  # colmena pre/postActivation both run as root). When already running
+  # as cfg.user (manual smoke test, or a user-context call), the
+  # re-exec is skipped and the body runs in place.
+  asUserPreamble = ''
+    set -eu
+    user='${cfg.user}'
+    uid="$(${pkgs.coreutils}/bin/id -u "$user")"
+    if [ "$(${pkgs.coreutils}/bin/id -un)" != "$user" ]; then
+      home="$(${pkgs.getent}/bin/getent passwd "$user" | ${pkgs.coreutils}/bin/cut -d: -f6)"
+      if [ -z "$home" ]; then
+        echo "spore-fleet-graceful: cannot resolve home for user '$user'" >&2
+        exit 1
+      fi
+      exec ${pkgs.util-linux}/bin/runuser -u "$user" -- ${pkgs.coreutils}/bin/env -i \
+        HOME="$home" \
+        USER="$user" \
+        LOGNAME="$user" \
+        XDG_RUNTIME_DIR="/run/user/$uid" \
+        PATH="/run/current-system/sw/bin:/run/wrappers/bin" \
+        "$0" "$@"
+    fi
+  '';
+
+  preScript = pkgs.writeShellScriptBin "spore-fleet-graceful-pre" ''
+    ${asUserPreamble}
+
+    project_root='${toString cfg.projectRoot}'
+    project="$(${pkgs.coreutils}/bin/basename "$project_root")"
+    timeout=${toString cfg.gracefulDeploy.timeout}
+    message='${cfg.gracefulDeploy.message}'
+    sporecli='${cfg.package}/bin/spore'
+    tmuxcli='${pkgs.tmux}/bin/tmux'
+
+    cd "$project_root"
+
+    echo "spore-fleet-graceful: disabling kill-switch" >&2
+    "$sporecli" fleet disable || true
+
+    list_workers() {
+      "$tmuxcli" list-sessions -F '#{session_name}' 2>/dev/null \
+        | ${pkgs.gnugrep}/bin/grep -E "^spore/$project/" \
+        | ${pkgs.gnugrep}/bin/grep -v "^spore/$project/coordinator$" || true
+    }
+
+    sessions="$(list_workers)"
+    if [ -z "$sessions" ]; then
+      echo "spore-fleet-graceful: no active workers" >&2
+      exit 0
+    fi
+
+    while IFS= read -r s; do
+      slug="''${s##spore/$project/}"
+      echo "spore-fleet-graceful: signalling $slug" >&2
+      "$sporecli" task tell "$slug" "$message" || true
+    done <<< "$sessions"
+
+    deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + timeout ))
+    while [ "$(${pkgs.coreutils}/bin/date +%s)" -lt "$deadline" ]; do
+      remaining="$(list_workers | ${pkgs.gnugrep}/bin/grep -c '^' || true)"
+      if [ "$remaining" = "0" ]; then
+        echo "spore-fleet-graceful: workers drained" >&2
+        exit 0
+      fi
+      ${pkgs.coreutils}/bin/sleep 2
+    done
+
+    echo "spore-fleet-graceful: timeout (''${timeout}s); killing remaining workers" >&2
+    list_workers | while IFS= read -r s; do
+      [ -z "$s" ] && continue
+      "$tmuxcli" kill-session -t "$s" || true
+    done
+  '';
+
+  postScript = pkgs.writeShellScriptBin "spore-fleet-graceful-post" ''
+    ${asUserPreamble}
+
+    sporecli='${cfg.package}/bin/spore'
+    echo "spore-fleet-graceful: re-enabling kill-switch" >&2
+    "$sporecli" fleet enable
+  '';
 in
 {
   options.services.spore-fleet = {
@@ -119,9 +202,94 @@ in
         server keys, git-push PATs, etc.).
       '';
     };
+
+    gracefulDeploy = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Wire pre/post-activation hooks that drain active workers
+          before a `nixos-rebuild switch` (or colmena deploy) and
+          re-enable the reconciler after. Disable when the host is
+          a one-off worker tier whose tasks should never see a
+          wrap-up signal.
+        '';
+      };
+
+      timeout = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 60;
+        description = ''
+          Seconds to wait for active workers to flush after the
+          wrap-up signal before the pre-activation script kills
+          remaining tmux sessions with SIGTERM.
+        '';
+      };
+
+      message = lib.mkOption {
+        type = lib.types.str;
+        default = "wrap-up: deployment incoming";
+        description = ''
+          Body of the inbox message dropped into each active
+          worker's inbox during the pre-activation drain. Workers
+          should treat it as a request to flush in-progress notes
+          to the task file before they get torn down.
+        '';
+      };
+
+      preScript = lib.mkOption {
+        type = lib.types.str;
+        readOnly = true;
+        description = ''
+          Absolute path to the pre-activation script. Drop into
+          colmena's `deployment.preActivation` to drive the same
+          drain remotely. The script re-execs as
+          `services.spore-fleet.user` via `runuser` and is safe to
+          call from a root shell.
+        '';
+      };
+
+      postScript = lib.mkOption {
+        type = lib.types.str;
+        readOnly = true;
+        description = ''
+          Absolute path to the post-activation script. Drop into
+          colmena's `deployment.postActivation` to re-enable the
+          fleet kill-switch after a successful deploy.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
+    services.spore-fleet.gracefulDeploy = {
+      preScript = "${preScript}/bin/spore-fleet-graceful-pre";
+      postScript = "${postScript}/bin/spore-fleet-graceful-post";
+    };
+
+    # Wire the pre/post hooks into NixOS system activation so a
+    # `nixos-rebuild switch` (and colmena, which lifts the same
+    # activation flow on the remote) drains workers before the new
+    # systemd-user units load and re-enables the kill-switch after.
+    # The NIXOS_ACTION gate keeps boot-time activation a no-op: there
+    # is nothing to drain on a fresh boot, and disabling the flag
+    # there would leave the reconciler paused until the next deploy.
+    system.activationScripts = lib.mkIf cfg.gracefulDeploy.enable {
+      spore-fleet-pre.text = ''
+        case "''${NIXOS_ACTION:-}" in
+          switch|test) ${preScript}/bin/spore-fleet-graceful-pre || true ;;
+        esac
+      '';
+      spore-fleet-post = {
+        deps = [ "spore-fleet-pre" ];
+        text = ''
+          case "''${NIXOS_ACTION:-}" in
+            switch|test) ${postScript}/bin/spore-fleet-graceful-post || true ;;
+          esac
+        '';
+      };
+    };
+
     home-manager.users.${cfg.user} = {
       systemd.user.services.spore-fleet-reconcile = {
         Unit = {
