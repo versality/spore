@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.0.3 - 2026-05-05
+
+Spore 0.0.3 lands the universal coordinator entry point. "How do I
+start the coordinator?" now has the same answer for every consumer:
+`spore coordinator start`.
+
+- Added `spore coordinator start [--wait] [--poll-sec N]`,
+  `stop`, `restart`, and `status` over the existing fleet
+  coordinator helpers. `start` is idempotent; `--wait` blocks
+  until the session exits (helm-spawn / skyhelm-spawn shape).
+- Added the `[coordinator]` section in `spore.toml` with `driver`,
+  `model`, and `brief` keys. Env vars still win; driver "claude"
+  maps to `claude-code`, "codex" to `codex`, and any other value
+  passes through (so a project can point at a launcher script).
+- Injected `SPORE_COORDINATOR_PROVIDER` and
+  `SPORE_COORDINATOR_MODEL` into the session env when configured,
+  matching the bundled `spore-coordinator-launch` dispatch shape.
+- `status` prints up/down, the configured driver/model/brief, and
+  exits 3 when the coordinator session is down (0 when up).
+
 ## 0.0.2 - 2026-05-04
 
 Spore 0.0.2 is a focused release: it can now run Codex-backed workers

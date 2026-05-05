@@ -34,11 +34,18 @@ func CoordinatorSessionName(projectRoot string) string {
 }
 
 // CoordinatorRolePath returns the override path from
-// SPORE_COORDINATOR_ROLE_FILE if set, else the in-tree default at
-// <projectRoot>/bootstrap/coordinator/role.md.
+// SPORE_COORDINATOR_ROLE_FILE if set, else the [coordinator].brief
+// entry in spore.toml (resolved against projectRoot when relative),
+// else the in-tree default at <projectRoot>/bootstrap/coordinator/role.md.
 func CoordinatorRolePath(projectRoot string) string {
 	if p := os.Getenv(CoordinatorRoleEnv); p != "" {
 		return p
+	}
+	if cfg, err := LoadCoordinatorConfig(projectRoot); err == nil && cfg.Brief != "" {
+		if filepath.IsAbs(cfg.Brief) {
+			return cfg.Brief
+		}
+		return filepath.Join(projectRoot, cfg.Brief)
 	}
 	return filepath.Join(projectRoot, "bootstrap", "coordinator", "role.md")
 }
@@ -61,7 +68,8 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		return session, false, nil
 	}
 
-	agent := coordinatorAgent()
+	tomlCfg, _ := LoadCoordinatorConfig(projectRoot)
+	agent := coordinatorAgent(tomlCfg)
 	rolePath := CoordinatorRolePath(projectRoot)
 	project, err := task.ProjectName(projectRoot)
 	if err != nil {
@@ -87,8 +95,14 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		"-e", "WT_PROJECT=" + project,
 		"-e", "SKYBOT_INBOX=" + inbox,
 		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
-		cmd,
 	}
+	if v := coordinatorProvider(tomlCfg); v != "" {
+		args = append(args, "-e", "SPORE_COORDINATOR_PROVIDER="+v)
+	}
+	if v := coordinatorModel(tomlCfg); v != "" {
+		args = append(args, "-e", "SPORE_COORDINATOR_MODEL="+v)
+	}
+	args = append(args, cmd)
 	out, err := exec.Command("tmux", args...).CombinedOutput()
 	if err != nil {
 		return "", false, fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
@@ -99,15 +113,56 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 // coordinatorAgent picks the binary the coordinator session execs.
 // Precedence: SPORE_COORDINATOR_AGENT (lets operators run a different
 // agent for the singleton coordinator) > SPORE_AGENT_BINARY (the same
-// var workers honour) > "claude-code" (the kernel default).
-func coordinatorAgent() string {
+// var workers honour) > spore.toml [coordinator].driver mapped to a
+// known binary > "claude-code" (the kernel default).
+func coordinatorAgent(cfg CoordinatorConfig) string {
 	if a := os.Getenv(CoordinatorAgentEnv); a != "" {
 		return a
 	}
 	if a := os.Getenv(task.AgentBinaryEnv); a != "" {
 		return a
 	}
+	if a := driverToBinary(cfg.Driver); a != "" {
+		return a
+	}
 	return "claude-code"
+}
+
+// coordinatorProvider returns the provider name for launcher scripts
+// that dispatch on $SPORE_COORDINATOR_PROVIDER (e.g. the bundled
+// spore-coordinator-launch.sh). Env wins over the spore.toml driver.
+// Empty when nothing is configured: the session env stays clean.
+func coordinatorProvider(cfg CoordinatorConfig) string {
+	if v := os.Getenv("SPORE_COORDINATOR_PROVIDER"); v != "" {
+		return v
+	}
+	return cfg.Driver
+}
+
+// coordinatorModel returns the model identifier injected into the
+// session env. Env wins over the spore.toml model. Empty when neither
+// source set it.
+func coordinatorModel(cfg CoordinatorConfig) string {
+	if v := os.Getenv("SPORE_COORDINATOR_MODEL"); v != "" {
+		return v
+	}
+	return cfg.Model
+}
+
+// driverToBinary maps a friendly driver name to the binary to exec.
+// "claude" -> "claude-code", "codex" -> "codex". Unknown values pass
+// through verbatim so a project can wire a launcher script by name.
+// Empty input returns empty so the caller falls through to the next
+// precedence level.
+func driverToBinary(driver string) string {
+	switch driver {
+	case "":
+		return ""
+	case "claude":
+		return "claude-code"
+	default:
+		return driver
+	}
 }
 
 // coordinatorShellCommand builds the shell snippet tmux runs for the
@@ -140,6 +195,12 @@ func ReapCoordinator(projectRoot string) bool {
 	}
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
 	return true
+}
+
+// CoordinatorAlive reports whether the coordinator tmux session for
+// projectRoot is currently up.
+func CoordinatorAlive(projectRoot string) bool {
+	return hasSession(CoordinatorSessionName(projectRoot))
 }
 
 func hasSession(name string) bool {

@@ -125,18 +125,23 @@ func TestCoordinatorAgentPrecedence(t *testing.T) {
 		name      string
 		coordEnv  string
 		workerEnv string
+		driver    string
 		want      string
 	}{
-		{name: "coord_wins", coordEnv: "agent-A", workerEnv: "agent-B", want: "agent-A"},
-		{name: "worker_fallback", coordEnv: "", workerEnv: "agent-B", want: "agent-B"},
-		{name: "default", coordEnv: "", workerEnv: "", want: "claude-code"},
+		{name: "coord_wins", coordEnv: "agent-A", workerEnv: "agent-B", driver: "codex", want: "agent-A"},
+		{name: "worker_fallback", coordEnv: "", workerEnv: "agent-B", driver: "codex", want: "agent-B"},
+		{name: "driver_claude", coordEnv: "", workerEnv: "", driver: "claude", want: "claude-code"},
+		{name: "driver_codex", coordEnv: "", workerEnv: "", driver: "codex", want: "codex"},
+		{name: "driver_passthrough", coordEnv: "", workerEnv: "", driver: "/usr/local/bin/spore-coordinator-launch", want: "/usr/local/bin/spore-coordinator-launch"},
+		{name: "default", coordEnv: "", workerEnv: "", driver: "", want: "claude-code"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("SPORE_COORDINATOR_AGENT", tc.coordEnv)
 			t.Setenv("SPORE_AGENT_BINARY", tc.workerEnv)
-			if got := coordinatorAgent(); got != tc.want {
-				t.Errorf("coordinatorAgent() = %q, want %q", got, tc.want)
+			cfg := CoordinatorConfig{Driver: tc.driver}
+			if got := coordinatorAgent(cfg); got != tc.want {
+				t.Errorf("coordinatorAgent(%+v) = %q, want %q", cfg, got, tc.want)
 			}
 		})
 	}

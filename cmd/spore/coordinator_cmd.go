@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
+	"github.com/versality/spore/internal/fleet"
 )
 
 // defaultCoordinatorStateDir resolves the coordinator state dir from
@@ -32,6 +34,10 @@ Usage:
   spore coordinator <subcommand> [flags]
 
 Subcommands:
+  start           Spawn the coordinator tmux session (idempotent).
+  stop            Kill the coordinator tmux session.
+  restart         Stop then start.
+  status          Print whether the coordinator session is alive.
   role-brief      Render the coordinator role brief to stdout.
   state-debt      Scan state.md for prose lessons that should be lifted.
   verify-done     Run the verify-done verdict for a slug.
@@ -50,6 +56,14 @@ func runCoordinator(args []string) int {
 	case "-h", "--help", "help":
 		fmt.Print(coordinatorUsage)
 		return 0
+	case "start":
+		return runCoordinatorStart(rest)
+	case "stop":
+		return runCoordinatorStop(rest)
+	case "restart":
+		return runCoordinatorRestart(rest)
+	case "status":
+		return runCoordinatorStatus(rest)
 	case "role-brief":
 		return runCoordinatorRoleBrief(rest)
 	case "state-debt":
@@ -66,6 +80,160 @@ func runCoordinator(args []string) int {
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
 	}
+}
+
+func runCoordinatorStart(args []string) int {
+	fs := flag.NewFlagSet("coordinator start", flag.ContinueOnError)
+	wait := fs.Bool("wait", false, "block until the coordinator session exits")
+	pollSec := fs.Int("poll-sec", 5, "poll interval for --wait, in seconds")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator start:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator start - spawn the coordinator tmux session")
+		fmt.Println("  --wait        block until the session dies (one poll every --poll-sec)")
+		fmt.Println("  --poll-sec N  poll interval for --wait (default 5)")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator start [--wait] [--poll-sec N]")
+		return 2
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator start:", err)
+		return 1
+	}
+
+	session, spawned, err := fleet.EnsureCoordinator(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator start:", err)
+		return 1
+	}
+	if spawned {
+		fmt.Printf("coordinator: spawned %s\n", session)
+	} else {
+		fmt.Printf("coordinator: already running %s\n", session)
+	}
+
+	if !*wait {
+		return 0
+	}
+	if *pollSec < 1 {
+		*pollSec = 1
+	}
+	for fleet.CoordinatorAlive(root) {
+		time.Sleep(time.Duration(*pollSec) * time.Second)
+	}
+	fmt.Printf("coordinator: %s exited\n", session)
+	return 0
+}
+
+func runCoordinatorStop(args []string) int {
+	fs := flag.NewFlagSet("coordinator stop", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator stop:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator stop - kill the coordinator tmux session (idempotent)")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator stop")
+		return 2
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator stop:", err)
+		return 1
+	}
+	session := fleet.CoordinatorSessionName(root)
+	if fleet.ReapCoordinator(root) {
+		fmt.Printf("coordinator: killed %s\n", session)
+		return 0
+	}
+	fmt.Printf("coordinator: not running (%s)\n", session)
+	return 0
+}
+
+func runCoordinatorRestart(args []string) int {
+	fs := flag.NewFlagSet("coordinator restart", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator restart:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator restart - stop then start")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator restart")
+		return 2
+	}
+	if code := runCoordinatorStop(nil); code != 0 {
+		return code
+	}
+	return runCoordinatorStart(nil)
+}
+
+func runCoordinatorStatus(args []string) int {
+	fs := flag.NewFlagSet("coordinator status", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator status:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator status - print whether the coordinator session is alive")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator status")
+		return 2
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator status:", err)
+		return 1
+	}
+	session := fleet.CoordinatorSessionName(root)
+	cfg, _ := fleet.LoadCoordinatorConfig(root)
+	alive := fleet.CoordinatorAlive(root)
+
+	state := "down"
+	if alive {
+		state = "up"
+	}
+	fmt.Printf("coordinator: %s (%s)\n", state, session)
+	if cfg.Driver != "" {
+		fmt.Printf("  driver: %s\n", cfg.Driver)
+	}
+	if cfg.Model != "" {
+		fmt.Printf("  model:  %s\n", cfg.Model)
+	}
+	if cfg.Brief != "" {
+		fmt.Printf("  brief:  %s\n", cfg.Brief)
+	}
+	if alive {
+		return 0
+	}
+	return 3
 }
 
 func runCoordinatorRoleBrief(args []string) int {
