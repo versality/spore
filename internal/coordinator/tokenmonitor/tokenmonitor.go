@@ -11,10 +11,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/versality/spore/internal/transcript"
 )
 
 const (
@@ -91,15 +92,15 @@ func Check(cfg Config, payload HookPayload) CheckResult {
 		return CheckResult{Level: "skip"}
 	}
 
-	transcript := payload.TranscriptPath
-	if transcript == "" || !fileExists(transcript) {
-		transcript = findFallbackTranscript()
+	tpath := payload.TranscriptPath
+	if tpath == "" || !fileExists(tpath) {
+		tpath = transcript.FindFallbackTranscript()
 	}
-	if transcript == "" {
+	if tpath == "" {
 		return CheckResult{Level: "skip"}
 	}
 
-	ctx := sumContextTokens(transcript)
+	ctx := transcript.SumContextTokens(tpath)
 	if ctx <= 0 {
 		return CheckResult{Level: "ok", Ctx: ctx, SoftCap: cfg.SoftCap, HardCap: cfg.HardCap}
 	}
@@ -153,79 +154,6 @@ func Check(cfg Config, payload HookPayload) CheckResult {
 	return result
 }
 
-// sumContextTokens reads the transcript JSONL and sums
-// input_tokens + cache_creation_input_tokens + cache_read_input_tokens
-// from the last assistant message's usage block.
-func sumContextTokens(path string) int {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0
-	}
-	defer f.Close()
-
-	var lastLine string
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, `"role":"assistant"`) {
-			lastLine = line
-		}
-	}
-	if lastLine == "" {
-		return 0
-	}
-
-	return extractContextFromLine(lastLine)
-}
-
-func extractContextFromLine(line string) int {
-	usageRE := regexp.MustCompile(`"usage"\s*:\s*\{`)
-	locs := usageRE.FindAllStringIndex(line, -1)
-	if len(locs) == 0 {
-		return 0
-	}
-	lastLoc := locs[len(locs)-1]
-	start := lastLoc[1] - 1
-
-	depth := 0
-	end := start
-	for i := start; i < len(line); i++ {
-		switch line[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				end = i + 1
-				goto done
-			}
-		}
-	}
-done:
-	if end <= start {
-		return 0
-	}
-
-	block := line[start:end]
-
-	var usage map[string]json.RawMessage
-	if json.Unmarshal([]byte(block), &usage) != nil {
-		return 0
-	}
-
-	sum := 0
-	for _, key := range []string{"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"} {
-		if raw, ok := usage[key]; ok {
-			var n int
-			if json.Unmarshal(raw, &n) == nil {
-				sum += n
-			}
-		}
-	}
-	return sum
-}
-
 func appendLedger(cfg Config, sessionID string, ctx int, softFired, hardFired bool) {
 	os.MkdirAll(filepath.Dir(cfg.LedgerFile), 0o700)
 	f, err := os.OpenFile(cfg.LedgerFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
@@ -237,38 +165,6 @@ func appendLedger(cfg Config, sessionID string, ctx int, softFired, hardFired bo
 	fmt.Fprintf(f, `{"ts":"%s","session_id":"%s","ctx":%d,"soft_cap":%d,"hard_cap":%d,"soft_fired":%s,"hard_fired":%s}`+"\n",
 		ts, sessionID, ctx, cfg.SoftCap, cfg.HardCap,
 		strconv.FormatBool(softFired), strconv.FormatBool(hardFired))
-}
-
-func findFallbackTranscript() string {
-	cwd := os.Getenv("CLAUDE_PROJECT_DIR")
-	if cwd == "" {
-		cwd, _ = os.Getwd()
-	}
-	encoded := strings.ReplaceAll(cwd, "/", "-")
-	home, _ := os.UserHomeDir()
-	projDir := filepath.Join(home, ".claude", "projects", encoded)
-
-	entries, err := os.ReadDir(projDir)
-	if err != nil {
-		return ""
-	}
-
-	var newest string
-	var newestTime time.Time
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
-			continue
-		}
-		fi, err := e.Info()
-		if err != nil {
-			continue
-		}
-		if newest == "" || fi.ModTime().After(newestTime) {
-			newest = filepath.Join(projDir, e.Name())
-			newestTime = fi.ModTime()
-		}
-	}
-	return newest
 }
 
 // LedgerVerdict reads the token-monitor ledger and returns whether

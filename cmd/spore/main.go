@@ -40,6 +40,7 @@ Commands:
   hooks      Install or run claude-code / git hooks.
   budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
+  worker     Worker support hooks (token-monitor).
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
@@ -153,6 +154,8 @@ func main() {
 		os.Exit(runBudget(args))
 	case "coordinator":
 		os.Exit(runCoordinator(args))
+	case "worker":
+		os.Exit(runWorker(args))
 	default:
 		fmt.Fprintf(os.Stderr, "spore: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
