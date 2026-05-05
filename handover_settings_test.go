@@ -30,6 +30,15 @@ func TestHandoverSettingsWireCommunicationHooks(t *testing.T) {
 	if !hasAsyncRewake(settings.Hooks["Stop"], "/usr/local/bin/spore hooks watch-inbox") {
 		t.Fatal("handover settings missing asyncRewake watch-inbox Stop hook")
 	}
+	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore coordinator token-monitor") {
+		t.Fatal("handover settings missing coordinator token-monitor Stop hook")
+	}
+	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore worker token-monitor") {
+		t.Fatal("handover settings missing worker token-monitor Stop hook")
+	}
+	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore fleet replenish-hook") {
+		t.Fatal("handover settings missing fleet replenish-hook Stop hook")
+	}
 }
 
 type handoverHookGroup struct {

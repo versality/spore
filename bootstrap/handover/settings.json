@@ -44,6 +44,21 @@
         "hooks": [
           {
             "type": "command",
+            "command": "/usr/local/bin/spore coordinator token-monitor",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/usr/local/bin/spore worker token-monitor",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/usr/local/bin/spore fleet replenish-hook",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "/usr/local/bin/spore hooks watch-inbox",
             "timeout": 604800,
             "asyncRewake": true

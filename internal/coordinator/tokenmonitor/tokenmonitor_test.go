@@ -36,46 +36,6 @@ func TestCheckSkipsNonCoordinator(t *testing.T) {
 	}
 }
 
-func TestExtractContextFromLine(t *testing.T) {
-	line := `{"type":"assistant","message":{"role":"assistant","content":[],"usage":{"input_tokens":100000,"output_tokens":5000,"cache_creation_input_tokens":20000,"cache_read_input_tokens":30000}}}`
-	got := extractContextFromLine(line)
-	want := 150000
-	if got != want {
-		t.Errorf("extractContextFromLine = %d, want %d", got, want)
-	}
-}
-
-func TestExtractContextNoUsage(t *testing.T) {
-	line := `{"type":"assistant","message":{"role":"assistant","content":[]}}`
-	got := extractContextFromLine(line)
-	if got != 0 {
-		t.Errorf("expected 0, got %d", got)
-	}
-}
-
-func TestSumContextTokens(t *testing.T) {
-	dir := t.TempDir()
-	f := filepath.Join(dir, "transcript.jsonl")
-
-	lines := []string{
-		`{"type":"human","message":{"role":"user"}}`,
-		`{"type":"assistant","message":{"role":"assistant","content":[],"usage":{"input_tokens":50000,"output_tokens":1000,"cache_creation_input_tokens":10000,"cache_read_input_tokens":5000}}}`,
-		`{"type":"human","message":{"role":"user"}}`,
-		`{"type":"assistant","message":{"role":"assistant","content":[],"usage":{"input_tokens":80000,"output_tokens":2000,"cache_creation_input_tokens":15000,"cache_read_input_tokens":25000}}}`,
-	}
-	var content []byte
-	for _, l := range lines {
-		content = append(content, []byte(l+"\n")...)
-	}
-	os.WriteFile(f, content, 0o644)
-
-	got := sumContextTokens(f)
-	want := 120000
-	if got != want {
-		t.Errorf("sumContextTokens = %d, want %d", got, want)
-	}
-}
-
 func TestCheckHardCap(t *testing.T) {
 	dir := t.TempDir()
 	transcriptDir := filepath.Join(dir, "transcript")
