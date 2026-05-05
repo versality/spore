@@ -1,7 +1,9 @@
 package task
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/versality/spore/internal/codexpolicy"
 	"github.com/versality/spore/internal/evidence"
+	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -206,6 +209,8 @@ func Done(tasksDir, slug string, force bool) error {
 		return err
 	}
 
+	notifyMatterDone(projectRoot, slug, m, os.Stderr)
+
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
 	session := taskTmuxSession(tasksDir, projectRoot, slug)
 
@@ -213,6 +218,54 @@ func Done(tasksDir, slug string, force bool) error {
 	_ = gitCmd(projectRoot, "worktree", "remove", "--force", worktree).Run()
 	_ = gitCmd(projectRoot, "branch", "-D", branch).Run()
 	return nil
+}
+
+// notifyMatterDone fires OnDone on the matter named in the task's
+// frontmatter (Extra["matter"]). No-op when the key is absent or the
+// adapter isn't configured for this project. Errors land on warnOut;
+// the status flip remains the source of truth.
+func notifyMatterDone(projectRoot, slug string, m frontmatter.Meta, warnOut io.Writer) {
+	name := m.Extra[matter.MatterKey]
+	if name == "" {
+		return
+	}
+	configs, err := matter.LoadFromProject(projectRoot)
+	if err != nil {
+		fmt.Fprintf(warnOut, "spore task done %s: matter load: %v\n", slug, err)
+		return
+	}
+	var cfg *matter.Config
+	for i := range configs {
+		if configs[i].Name == name && configs[i].Enabled {
+			cfg = &configs[i]
+			break
+		}
+	}
+	if cfg == nil {
+		return
+	}
+	matters, err := matter.FromConfig([]matter.Config{*cfg})
+	if err != nil {
+		fmt.Fprintf(warnOut, "spore task done %s: matter %s: %v\n", slug, name, err)
+		return
+	}
+	if len(matters) == 0 {
+		return
+	}
+	if err := matters[0].OnDone(context.Background(), slug, copyExtra(m.Extra)); err != nil {
+		fmt.Fprintf(warnOut, "spore task done %s: matter %s OnDone: %v\n", slug, name, err)
+	}
+}
+
+func copyExtra(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 // evidenceGate runs the structural evidence verifier on the task body

@@ -87,24 +87,87 @@ let
     "$sporecli" fleet enable
   '';
 
-  matterLinear = cfg.matter.linear;
+  # envSlug folds an attribute name into the SPORE_MATTER_<NAME>__<KEY>
+  # shape the matter loader expects: upper-case, with non [A-Z0-9]
+  # runes mapped to '_'. Mirrors internal/matter.envKey normalisation.
+  envSlug = name:
+    let upper = lib.toUpper name; in
+    builtins.concatStringsSep "" (
+      builtins.map
+        (c: if (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") then c else "_")
+        (lib.stringToCharacters upper)
+    );
 
-  matterLinearTOML = pkgs.writeText "spore-matter-linear.toml" ''
-    [matter.linear]
-    team = "${matterLinear.team}"
-    ready_state = "${matterLinear.readyState}"
-    in_progress_state = "${matterLinear.inProgressState}"
-    done_state = "${matterLinear.doneState}"
-    api_key_file = "linear-api-key"
-    endpoint = "${matterLinear.endpoint}"
-  '';
+  enabledMatters = lib.filterAttrs (_: m: m.enable) cfg.matters;
 
-  matterEnv = lib.optionalAttrs matterLinear.enable {
-    SPORE_MATTER_TOML = toString matterLinearTOML;
-  };
+  # matterEnv flattens enabled matters into
+  # SPORE_MATTER_<NAME>__<KEY> entries: one ENABLED=1 marker, one
+  # entry per setting, and one per credentialFile (pointing at
+  # $CREDENTIALS_DIRECTORY/matter-<name>-<key> via systemd's `%d`
+  # specifier). The double underscore between name and key is the
+  # matter loader's contract; see internal/matter/config.go envSep.
+  matterEnv = lib.foldlAttrs
+    (acc: name: m:
+      let
+        slug = envSlug name;
+        prefix = "SPORE_MATTER_${slug}__";
+        settingEnv = lib.mapAttrs'
+          (k: v: lib.nameValuePair "${prefix}${envSlug k}" (toString v))
+          m.settings;
+        credEnv = lib.mapAttrs'
+          (k: _: lib.nameValuePair
+            "${prefix}CREDENTIAL_${envSlug k}"
+            "%d/matter-${name}-${k}")
+          m.credentialFiles;
+      in
+      acc // { "${prefix}ENABLED" = "1"; } // settingEnv // credEnv
+    )
+    { }
+    enabledMatters;
 
-  matterCredentials = lib.optionalAttrs matterLinear.enable {
-    linear-api-key = matterLinear.apiKeySecret;
+  # matterCredentials renames per-matter credentialFiles into the flat
+  # LoadCredential namespace using a matter-<name>-<key> prefix so the
+  # SPORE_MATTER_<NAME>__CREDENTIAL_<KEY> env vars resolve under
+  # $CREDENTIALS_DIRECTORY at runtime.
+  matterCredentials = lib.foldlAttrs
+    (acc: name: m:
+      acc // (lib.mapAttrs'
+        (k: path: lib.nameValuePair "matter-${name}-${k}" path)
+        m.credentialFiles)
+    )
+    { }
+    enabledMatters;
+
+  matterSubmodule = lib.types.submodule {
+    options = {
+      enable = lib.mkEnableOption "this matter (rendered as SPORE_MATTER_<NAME>__ENABLED=1)";
+
+      settings = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.oneOf [ lib.types.str lib.types.int lib.types.bool ]);
+        default = { };
+        example = lib.literalExpression ''{ team = "MAR"; ready_state = "Ready"; }'';
+        description = ''
+          Adapter-specific key-value pairs. Each entry is rendered
+          to the unit env as SPORE_MATTER_<NAME>__<KEY>=<value>;
+          the matter loader merges these on top of any
+          [matter.<name>] section in the project's spore.toml.
+        '';
+      };
+
+      credentialFiles = lib.mkOption {
+        type = lib.types.attrsOf lib.types.path;
+        default = { };
+        example = lib.literalExpression ''{ api_key = config.age.secrets.linear-api-key.path; }'';
+        description = ''
+          Per-credential files exposed via systemd LoadCredential
+          under the name `matter-<matter>-<key>`. The matter
+          adapter receives the resolved path through
+          SPORE_MATTER_<NAME>__CREDENTIAL_<KEY>=%d/matter-<matter>-<key>;
+          the file itself is dereferenced by systemd at activation
+          time, so secrets never enter Nix evaluation or /nix/store.
+        '';
+      };
+    };
   };
 in
 {
@@ -280,67 +343,40 @@ in
       };
     };
 
-    matter.linear = {
-      enable = lib.mkEnableOption "Linear ticket source for the fleet reconciler";
+    matters = lib.mkOption {
+      type = lib.types.attrsOf matterSubmodule;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          linear = {
+            enable = true;
+            settings = {
+              team = "MAR";
+              ready_state = "Ready";
+              done_state = "Done";
+            };
+            credentialFiles = {
+              api_key = config.age.secrets.linear-api-key.path;
+            };
+          };
+        }
+      '';
+      description = ''
+        External work-source adapters. Each `matters.<name>` is
+        rendered into the unit's environment as
+        `SPORE_MATTER_<NAME>__ENABLED=1` plus one
+        `SPORE_MATTER_<NAME>__<KEY>=<value>` per setting. Any
+        per-matter `credentialFiles` are exposed via
+        LoadCredential under the prefixed name
+        `matter-<matter>-<key>`, and the resolved paths are
+        passed to the adapter as
+        `SPORE_MATTER_<NAME>__CREDENTIAL_<KEY>=%d/matter-<matter>-<key>`.
 
-      team = lib.mkOption {
-        type = lib.types.str;
-        example = "MAR";
-        description = ''
-          Linear team key. Only issues belonging to this team are
-          adopted. Wired through `[matter.linear] team` in the
-          generated spore.toml drop-in.
-        '';
-      };
-
-      readyState = lib.mkOption {
-        type = lib.types.str;
-        default = "Ready";
-        description = ''
-          Workflow state name the reconciler polls for adoption.
-          Must match the team's Linear workflow exactly.
-        '';
-      };
-
-      inProgressState = lib.mkOption {
-        type = lib.types.str;
-        default = "In Progress";
-        description = ''
-          Workflow state the reconciler moves an adopted issue into
-          right after creating its on-disk task file.
-        '';
-      };
-
-      doneState = lib.mkOption {
-        type = lib.types.str;
-        default = "Done";
-        description = ''
-          Workflow state the reconciler pushes an issue to once its
-          on-disk task flips to status=done.
-        '';
-      };
-
-      apiKeySecret = lib.mkOption {
-        type = lib.types.path;
-        example = lib.literalExpression "config.age.secrets.linear-api-key.path";
-        description = ''
-          Path to the Linear API key. Decrypted at activation time
-          (e.g. agenix at /run/agenix/<name>) and exposed to the
-          reconciler via systemd LoadCredential under the name
-          `linear-api-key`. The kernel reads it through
-          $CREDENTIALS_DIRECTORY/linear-api-key, so the Nix store
-          never sees the secret.
-        '';
-      };
-
-      endpoint = lib.mkOption {
-        type = lib.types.str;
-        default = "https://api.linear.app/graphql";
-        description = ''
-          Linear GraphQL endpoint. Override only for self-hosted
-          proxies or test stubs.
-        '';
-      };
+        The matter loader merges these env entries on top of any
+        `[matter.<name>]` section in the project's spore.toml,
+        so the same adapter can be configured locally via TOML
+        and on a NixOS deployment via this option set.
+      '';
     };
   };
 

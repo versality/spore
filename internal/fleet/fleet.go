@@ -13,6 +13,7 @@ package fleet
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task"
 )
 
@@ -49,6 +51,20 @@ type Result struct {
 	Reaped  []string
 	Kept    []string
 	Skipped []string
+
+	// Matter is the per-matter sync outcome from the prelude pass.
+	// Empty when no matters are configured. Errors do not abort
+	// reconciliation: the worker pass still runs against whatever
+	// tasks are on disk.
+	Matter []MatterResult
+}
+
+// MatterResult records one matter's sync outcome for the pass.
+type MatterResult struct {
+	Name    string
+	Created int
+	Updated int
+	Err     error
 }
 
 // Reconcile runs a single pass: list active tasks, list spore-prefix
@@ -77,6 +93,8 @@ func Reconcile(cfg Config) (Result, error) {
 	if _, _, err := EnsureCoordinator(cfg.ProjectRoot); err != nil {
 		return Result{}, fmt.Errorf("coordinator: %w", err)
 	}
+
+	matterRes := syncMatters(cfg.ProjectRoot)
 
 	metas, err := task.List(cfg.TasksDir)
 	if err != nil {
@@ -108,7 +126,7 @@ func Reconcile(cfg Config) (Result, error) {
 		runningSet[s] = true
 	}
 
-	res := Result{}
+	res := Result{Matter: matterRes}
 
 	// Reap first so freed slots count toward the cap on spawn.
 	// Sessions for tasks the operator paused or blocked are kept
@@ -157,6 +175,36 @@ func Reconcile(cfg Config) (Result, error) {
 	sort.Strings(res.Kept)
 	sort.Strings(res.Skipped)
 	return res, nil
+}
+
+// syncMatters runs Sync against every enabled matter under
+// projectRoot, returning one MatterResult per attempted matter (in
+// the order LoadFromProject returned them, i.e. sorted by name).
+// Returns nil when no matters are configured. Errors are captured
+// per-matter rather than bubbled so reconciliation continues even
+// when one upstream is down.
+func syncMatters(projectRoot string) []MatterResult {
+	configs, err := matter.LoadFromProject(projectRoot)
+	if err != nil {
+		return []MatterResult{{Name: "", Err: fmt.Errorf("matter: load: %w", err)}}
+	}
+	if len(configs) == 0 {
+		return nil
+	}
+	matters, err := matter.FromConfig(configs)
+	if err != nil {
+		return []MatterResult{{Name: "", Err: fmt.Errorf("matter: instantiate: %w", err)}}
+	}
+	if len(matters) == 0 {
+		return nil
+	}
+	out := make([]MatterResult, 0, len(matters))
+	ctx := context.Background()
+	for _, m := range matters {
+		c, u, err := m.Sync(ctx, projectRoot)
+		out = append(out, MatterResult{Name: m.Name(), Created: c, Updated: u, Err: err})
+	}
+	return out
 }
 
 // LoadMaxWorkers reads `[fleet] max_workers = N` from a spore.toml
