@@ -121,7 +121,7 @@ func Reconcile(cfg Config) (Result, error) {
 			res.Kept = append(res.Kept, slug)
 			continue
 		}
-		if err := task.Reap(cfg.ProjectRoot, slug); err != nil {
+		if err := task.Reap(cfg.TasksDir, cfg.ProjectRoot, slug); err != nil {
 			return res, fmt.Errorf("reap %s: %w", slug, err)
 		}
 		res.Reaped = append(res.Reaped, slug)
