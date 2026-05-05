@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.2 - 2026-05-06
 
 - Fixed `spore coordinator start` lying about success when the agent
   binary failed to exec. `driverToBinary("claude")` returned the
@@ -11,6 +11,13 @@
   fallback also moves to `claude`); (2) `EnsureCoordinator` now
   waits a short settle window after `tmux new-session -d` and
   re-checks the session, returning a real error if the spawn died.
+- Synced `VERSION` with the git tag scheme (was stuck at `0.0.3`
+  while tags advanced to `v0.4.x`). New `just release X.Y.Z` recipe
+  validates clean+green, bumps `VERSION`, commits, and tags so the
+  two stay in step from now on.
+- Refactored `embed_test.go` to read `VERSION` at test time instead
+  of hardcoding the expected string, so a release no longer requires
+  a paired test edit.
 
 ## 0.0.3 - 2026-05-05
 
