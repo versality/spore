@@ -70,9 +70,9 @@ prose
 ## Evidence
 
 - commit: a1b2c3d shipped the parser
-- file: internal/evidence/parse.go contains ParseEvidence
+- file: evidence/parse.go contains ParseEvidence
 - bogus: not a kind
-- test: internal/evidence/parse_test.go covers the parser
+- test: evidence/parse_test.go covers the parser
 
 ## Other section
 - commit: ignored-in-other-section
@@ -83,8 +83,8 @@ prose
 	}
 	want := []Item{
 		{Kind: "commit", Rest: "a1b2c3d shipped the parser"},
-		{Kind: "file", Rest: "internal/evidence/parse.go contains ParseEvidence"},
-		{Kind: "test", Rest: "internal/evidence/parse_test.go covers the parser"},
+		{Kind: "file", Rest: "evidence/parse.go contains ParseEvidence"},
+		{Kind: "test", Rest: "evidence/parse_test.go covers the parser"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v\nwant %#v", got, want)
@@ -116,8 +116,8 @@ func TestVerify_RealImpl(t *testing.T) {
 	meta := map[string]any{"evidence_required": "[commit, file, test]"}
 	body := `## Evidence
 - commit: a1b2c3d4 shipped the package
-- file: internal/evidence/verify.go contains Verify
-- test: internal/evidence/evidence_test.go covers all 6 verdicts
+- file: evidence/verify.go contains Verify
+- test: evidence/evidence_test.go covers all 6 verdicts
 `
 	v, _ := Verify(meta, body)
 	if v != RealImpl {
@@ -156,7 +156,7 @@ func TestVerify_SuspectHallucination(t *testing.T) {
 The change shipped on main.
 
 ## Evidence
-- file: internal/evidence/parse.go updated
+- file: evidence/parse.go updated
 `
 	v, diags := Verify(meta, body)
 	if v != SuspectHallucination {

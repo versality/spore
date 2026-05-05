@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/versality/spore/internal/evidence"
+	"github.com/versality/spore/evidence"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
