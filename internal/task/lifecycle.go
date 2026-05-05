@@ -65,15 +65,12 @@ func Start(tasksDir, slug string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	session := tmuxSessionName(projectRoot, slug)
+	session := taskTmuxSession(tasksDir, projectRoot, slug)
 	// Pause leaves the session alive for the operator; Start
 	// replaces it so a resume gets a fresh agent and new-session
 	// does not collide on the name.
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
-	if _, err := ensureSession(tasksDir, slug); err != nil {
-		return "", err
-	}
-	return session, nil
+	return ensureSession(tasksDir, slug)
 }
 
 // Ensure makes sure the wt/<slug> branch, worktree, and tmux session
@@ -88,8 +85,8 @@ func Ensure(tasksDir, slug string) (string, error) {
 // Reap kills the tmux session for slug. Status, worktree, and branch
 // are left untouched. Used by the fleet reconciler when a task
 // leaves active.
-func Reap(projectRoot, slug string) error {
-	session := tmuxSessionName(projectRoot, slug)
+func Reap(tasksDir, projectRoot, slug string) error {
+	session := taskTmuxSession(tasksDir, projectRoot, slug)
 	return exec.Command("tmux", "kill-session", "-t", session).Run()
 }
 
@@ -210,7 +207,7 @@ func Done(tasksDir, slug string, force bool) error {
 	}
 
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
-	session := tmuxSessionName(projectRoot, slug)
+	session := taskTmuxSession(tasksDir, projectRoot, slug)
 
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
 	_ = gitCmd(projectRoot, "worktree", "remove", "--force", worktree).Run()
@@ -330,6 +327,9 @@ func ensureSession(tasksDir, slug string) (string, error) {
 		}
 	}
 
+	if external := meta.Session; external != "" && hasSession(external) {
+		return external, nil
+	}
 	session := tmuxSessionName(projectRoot, slug)
 	if hasSession(session) {
 		return session, nil
@@ -475,6 +475,20 @@ func copyBriefToWorktree(tasksDir, worktree, slug string) error {
 
 func tmuxSessionName(projectRoot, slug string) string {
 	return tmuxSessionPrefix(projectRoot) + slug
+}
+
+// taskTmuxSession returns the tmux session name to target for slug
+// when killing or probing the rower's session. The frontmatter
+// `session:` field wins when set (the spawner registers the real
+// session name there, e.g. "🐈 acme-project/foo [opus]"); otherwise
+// the kernel's computed "spore/<project>/<slug>" name is used. A
+// task file that fails to read or parse falls back to the computed
+// name so a corrupt brief never blocks cleanup.
+func taskTmuxSession(tasksDir, projectRoot, slug string) string {
+	if m, err := readTaskMeta(tasksDir, slug); err == nil && m.Session != "" {
+		return m.Session
+	}
+	return tmuxSessionName(projectRoot, slug)
 }
 
 func tmuxSessionPrefix(projectRoot string) string {

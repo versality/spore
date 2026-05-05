@@ -47,7 +47,7 @@ func Merge(tasksDir, slug string) error {
 	}
 	_ = gitCmd(projectRoot, "branch", "-d", branch).Run()
 
-	session := tmuxSessionName(projectRoot, slug)
+	session := taskTmuxSession(tasksDir, projectRoot, slug)
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
 
 	return nil

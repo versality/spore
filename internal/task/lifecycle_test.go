@@ -177,6 +177,89 @@ func TestStartResumesPaused(t *testing.T) {
 	}
 }
 
+func TestDoneKillsFrontmatterSession(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	repo := t.TempDir()
+	t.Chdir(repo)
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slug := "demo"
+	// Pretend an external spawner registered a custom session name in
+	// the brief. The kernel-computed name "spore/<project>/demo"
+	// would never match; only the frontmatter value should.
+	customSession := "rower-demo-" + filepath.Base(t.TempDir())
+	body := "---\nstatus: active\nslug: demo\ntitle: Demo\nsession: " + customSession + "\n---\nbody\n"
+	taskPath := filepath.Join(tasksDir, slug+".md")
+	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Spawn a tmux session under the custom name; no kernel-named
+	// session is created. Done must still tear it down.
+	if out, err := exec.Command("tmux", "new-session", "-d", "-s", customSession, "sleep 30").CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session %q: %v: %s", customSession, err, out)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", customSession).Run()
+	})
+
+	if err := Done(tasksDir, slug, false); err != nil {
+		t.Fatalf("Done: %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("after Done: status = %q, want done", status)
+	}
+	if err := exec.Command("tmux", "has-session", "-t", customSession).Run(); err == nil {
+		t.Errorf("custom tmux session %q still alive after Done", customSession)
+	}
+}
+
+func TestReapKillsFrontmatterSession(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	repo := t.TempDir()
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slug := "x"
+	customSession := "reap-test-" + filepath.Base(t.TempDir())
+	body := "---\nstatus: done\nslug: x\ntitle: X\nsession: " + customSession + "\n---\n"
+	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := exec.Command("tmux", "new-session", "-d", "-s", customSession, "sleep 30").CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session: %v: %s", err, out)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", customSession).Run()
+	})
+
+	if err := Reap(tasksDir, repo, slug); err != nil {
+		t.Fatalf("Reap: %v", err)
+	}
+	if err := exec.Command("tmux", "has-session", "-t", customSession).Run(); err == nil {
+		t.Errorf("custom tmux session %q still alive after Reap", customSession)
+	}
+}
+
 func TestStartRefusesActive(t *testing.T) {
 	tasksDir := t.TempDir()
 	taskPath := filepath.Join(tasksDir, "x.md")
