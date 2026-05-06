@@ -41,6 +41,7 @@ Commands:
   budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
   worker     Worker support hooks (token-monitor).
+  claude     CLAUDE.md helpers: lint-distribute, apply-distribute, lint-subdir.
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
@@ -156,6 +157,8 @@ func main() {
 		os.Exit(runCoordinator(args))
 	case "worker":
 		os.Exit(runWorker(args))
+	case "claude":
+		os.Exit(runClaude(args))
 	default:
 		fmt.Fprintf(os.Stderr, "spore: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
