@@ -198,11 +198,11 @@ func TestEnsureCoordinatorDefersToExternalSession(t *testing.T) {
 	}
 
 	external := "helm-mcom [opus]"
-	if err := exec.Command("tmux", "new-session", "-d", "-s", external, "sleep 86400").Run(); err != nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", external, "sleep 86400").Run(); err != nil {
 		t.Fatalf("spawn external session: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", external).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", external).Run()
 	})
 
 	got, spawned, err := EnsureCoordinator(dir)
@@ -236,7 +236,7 @@ func TestEnsureCoordinatorPatternNoMatchSpawnsKernel(t *testing.T) {
 	}
 	t.Setenv("SPORE_COORDINATOR_AGENT", "sleep 30")
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", CoordinatorSessionName(dir)).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", CoordinatorSessionName(dir)).Run()
 	})
 
 	got, spawned, err := EnsureCoordinator(dir)
