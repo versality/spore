@@ -49,6 +49,11 @@ driver = "claude"
 			want: CoordinatorConfig{Driver: "claude"},
 		},
 		{
+			name:  "external_session_pattern",
+			input: "[coordinator]\nexternal_session_pattern = \"^helm-.*\"\n",
+			want:  CoordinatorConfig{ExternalSessionPattern: "^helm-.*"},
+		},
+		{
 			name:    "unknown key errors",
 			input:   "[coordinator]\nbogus = 1\n",
 			wantErr: true,

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -86,6 +87,11 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 	}
 
 	tomlCfg, _ := LoadCoordinatorConfig(projectRoot)
+	if pat := tomlCfg.ExternalSessionPattern; pat != "" {
+		if name, ok := externalCoordinatorSession(pat); ok {
+			return name, false, nil
+		}
+	}
 	agent := coordinatorAgent(tomlCfg)
 	rolePath := CoordinatorRolePath(projectRoot)
 	project, err := task.ProjectName(projectRoot)
@@ -227,9 +233,45 @@ func ReapCoordinator(projectRoot string) bool {
 }
 
 // CoordinatorAlive reports whether the coordinator tmux session for
-// projectRoot is currently up.
+// projectRoot is currently up. A matching external_session_pattern
+// counts as alive so the wait poll does not spin against an
+// operator-managed coordinator at a non-kernel session name.
 func CoordinatorAlive(projectRoot string) bool {
-	return hasSession(CoordinatorSessionName(projectRoot))
+	if hasSession(CoordinatorSessionName(projectRoot)) {
+		return true
+	}
+	if cfg, err := LoadCoordinatorConfig(projectRoot); err == nil && cfg.ExternalSessionPattern != "" {
+		if _, ok := externalCoordinatorSession(cfg.ExternalSessionPattern); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// externalCoordinatorSession returns the first tmux session name matching
+// pattern (RE2). Used by EnsureCoordinator and CoordinatorAlive to defer
+// to an operator-side coordinator running under a non-kernel session
+// name. A malformed regex or an unreachable tmux server (no server
+// running, exec failure) returns no match so the caller falls back to
+// kernel-managed lifecycle instead of failing the reconcile pass.
+func externalCoordinatorSession(pattern string) (string, bool) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", false
+	}
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		return "", false
+	}
+	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if name == "" {
+			continue
+		}
+		if re.MatchString(name) {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 func hasSession(name string) bool {

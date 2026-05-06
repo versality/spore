@@ -185,6 +185,72 @@ func TestCoordinatorAgentPrecedence(t *testing.T) {
 	}
 }
 
+func TestEnsureCoordinatorDefersToExternalSession(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "spore.toml"),
+		[]byte("[coordinator]\nexternal_session_pattern = \"^helm-mcom( \\[.*\\])?$\"\n"),
+		0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	external := "helm-mcom [opus]"
+	if err := exec.Command("tmux", "new-session", "-d", "-s", external, "sleep 86400").Run(); err != nil {
+		t.Fatalf("spawn external session: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", external).Run()
+	})
+
+	got, spawned, err := EnsureCoordinator(dir)
+	if err != nil {
+		t.Fatalf("EnsureCoordinator: %v", err)
+	}
+	if spawned {
+		t.Errorf("expected spawned=false (external coordinator owns the role), got true")
+	}
+	if got != external {
+		t.Errorf("EnsureCoordinator returned %q, want external %q", got, external)
+	}
+	if hasSession(CoordinatorSessionName(dir)) {
+		t.Errorf("kernel coordinator session %q was spawned despite external match", CoordinatorSessionName(dir))
+	}
+	if !CoordinatorAlive(dir) {
+		t.Errorf("CoordinatorAlive returned false despite matching external session")
+	}
+}
+
+func TestEnsureCoordinatorPatternNoMatchSpawnsKernel(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "spore.toml"),
+		[]byte("[coordinator]\nexternal_session_pattern = \"^helm-mcom\"\n"),
+		0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPORE_COORDINATOR_AGENT", "sleep 30")
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "kill-session", "-t", CoordinatorSessionName(dir)).Run()
+	})
+
+	got, spawned, err := EnsureCoordinator(dir)
+	if err != nil {
+		t.Fatalf("EnsureCoordinator: %v", err)
+	}
+	if !spawned {
+		t.Errorf("expected spawned=true when pattern set but no session matches, got false")
+	}
+	if got != CoordinatorSessionName(dir) {
+		t.Errorf("EnsureCoordinator returned %q, want kernel session %q", got, CoordinatorSessionName(dir))
+	}
+}
+
 // sessionCreated returns the tmux #{session_created} for name. Used by
 // the idempotency check to detect a respawn.
 func sessionCreated(name string) (string, error) {

@@ -27,6 +27,15 @@ type CoordinatorConfig struct {
 	// Brief is the role-file path. Mirrors SPORE_COORDINATOR_ROLE_FILE;
 	// relative paths resolve against projectRoot.
 	Brief string
+
+	// ExternalSessionPattern is an RE2 regex matched against tmux
+	// session names. When set and a live session matches, EnsureCoordinator
+	// treats the coordinator role as externally provided and skips the
+	// kernel spawn. Use this when an operator-side process owns the
+	// coordinator under a non-spore session name (for example a helm-*
+	// session running outside the kernel's spore/<project>/coordinator
+	// slot). Empty disables the check and the kernel spawns its own.
+	ExternalSessionPattern string
 }
 
 // LoadCoordinatorConfig reads `[coordinator]` from <projectRoot>/spore.toml.
@@ -82,6 +91,8 @@ func parseCoordinatorTOML(content string) (CoordinatorConfig, error) {
 			cfg.Model = val
 		case "brief":
 			cfg.Brief = val
+		case "external_session_pattern":
+			cfg.ExternalSessionPattern = val
 		default:
 			return CoordinatorConfig{}, fmt.Errorf("line %d: unknown key %q in [coordinator]", lineNum, key)
 		}
