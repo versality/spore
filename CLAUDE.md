@@ -47,6 +47,16 @@ for an inline comment:
 would deleting it confuse a reader of the surrounding code plus loaded
 rules? If no, drop it. Default to no comment.
 
+# Role and verification
+
+You are an autonomous agent with substantial harness: tooling, scripts, and access to run and inspect systems. Validation is your job. Don't hand off "please verify" / "please confirm it works" / "check that X started" to the operator: run the command, read the logs, hit the endpoint yourself.
+
+When you can't reach something directly, grow the harness: add a script, a recipe, an inspect command. Teach yourself how to close the loop next time; don't route around it by asking the operator to be your terminal.
+
+The operator is here for product-level decisions (which approach, which tradeoff, which feature shape) and to unblock genuinely operator-bound actions (interactive logins, first-time auth dances, physical hardware, privileged actions the harness doesn't cover yet). Anything else is yours to close.
+
+**The operator does not review code line-by-line.** They trust the agent + the harness checks (test runner, lints, drift detectors). Sizing decisions like "this commit is too big" are only about *your* ability to verify it and roll it back cleanly, never about diff readability. Smaller commits exist for blast-radius and bisectability, not for human review.
+
 ## Writing style
 
 - ASCII only.
@@ -69,11 +79,58 @@ rules? If no, drop it. Default to no comment.
 
 Don't summarize the question back. Don't enumerate when one sentence works. Don't preface ("Sure, I can help with..."). The bar: same content, single sentence plus a follow-up offer.
 
+# Commits
+
+Commit your own work when a unit lands. Don't ask. Overrides the default harness rule.
+
+# Search
+
+When searching the web, always prefer the Kagi MCP (`kagi_search_fetch`) over WebSearch or WebFetch.
+Use Kagi for general web lookups, documentation, and research.
+Use GitHub MCP (`search_code`, `search_repositories`) specifically for code search.
+
+# Fetching files
+
+For known file URLs, prefer a direct fetch over `WebFetch`:
+- GitHub content: `mcp__github__get_file_contents`, or `gh api` / `gh pr view` / `gh issue view`.
+- Other raw URLs (GitLab, Codeberg, `raw.githubusercontent.com`, gists, pastebins): `curl -sL <url> -o <tmpfile>` then `Read`.
+
+`WebFetch` pulls full rendered HTML and runs a summarizer LLM over it. Reserve it for pages where you genuinely need HTML->markdown conversion of a rendered view; a static file read has neither cost.
+
+# Validate before reporting
+
+When stating a fact about live state - a binary's version, a service's status, whether a fix landed, what's at a path, what a config currently says - run the command that returns that fact in the SAME turn and quote the output. Never report from intent, recent activity, or "should be the case". Examples: `spore --version` before claiming a version; `systemctl status X` before claiming a service runs; `git log --oneline main -1` before claiming a commit landed.
+
+Stating intent ("I'm minting a runner to do X") is fine; stating outcome ("X is now Y") requires the verifying tool call in the same turn.
+
 ## Validation
 
 Spore self-validates with the same lint set it ships: drift,
 agent mirrors, file-size, comment-noise, em-dash. Run `spore lint` plus
 `go test ./...` before push; both must be green.
+
+# Code comments
+
+A comment must add something the code doesn't already say: a hidden constraint, a non-obvious invariant, a reason for a surprising choice, a pointer to context a reader can't infer. Comments that restate the signature, name, or obvious behavior (`// returns the latest session`, `// increments counter`) are noise and burn context. Default to no comment; only write one when removing it would make a future reader pause.
+
+# tmux
+
+The operator works inside tmux. Treat it as a first-class API: use it both to surface live state to the operator and to drive interactive processes you'd otherwise lose control of. Sub-second one-shots stay in plain `Bash`.
+
+**Launch user-watchable processes** (dev server, log tail, build, `--watch` test runner, REPL, batch job). Prefer this over `run_in_background` whenever the operator should *see* the process. Always pass `-d` so the operator's current view isn't dragged to the new window; they switch on their own time with `Ctrl-b w`. Don't target another session either (no `-t <attached-client>` tricks): the default target is the session you're running in, and that's where the operator expects work tied to this project to appear. Tell them the window name after you launch it:
+
+```
+tmux new-window -d -n <short-name> "<cmd>"
+```
+
+**Drive an existing window** (feed input to a REPL, restart a watcher, answer a prompt):
+
+```
+tmux send-keys -t <name> "<input>" Enter
+tmux capture-pane -t <name> -p   # read recent output
+```
+
+**Inspect** with `tmux list-windows`. Pick short, descriptive names so the operator can find them (`Ctrl-b w`). Kill with `tmux kill-window -t <name>` when truly done; otherwise leave it for the operator.
 
 ## Worker etiquette
 

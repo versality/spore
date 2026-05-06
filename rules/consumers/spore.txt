@@ -5,8 +5,15 @@ core/header
 core/roles
 core/source-map
 core/tier-policy
+core/role
 core/writing-style
 core/tldr-first
+core/commits
+core/search-kagi
+core/fetch-files
+core/validate-before-report
 core/validation
+core/code-comments
+core/tmux-api
 core/worker-etiquette
 ?align core/alignment-mode
