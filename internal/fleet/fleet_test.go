@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -137,6 +138,73 @@ func TestReconcileRespectsMaxWorkers(t *testing.T) {
 		t.Errorf("Spawned = %v, want %v", got, want)
 	}
 	if got, want := r.Skipped, []string{"c", "d", "e"}; !equalSlices(got, want) {
+		t.Errorf("Skipped = %v, want %v", got, want)
+	}
+}
+
+func TestReconcileSpawnsByMatterSortOrder(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+
+	// Slug order is alpha < bravo < charlie < delta. matter_sort_order
+	// inverts it: charlie sits at the top of the kanban column. With
+	// MaxWorkers=2 the cap should pick charlie + bravo, not the
+	// alphabetical alpha + bravo.
+	writeTaskWithExtra(t, dirs.tasks, "alpha", "active", matter.MatterSortOrderKey, "30")
+	writeTaskWithExtra(t, dirs.tasks, "bravo", "active", matter.MatterSortOrderKey, "20")
+	writeTaskWithExtra(t, dirs.tasks, "charlie", "active", matter.MatterSortOrderKey, "10")
+	writeTaskWithExtra(t, dirs.tasks, "delta", "active", matter.MatterSortOrderKey, "40")
+
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  2,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got, want := r.Spawned, []string{"bravo", "charlie"}; !equalSlices(got, want) {
+		t.Errorf("Spawned = %v, want %v (top two by matter_sort_order)", got, want)
+	}
+	if got, want := r.Skipped, []string{"alpha", "delta"}; !equalSlices(got, want) {
+		t.Errorf("Skipped = %v, want %v", got, want)
+	}
+}
+
+func TestReconcileSortsStampedBeforeUnstamped(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+
+	// "zulu" carries a stamp, "alpha" does not. Stamped tasks sort
+	// before unstamped so a matter-managed ticket beats an ad-hoc
+	// task when slots are scarce.
+	writeTaskWithExtra(t, dirs.tasks, "zulu", "active", matter.MatterSortOrderKey, "5")
+	writeTask(t, dirs.tasks, "alpha", "active")
+
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  1,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got, want := r.Spawned, []string{"zulu"}; !equalSlices(got, want) {
+		t.Errorf("Spawned = %v, want %v", got, want)
+	}
+	if got, want := r.Skipped, []string{"alpha"}; !equalSlices(got, want) {
 		t.Errorf("Skipped = %v, want %v", got, want)
 	}
 }

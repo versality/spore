@@ -103,10 +103,16 @@ func Reconcile(cfg Config) (Result, error) {
 	}
 	statusBySlug := map[string]string{}
 	activeSet := map[string]bool{}
+	sortOrderBySlug := map[string]float64{}
 	for _, m := range metas {
 		statusBySlug[m.Slug] = m.Status
 		if m.Status == "active" {
 			activeSet[m.Slug] = true
+		}
+		if v := m.Extra[matter.MatterSortOrderKey]; v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				sortOrderBySlug[m.Slug] = f
+			}
 		}
 	}
 
@@ -147,13 +153,30 @@ func Reconcile(cfg Config) (Result, error) {
 		delete(runningSet, slug)
 	}
 
-	// Stable iteration: sort active slugs before spawning so the
-	// MaxWorkers cap picks the same prefix on every run.
+	// Stable iteration: sort by matter_sort_order ascending (lower
+	// spawns first; tasks without a stamp sort after stamped ones), then
+	// by slug. Stamps come from matter adapters such as linear's
+	// kanban sortOrder, so an upstream reorder changes which active
+	// task spawns next when MaxWorkers clips the active set.
 	var actives []string
 	for slug := range activeSet {
 		actives = append(actives, slug)
 	}
-	sort.Strings(actives)
+	sort.SliceStable(actives, func(i, j int) bool {
+		ai, aiOK := sortOrderBySlug[actives[i]]
+		aj, ajOK := sortOrderBySlug[actives[j]]
+		switch {
+		case aiOK && ajOK:
+			if ai != aj {
+				return ai < aj
+			}
+		case aiOK:
+			return true
+		case ajOK:
+			return false
+		}
+		return actives[i] < actives[j]
+	})
 	res.Active = actives
 
 	workersCfg, err := LoadWorkersConfig(cfg.ProjectRoot)
