@@ -42,10 +42,10 @@ func TestDoneKillsAllMatchingSlugSessions(t *testing.T) {
 	}
 
 	for _, name := range []string{recorded, drifted, sporeStyle} {
-		if out, err := exec.Command("tmux", "new-session", "-d", "-s", name, "sleep 30").CombinedOutput(); err != nil {
+		if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", name, "sleep 30").CombinedOutput(); err != nil {
 			t.Fatalf("tmux new-session %q: %v: %s", name, err, out)
 		}
-		t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", name).Run() })
+		t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", name).Run() })
 	}
 
 	if err := Done(tasksDir, slug, true); err != nil {
@@ -53,7 +53,7 @@ func TestDoneKillsAllMatchingSlugSessions(t *testing.T) {
 	}
 
 	for _, name := range []string{recorded, drifted, sporeStyle} {
-		if err := exec.Command("tmux", "has-session", "-t", name).Run(); err == nil {
+		if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", name).Run(); err == nil {
 			t.Errorf("session %q still alive after Done; broad-match reap missed it", name)
 		}
 	}
@@ -90,10 +90,10 @@ func TestDoneLeavesUnrelatedSessionsAlone(t *testing.T) {
 	sister := "X " + project + "/foo-bar [opus]"
 	otherProject := "X other-project/foo"
 	for _, name := range []string{sister, otherProject} {
-		if out, err := exec.Command("tmux", "new-session", "-d", "-s", name, "sleep 30").CombinedOutput(); err != nil {
+		if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", name, "sleep 30").CombinedOutput(); err != nil {
 			t.Fatalf("tmux new-session %q: %v: %s", name, err, out)
 		}
-		t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", name).Run() })
+		t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", name).Run() })
 	}
 
 	if err := Done(tasksDir, slug, true); err != nil {
@@ -101,7 +101,7 @@ func TestDoneLeavesUnrelatedSessionsAlone(t *testing.T) {
 	}
 
 	for _, name := range []string{sister, otherProject} {
-		if err := exec.Command("tmux", "has-session", "-t", name).Run(); err != nil {
+		if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", name).Run(); err != nil {
 			t.Errorf("unrelated session %q killed by reap: %v", name, err)
 		}
 	}
@@ -134,17 +134,17 @@ func TestPauseLeavesActivelyUsedSessionAlive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("tmux", "new-session", "-d", "-s", session, "sleep 30").CombinedOutput(); err != nil {
+	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", session, "sleep 30").CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session: %v: %s", err, out)
 	}
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", session).Run() })
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run() })
 
 	// Default 5min idle threshold; the session was just created so
 	// activity is fresh. Pause must NOT reap it.
 	if err := Pause(tasksDir, slug); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
-	if err := exec.Command("tmux", "has-session", "-t", session).Run(); err != nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", session).Run(); err != nil {
 		t.Errorf("Pause reaped a fresh session: %v", err)
 	}
 }
@@ -176,10 +176,10 @@ func TestPauseReapsIdleSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("tmux", "new-session", "-d", "-s", session, "sleep 30").CombinedOutput(); err != nil {
+	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", session, "sleep 30").CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session: %v: %s", err, out)
 	}
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", session).Run() })
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run() })
 
 	// Threshold 0 forces every matching session to count as "stale
 	// enough"; mirrors the >5min idle case without sleeping the test.
@@ -188,7 +188,7 @@ func TestPauseReapsIdleSession(t *testing.T) {
 	if err := Pause(tasksDir, slug); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
-	if err := exec.Command("tmux", "has-session", "-t", session).Run(); err == nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", session).Run(); err == nil {
 		t.Errorf("Pause did not reap idle session under threshold=0")
 	}
 }

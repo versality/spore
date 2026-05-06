@@ -104,7 +104,7 @@ func TestCoordinatorStartStopStatus(t *testing.T) {
 
 	session := fleet.CoordinatorSessionName(root)
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
 	code, out, errOut := captureFn(t, func() int { return runCoordinatorStatus(nil) })
@@ -177,7 +177,7 @@ func TestCoordinatorStartReportsDeadAgent(t *testing.T) {
 
 	session := fleet.CoordinatorSessionName(root)
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
 	code, out, errOut := captureFn(t, func() int { return runCoordinatorStart(nil) })

@@ -46,7 +46,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
 	wantSuffix := "/" + slug
@@ -80,7 +80,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		t.Errorf("brief in worktree is empty")
 	}
 
-	out, err := exec.Command("tmux", "has-session", "-t", session).CombinedOutput()
+	out, err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", session).CombinedOutput()
 	if err != nil {
 		t.Errorf("tmux has-session: %v: %s", err, out)
 	}
@@ -108,7 +108,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 	if branchExists(repo, "wt/"+slug) {
 		t.Errorf("branch wt/%s should be removed after Done", slug)
 	}
-	if err := exec.Command("tmux", "has-session", "-t", session).Run(); err == nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", session).Run(); err == nil {
 		t.Errorf("tmux session %q still alive after Done", session)
 	}
 
@@ -151,7 +151,7 @@ func TestStartResumesPaused(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
 	if err := Pause(tasksDir, slug); err != nil {
@@ -168,7 +168,7 @@ func TestStartResumesPaused(t *testing.T) {
 	if status := readStatus(t, taskPath); status != "active" {
 		t.Errorf("after resume: status = %q, want active", status)
 	}
-	if err := exec.Command("tmux", "has-session", "-t", resumed).Run(); err != nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", resumed).Run(); err != nil {
 		t.Errorf("tmux has-session after resume: %v", err)
 	}
 
@@ -210,11 +210,11 @@ func TestDoneKillsFrontmatterSession(t *testing.T) {
 
 	// Spawn a tmux session under the custom name; no kernel-named
 	// session is created. Done must still tear it down.
-	if out, err := exec.Command("tmux", "new-session", "-d", "-s", customSession, "sleep 30").CombinedOutput(); err != nil {
+	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", customSession, "sleep 30").CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session %q: %v: %s", customSession, err, out)
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", customSession).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", customSession).Run()
 	})
 
 	if err := Done(tasksDir, slug, false); err != nil {
@@ -223,7 +223,7 @@ func TestDoneKillsFrontmatterSession(t *testing.T) {
 	if status := readStatus(t, taskPath); status != "done" {
 		t.Errorf("after Done: status = %q, want done", status)
 	}
-	if err := exec.Command("tmux", "has-session", "-t", customSession).Run(); err == nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", customSession).Run(); err == nil {
 		t.Errorf("custom tmux session %q still alive after Done", customSession)
 	}
 }
@@ -245,17 +245,17 @@ func TestReapKillsFrontmatterSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("tmux", "new-session", "-d", "-s", customSession, "sleep 30").CombinedOutput(); err != nil {
+	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", customSession, "sleep 30").CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session: %v: %s", err, out)
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", customSession).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", customSession).Run()
 	})
 
 	if err := Reap(tasksDir, repo, slug); err != nil {
 		t.Fatalf("Reap: %v", err)
 	}
-	if err := exec.Command("tmux", "has-session", "-t", customSession).Run(); err == nil {
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", customSession).Run(); err == nil {
 		t.Errorf("custom tmux session %q still alive after Reap", customSession)
 	}
 }
