@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,7 +29,10 @@ Subcommands:
   pause <slug>                 Flip active task to paused (no teardown).
   block <slug>                 Flip active task to blocked (no teardown).
   done <slug> [--force]         Flip to done, kill tmux + remove worktree.
-  merge <slug>                 Merge wt/<slug> into main; push origin main:main only.
+  merge <slug> [--force-merge-red <reason>]
+                               Merge wt/<slug> into main; push origin main:main only.
+                               Refuses on red 'just check' (exit 2);
+                               --force-merge-red bypasses with a logged reason.
   tell <slug> <message>        Append a message to the slug's inbox dir.
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.
@@ -103,10 +107,44 @@ func runTaskPick(_ []string) error {
 }
 
 func runTaskMerge(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: spore task merge <slug>")
+	slug := ""
+	force := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--force-merge-red":
+			if i+1 >= len(args) || args[i+1] == "" {
+				return fmt.Errorf("--force-merge-red requires a <reason> argument")
+			}
+			force = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--force-merge-red="):
+			force = strings.TrimPrefix(a, "--force-merge-red=")
+			if force == "" {
+				return fmt.Errorf("--force-merge-red requires a <reason> argument")
+			}
+		case strings.HasPrefix(a, "-"):
+			return fmt.Errorf("spore task merge: unknown flag: %s", a)
+		default:
+			if slug != "" {
+				return fmt.Errorf("usage: spore task merge <slug> [--force-merge-red <reason>]")
+			}
+			slug = a
+		}
 	}
-	return task.Merge("tasks", args[0])
+	if slug == "" {
+		return fmt.Errorf("usage: spore task merge <slug> [--force-merge-red <reason>]")
+	}
+	err := task.MergeWithOptions("tasks", slug, task.MergeOptions{ForceMergeRed: force})
+	if err != nil {
+		var gateErr *task.MergeGateError
+		if errors.As(err, &gateErr) {
+			fmt.Fprintln(os.Stderr, "spore task merge:", err)
+			os.Exit(gateErr.ExitCode())
+		}
+		return err
+	}
+	return nil
 }
 
 func runTaskWaybar(_ []string) error {

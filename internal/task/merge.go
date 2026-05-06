@@ -1,14 +1,44 @@
 package task
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/versality/spore/internal/task/frontmatter"
 )
+
+// MergeOptions tunes Merge. ForceMergeRed bypasses the just check
+// gate when non-empty; the reason is recorded to merge-override.jsonl
+// so operators can audit who shipped red and why.
+type MergeOptions struct {
+	ForceMergeRed string
+}
+
+// MergeGateError is returned when the just check gate refuses a
+// merge. It carries the recipe that failed and exposes ExitCode 2 so
+// CLI callers can mirror the upstream bash gate's exit shape.
+type MergeGateError struct {
+	Recipe string
+	Reason string
+	Err    error
+}
+
+func (e *MergeGateError) Error() string {
+	if e.Recipe == "" {
+		return fmt.Sprintf("merge gate refused: %s", e.Reason)
+	}
+	return fmt.Sprintf("merge gate refused: just %s failed: %s", e.Recipe, e.Reason)
+}
+
+func (e *MergeGateError) Unwrap() error { return e.Err }
+
+// ExitCode returns 2, matching `wt merge`'s upstream gate.
+func (e *MergeGateError) ExitCode() int { return 2 }
 
 // Merge fast-forward merges the wt/<slug> branch into main, then
 // cleans up the worktree and branch. The task file's status is
@@ -16,6 +46,13 @@ import (
 // not be a fast-forward or if the landed main cannot be pushed to
 // origin.
 func Merge(tasksDir, slug string) error {
+	return MergeWithOptions(tasksDir, slug, MergeOptions{})
+}
+
+// MergeWithOptions is Merge with a knob for the just check gate.
+// Pass MergeOptions{ForceMergeRed: reason} to bypass and log the
+// override. Mirrors nix-config's wt cmd_merge --force-merge-red.
+func MergeWithOptions(tasksDir, slug string, opts MergeOptions) error {
 	projectRoot, err := projectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return err
@@ -25,6 +62,10 @@ func Merge(tasksDir, slug string) error {
 		return fmt.Errorf("branch %s does not exist", branch)
 	}
 	if err := requireMainCheckout(projectRoot); err != nil {
+		return err
+	}
+
+	if err := runJustCheckGate(projectRoot, slug, branch, opts.ForceMergeRed); err != nil {
 		return err
 	}
 
@@ -138,6 +179,97 @@ func closeMergedTask(tasksDir, slug string) error {
 			return nil
 		}
 		return fmt.Errorf("git commit task close: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// runJustCheckGate runs `just check` from the wt/<slug> worktree
+// before the fast-forward. Skips silently when there is no worktree,
+// no justfile, no `just` on PATH, or no `check` recipe; otherwise
+// refuses with a typed *MergeGateError on red. forceReason bypasses
+// the gate after appending an override row to merge-override.jsonl.
+// Hard-coded `check` recipe mirrors nix/packages/wt/wt's
+// _run_just_check_gate; per-project configuration is documented as
+// out-of-scope in docs/worker-dispatch.md.
+func runJustCheckGate(projectRoot, slug, branch, forceReason string) error {
+	if forceReason != "" {
+		if err := logMergeOverride(projectRoot, slug, branch, forceReason); err != nil {
+			fmt.Fprintf(os.Stderr, "spore task merge: log override failed: %v\n", err)
+		}
+		fmt.Fprintf(os.Stderr, "spore task merge: --force-merge-red set (reason: %s); skipping just check gate\n", forceReason)
+		return nil
+	}
+	worktree := filepath.Join(projectRoot, ".worktrees", slug)
+	if _, err := os.Stat(worktree); err != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(worktree, "justfile")); err != nil {
+		return nil
+	}
+	if _, err := exec.LookPath("just"); err != nil {
+		return nil
+	}
+	show := exec.Command("just", "--show", "check")
+	show.Dir = worktree
+	if err := show.Run(); err != nil {
+		return nil
+	}
+	fmt.Fprintln(os.Stderr, "spore task merge: running just check (merge gate)")
+	cmd := exec.Command("just", "check")
+	cmd.Dir = worktree
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return &MergeGateError{
+			Recipe: "check",
+			Reason: "just check failed; refusing to land. Fix the failing recipe, or pass --force-merge-red <reason> for genuine emergencies.",
+			Err:    err,
+		}
+	}
+	return nil
+}
+
+// logMergeOverride appends a JSONL row to
+// $STATE_DIR/merge-override.jsonl recording a --force-merge-red
+// bypass. Operators tail the ledger to spot rowers shipping red.
+// SPORE_MERGE_OVERRIDE_LOG overrides the path (used by tests).
+func logMergeOverride(projectRoot, slug, branch, reason string) error {
+	path := os.Getenv("SPORE_MERGE_OVERRIDE_LOG")
+	if path == "" {
+		stateDir, err := StateDirForProject(projectRoot)
+		if err != nil {
+			return err
+		}
+		path = filepath.Join(stateDir, "merge-override.jsonl")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	project, _ := ProjectName(projectRoot)
+	row := struct {
+		TS      string `json:"ts"`
+		Slug    string `json:"slug"`
+		Project string `json:"project"`
+		Branch  string `json:"branch"`
+		Reason  string `json:"reason"`
+	}{
+		TS:      time.Now().UTC().Format(time.RFC3339),
+		Slug:    slug,
+		Project: project,
+		Branch:  branch,
+		Reason:  reason,
+	}
+	line, err := json.Marshal(row)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(append(line, '\n')); err != nil {
+		return err
 	}
 	return nil
 }
