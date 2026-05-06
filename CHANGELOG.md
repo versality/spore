@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.0 - 2026-05-06
+
+- Added `spore claude` subcommand tree:
+  - `spore claude lint-distribute --source <path>` scans a markdown
+    composer body and flags top-level sections whose backticked path
+    tokens concentrate >= 60% under one top-level repo subdir
+    (homePath candidates).
+  - `spore claude apply-distribute --source <path> [--render-cmd ...]
+    [--check-cmd ...] [--ledger ...] [--dry-run]` mutates the source by
+    inserting `<!-- homePath: <subdir> -->` markers, optionally re-renders,
+    runs the consumer's check, commits on green, or appends a pending row
+    to `--ledger` on red.
+  - `spore claude lint-subdir [--root .]` is a standalone surface for the
+    existing `lints.ClaudeSubdir` (rendered-side check) so consumers can
+    invoke it without going through `spore lint`'s default set.
+- New `internal/lints/ClaudeDistribute` lint type (Lint interface, plus
+  `Scan` and `ApplyMarkers`) so other tooling can drive the heuristic
+  without going through the CLI. Sections carrying `<!-- homePath: ... -->`
+  or `<!-- lint: scope-ok -->` are skipped, making the apply path
+  idempotent.
+
 ## 0.4.2 - 2026-05-06
 
 - Fixed `spore coordinator start` lying about success when the agent
