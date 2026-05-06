@@ -25,10 +25,16 @@ import "context"
 // Frontmatter Extra keys reserved for matter wiring. Adapters MUST
 // write MatterKey when they create a task; MatterIDKey is strongly
 // encouraged so OnDone has a stable handle on the upstream record.
+// MatterSortOrderKey is optional: when an adapter writes it, the
+// fleet reconciler uses it to break ties between active tasks
+// instead of falling back to slug order, so an upstream reorder
+// (e.g. a Linear kanban drag) can change which task spawns next
+// when the worker cap clips the active set. Lower values spawn first.
 const (
-	MatterKey    = "matter"
-	MatterIDKey  = "matter_id"
-	MatterURLKey = "matter_url"
+	MatterKey          = "matter"
+	MatterIDKey        = "matter_id"
+	MatterURLKey       = "matter_url"
+	MatterSortOrderKey = "matter_sort_order"
 )
 
 // Matter is an external work source that creates tasks from upstream

@@ -34,6 +34,7 @@ type stubIssue struct {
 	Description string
 	URL         string
 	StateID     string
+	SortOrder   float64
 }
 
 func newStub(t *testing.T) *stubLinear {
@@ -133,11 +134,12 @@ func (s *stubLinear) respondStates(w http.ResponseWriter) {
 func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 	stateID, _ := vars["stateId"].(string)
 	type node struct {
-		ID          string `json:"id"`
-		Identifier  string `json:"identifier"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		URL         string `json:"url"`
+		ID          string  `json:"id"`
+		Identifier  string  `json:"identifier"`
+		Title       string  `json:"title"`
+		Description string  `json:"description"`
+		URL         string  `json:"url"`
+		SortOrder   float64 `json:"sortOrder"`
 	}
 	var nodes []node
 	for _, iss := range s.issues {
@@ -147,6 +149,7 @@ func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 		nodes = append(nodes, node{
 			ID: iss.ID, Identifier: iss.Identifier, Title: iss.Title,
 			Description: iss.Description, URL: iss.URL,
+			SortOrder: iss.SortOrder,
 		})
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Identifier < nodes[j].Identifier })
@@ -263,6 +266,68 @@ func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
 	}
 	if c2 != 0 || u2 != 0 {
 		t.Errorf("expected no-op second pass, got (created=%d, updated=%d)", c2, u2)
+	}
+}
+
+func TestSyncProjectsInLinearSortOrder(t *testing.T) {
+	stub := newStub(t)
+	// Identifier order is MAR-50 < MAR-51 < MAR-52, but sortOrder
+	// inverts it: MAR-52 sits at the top of the kanban column. The stub
+	// responds in identifier order; the production code must re-sort
+	// client-side before iterating in adoptIssue.
+	stub.addReady("u-50", "MAR-50", "Bottom of Ready", "").SortOrder = 99.0
+	stub.addReady("u-51", "MAR-51", "Middle of Ready", "").SortOrder = 50.0
+	stub.addReady("u-52", "MAR-52", "Top of Ready", "").SortOrder = -10.0
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	root := t.TempDir()
+	src := newSource(t, srv.URL)
+
+	if _, _, err := src.Sync(context.Background(), root); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	tasksDir := filepath.Join(root, "tasks")
+	files, err := os.ReadDir(tasksDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type stamped struct {
+		identifier string
+		sortOrder  string
+	}
+	var got []stamped
+	for _, f := range files {
+		raw, err := os.ReadFile(filepath.Join(tasksDir, f.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, _, err := frontmatter.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse %s: %v", f.Name(), err)
+		}
+		got = append(got, stamped{
+			identifier: m.Extra[matter.MatterIDKey],
+			sortOrder:  m.Extra[matter.MatterSortOrderKey],
+		})
+	}
+
+	wantOrder := map[string]string{
+		"MAR-52": "-10",
+		"MAR-51": "50",
+		"MAR-50": "99",
+	}
+	for _, g := range got {
+		want, ok := wantOrder[g.identifier]
+		if !ok {
+			t.Errorf("unexpected identifier %q stamped", g.identifier)
+			continue
+		}
+		if g.sortOrder != want {
+			t.Errorf("%s: matter_sort_order = %q, want %q", g.identifier, g.sortOrder, want)
+		}
 	}
 }
 

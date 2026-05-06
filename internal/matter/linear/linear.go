@@ -37,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -295,8 +296,9 @@ func (s *Source) adoptIssue(absTasks string, issue linearIssue) (string, error) 
 		Title:   issue.Title,
 		Created: time.Now().UTC().Format("2006-01-02"),
 		Extra: map[string]string{
-			matter.MatterKey:   sourceName,
-			matter.MatterIDKey: issue.Identifier,
+			matter.MatterKey:          sourceName,
+			matter.MatterIDKey:        issue.Identifier,
+			matter.MatterSortOrderKey: strconv.FormatFloat(issue.SortOrder, 'g', -1, 64),
 		},
 	}
 	if issue.URL != "" {
@@ -513,17 +515,25 @@ func (s *Source) loadStateIDs() error {
 }
 
 type linearIssue struct {
-	ID          string `json:"id"`
-	Identifier  string `json:"identifier"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
+	ID          string  `json:"id"`
+	Identifier  string  `json:"identifier"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	URL         string  `json:"url"`
+	SortOrder   float64 `json:"sortOrder"`
 }
 
+// listIssuesByState returns the issues in stateID ordered by Linear's
+// kanban sortOrder (ascending; lower values appear higher in the
+// column). The GraphQL `issues` query has no manual-order knob - its
+// `orderBy` only takes createdAt/updatedAt - so we fetch sortOrder and
+// sort client-side. Operators expect "drag a ticket to the top of
+// Ready, get it picked next"; relying on default ordering would honour
+// createdAt instead.
 func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
 	const q = `query StateIssues($stateId: ID!) {
   issues(filter: {state: {id: {eq: $stateId}}}) {
-    nodes { id identifier title description url }
+    nodes { id identifier title description url sortOrder }
   }
 }`
 	var resp struct {
@@ -536,7 +546,14 @@ func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
 	if err := s.graphQL(q, map[string]any{"stateId": stateID}, &resp); err != nil {
 		return nil, err
 	}
-	return resp.Data.Issues.Nodes, nil
+	nodes := resp.Data.Issues.Nodes
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].SortOrder != nodes[j].SortOrder {
+			return nodes[i].SortOrder < nodes[j].SortOrder
+		}
+		return nodes[i].Identifier < nodes[j].Identifier
+	})
+	return nodes, nil
 }
 
 // graphQL sends one POST to the configured endpoint and decodes the
