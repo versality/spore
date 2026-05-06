@@ -79,3 +79,16 @@ branch, and tmux session. It does not push `wt/<slug>`, feature
 branches, or any other local branch. If a close or push gate fails,
 the branch and worktree stay in place so the worker can fix the
 evidence, drain the inbox, or retry the upstream push.
+
+Before the fast-forward, `spore task merge` runs `just check` from
+the worktree as a gate. The gate skips silently when the worktree
+has no `justfile`, no `just` is on PATH, or the project lacks a
+`check` recipe. On a red `just check` it refuses with a typed
+`*task.MergeGateError` (exit 2) and leaves the branch + worktree in
+place so the worker can fix the failing recipe. Pass
+`spore task merge <slug> --force-merge-red <reason>` for genuine
+emergencies; the bypass appends a row to
+`$XDG_STATE_HOME/spore/<project>/merge-override.jsonl` so operators
+can audit who shipped red and why. Hard-coded `just check` mirrors
+the upstream nix-config bash gate; per-project recipe configuration
+is out of scope for the initial gate.

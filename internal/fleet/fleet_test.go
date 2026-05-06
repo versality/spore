@@ -11,6 +11,7 @@ import (
 )
 
 func TestReconcileShortCircuitsWhenDisabled(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	dirs := newTestDirs(t)
 	writeTask(t, dirs.tasks, "alpha", "active")
 

@@ -1,6 +1,7 @@
 package task
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -413,4 +414,163 @@ func TestMergePushFailureKeepsBranchAndWorktree(t *testing.T) {
 	if status := readStatus(t, taskPath); status != "done" {
 		t.Errorf("status = %q want done after local close commit", status)
 	}
+}
+
+func TestMergeJustCheckRedRefuses(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("just"); err != nil {
+		t.Skipf("just not available: %v", err)
+	}
+	repo, taskPath := setupGateRepo(t, "demo", "@exit 1")
+
+	preMain, err := exec.Command("git", "-C", repo, "rev-parse", "main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mergeErr := Merge(filepath.Join(repo, "tasks"), "demo")
+	if mergeErr == nil {
+		t.Fatal("Merge should refuse on red just check")
+	}
+	var gateErr *MergeGateError
+	if !errors.As(mergeErr, &gateErr) {
+		t.Fatalf("error %v should be a *MergeGateError", mergeErr)
+	}
+	if gateErr.ExitCode() != 2 {
+		t.Errorf("ExitCode = %d, want 2", gateErr.ExitCode())
+	}
+	if !strings.Contains(gateErr.Error(), "just check") {
+		t.Errorf("error %q should name the failing recipe", gateErr.Error())
+	}
+
+	postMain, err := exec.Command("git", "-C", repo, "rev-parse", "main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(preMain) != string(postMain) {
+		t.Errorf("main moved despite red gate: pre=%q post=%q", preMain, postMain)
+	}
+	if !branchExists(repo, "wt/demo") {
+		t.Error("wt/demo branch deleted despite red gate")
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, ".worktrees", "demo")); statErr != nil {
+		t.Errorf("worktree removed despite red gate: %v", statErr)
+	}
+	if status := readStatus(t, taskPath); status != "active" {
+		t.Errorf("status = %q want active", status)
+	}
+}
+
+func TestMergeJustCheckGreenLands(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("just"); err != nil {
+		t.Skipf("just not available: %v", err)
+	}
+	repo, taskPath := setupGateRepo(t, "demo", "@echo ok")
+
+	if err := Merge(filepath.Join(repo, "tasks"), "demo"); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("status = %q want done", status)
+	}
+	if branchExists(repo, "wt/demo") {
+		t.Error("wt/demo branch still exists after green merge")
+	}
+}
+
+func TestMergeForceMergeRedOverridesAndLogs(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("just"); err != nil {
+		t.Skipf("just not available: %v", err)
+	}
+	repo, taskPath := setupGateRepo(t, "demo", "@exit 1")
+	ledger := filepath.Join(t.TempDir(), "merge-override.jsonl")
+	t.Setenv("SPORE_MERGE_OVERRIDE_LOG", ledger)
+
+	err := MergeWithOptions(filepath.Join(repo, "tasks"), "demo", MergeOptions{ForceMergeRed: "shipping during outage"})
+	if err != nil {
+		t.Fatalf("MergeWithOptions: %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("status = %q want done", status)
+	}
+	row, err := os.ReadFile(ledger)
+	if err != nil {
+		t.Fatalf("read ledger: %v", err)
+	}
+	got := string(row)
+	for _, want := range []string{`"slug":"demo"`, `"branch":"wt/demo"`, `"reason":"shipping during outage"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ledger missing %q: got %q", want, got)
+		}
+	}
+}
+
+func TestMergeNoJustfileSkipsGate(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo, taskPath := setupGateRepo(t, "demo", "")
+
+	if err := Merge(filepath.Join(repo, "tasks"), "demo"); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("status = %q want done", status)
+	}
+}
+
+// setupGateRepo wires a repo + tasks/<slug>.md + worktree at
+// .worktrees/<slug> + a feature.txt commit on wt/<slug>. When body
+// is non-empty, a justfile with a `check` recipe whose body is the
+// argument is committed onto wt/<slug>; an empty body skips the
+// justfile so callers can exercise the no-justfile branch.
+func setupGateRepo(t *testing.T, slug, justBody string) (repo, taskPath string) {
+	t.Helper()
+	repo = t.TempDir()
+	t.Chdir(repo)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	taskPath = filepath.Join(tasksDir, slug+".md")
+	body := "---\nstatus: active\nslug: " + slug + "\ntitle: Demo\n---\nbody\n"
+	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-q", "-m", "task active")
+	configureOrigin(t, repo)
+
+	worktree := filepath.Join(repo, ".worktrees", slug)
+	runGit(t, repo, "worktree", "add", "-q", "-b", "wt/"+slug, worktree, "main")
+	runGit(t, worktree, "config", "user.email", "test@example.com")
+	runGit(t, worktree, "config", "user.name", "Test")
+	if justBody != "" {
+		just := "check:\n\t" + justBody + "\n"
+		if err := os.WriteFile(filepath.Join(worktree, "justfile"), []byte(just), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGit(t, worktree, "add", "justfile")
+		runGit(t, worktree, "commit", "-q", "-m", "add justfile")
+	}
+	if err := os.WriteFile(filepath.Join(worktree, "feature.txt"), []byte("feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, worktree, "add", "feature.txt")
+	runGit(t, worktree, "commit", "-q", "-m", "feat: demo work")
+	return repo, taskPath
 }
