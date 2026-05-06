@@ -45,6 +45,7 @@ func Default() []Lint {
 		ClaudeTotalSize{},
 		AgentMirror{},
 		TaskEvidence{TasksDir: "tasks"},
+		TmuxSocketTest{},
 	}
 }
 

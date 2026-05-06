@@ -375,14 +375,14 @@ func requireToolchain(t *testing.T) {
 }
 
 func killSporeSessions(projectRoot string) {
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	out, err := exec.Command("tmux", "-L", testTmuxSocket, "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil {
 		return
 	}
 	prefix := "spore/" + filepath.Base(projectRoot) + "/"
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if strings.HasPrefix(line, prefix) {
-			_ = exec.Command("tmux", "kill-session", "-t", line).Run()
+			_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", line).Run()
 		}
 	}
 }

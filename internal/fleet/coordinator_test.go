@@ -151,7 +151,7 @@ func TestCoordinatorAgentPrecedence(t *testing.T) {
 // the idempotency check to detect a respawn.
 func sessionCreated(name string) (string, error) {
 	out, err := exec.Command(
-		"tmux", "display-message", "-p", "-t", name, "#{session_created}",
+		"tmux", "-L", testTmuxSocket, "display-message", "-p", "-t", name, "#{session_created}",
 	).Output()
 	if err != nil {
 		return "", err
