@@ -69,7 +69,7 @@ Subcommands:
   settings               Read a hook binding JSON from stdin, emit a
                          deterministic settings.json to stdout.
   watch-inbox [slug]          Stop-hook: block on inbox, exit 2 on message.
-                              With no slug, reads $SKYBOT_INBOX.
+                              With no slug, reads $SPORE_TASK_INBOX.
   notify-coordinator [project]
                               Write a poke to the coordinator's project inbox.
                               With no project, reads $WT_PROJECT.

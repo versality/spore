@@ -23,7 +23,7 @@ func TestIsCoordinatorSession(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("SKYBOT_INBOX", tc.envInbox)
+			t.Setenv("SPORE_TASK_INBOX", tc.envInbox)
 			t.Setenv("SKYHELM_STATE_DIR", tc.envState)
 			t.Setenv("SPORE_COORDINATOR_STATE_DIR", tc.envCoord)
 			if got := isCoordinatorSession(); got != tc.want {

@@ -168,9 +168,9 @@ func runHooksWatchInbox(args []string) int {
 	var err error
 	switch len(args) {
 	case 0:
-		inbox := os.Getenv("SKYBOT_INBOX")
+		inbox := os.Getenv("SPORE_TASK_INBOX")
 		if inbox == "" {
-			fmt.Fprintln(os.Stderr, "spore hooks watch-inbox: SKYBOT_INBOX is required when slug is omitted")
+			fmt.Fprintln(os.Stderr, "spore hooks watch-inbox: SPORE_TASK_INBOX is required when slug is omitted")
 			return 2
 		}
 		err = hooks.WatchInboxAt(inbox)

@@ -104,7 +104,7 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		"-e", "SPORE_COORDINATOR_ROLE=" + rolePath,
 		"-e", "SPORE_PROJECT_ROOT=" + projectRoot,
 		"-e", "WT_PROJECT=" + project,
-		"-e", "SKYBOT_INBOX=" + inbox,
+		"-e", "SPORE_TASK_INBOX=" + inbox,
 		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
 	}
 	if v := coordinatorProvider(tomlCfg); v != "" {

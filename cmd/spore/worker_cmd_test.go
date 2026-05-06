@@ -50,7 +50,7 @@ func captureWorkerTokenMonitor(t *testing.T, input string) (code int, stderr str
 }
 
 func TestRunWorkerTokenMonitorSkipNoInbox(t *testing.T) {
-	t.Setenv("SKYBOT_INBOX", "")
+	t.Setenv("SPORE_TASK_INBOX", "")
 	code, _ := captureWorkerTokenMonitor(t, `{"session_id":"s","transcript_path":""}`)
 	if code != 0 {
 		t.Fatalf("expected exit 0 with no inbox, got %d", code)
@@ -65,7 +65,7 @@ func TestRunWorkerTokenMonitorWrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("SKYBOT_INBOX", filepath.Join(dir, "workers", "wrapme", "inbox"))
+	t.Setenv("SPORE_TASK_INBOX", filepath.Join(dir, "workers", "wrapme", "inbox"))
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", filepath.Join(dir, "coord"))
 	t.Setenv("SPORE_ACCOUNT_TIER", "max")
 
@@ -90,7 +90,7 @@ func TestRunWorkerTokenMonitorOk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("SKYBOT_INBOX", filepath.Join(dir, "workers", "ok", "inbox"))
+	t.Setenv("SPORE_TASK_INBOX", filepath.Join(dir, "workers", "ok", "inbox"))
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", filepath.Join(dir, "coord"))
 	t.Setenv("SPORE_ACCOUNT_TIER", "max")
 

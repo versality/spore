@@ -11,7 +11,7 @@ func TestHooksNotifyCoordinatorNoArgsUsesEnv(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "project")
-	t.Setenv("SKYBOT_INBOX", filepath.Join(t.TempDir(), "worker", "inbox"))
+	t.Setenv("SPORE_TASK_INBOX", filepath.Join(t.TempDir(), "worker", "inbox"))
 
 	if code := runHooksNotifyCoordinator(nil); code != 0 {
 		t.Fatalf("runHooksNotifyCoordinator(nil) = %d, want 0", code)
@@ -32,9 +32,9 @@ func TestHooksNotifyCoordinatorNoArgsUsesEnv(t *testing.T) {
 }
 
 func TestHooksWatchInboxNoArgsRequiresEnv(t *testing.T) {
-	t.Setenv("SKYBOT_INBOX", "")
+	t.Setenv("SPORE_TASK_INBOX", "")
 
 	if code := runHooksWatchInbox(nil); code != 2 {
-		t.Fatalf("runHooksWatchInbox(nil) = %d, want 2 without SKYBOT_INBOX", code)
+		t.Fatalf("runHooksWatchInbox(nil) = %d, want 2 without SPORE_TASK_INBOX", code)
 	}
 }

@@ -18,16 +18,16 @@ func NotifyCoordinator(slug string) error {
 
 // NotifyCoordinatorEnv is the env-driven entry point for the
 // Notification hook. It reads $WT_PROJECT to identify the target
-// coordinator inbox, and $SKYBOT_INBOX to skip self-pokes when the
+// coordinator inbox, and $SPORE_TASK_INBOX to skip self-pokes when the
 // firing session is the coordinator itself. Returns nil (no-op) when
-// WT_PROJECT is unset or when SKYBOT_INBOX matches the target inbox.
+// WT_PROJECT is unset or when SPORE_TASK_INBOX matches the target inbox.
 func NotifyCoordinatorEnv() error {
 	project := os.Getenv("WT_PROJECT")
 	if project == "" {
 		return nil
 	}
 	inbox := coordinatorInbox(project)
-	if os.Getenv("SKYBOT_INBOX") == inbox {
+	if os.Getenv("SPORE_TASK_INBOX") == inbox {
 		return nil
 	}
 	return notifyCoordinatorAt(inbox)

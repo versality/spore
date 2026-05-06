@@ -395,7 +395,7 @@ func runCoordinatorTokenMonitor(_ []string) int {
 	}
 
 	cfg := tokenmonitor.Config{
-		Inbox: os.Getenv("SKYBOT_INBOX"),
+		Inbox: os.Getenv("SPORE_TASK_INBOX"),
 	}
 
 	result := tokenmonitor.Check(cfg, payload)
