@@ -82,9 +82,15 @@ func stateBaseDir() (string, error) {
 	return filepath.Join(home, ".local", "state"), nil
 }
 
-// ProjectName returns the basename of the git toplevel rooted at
+// ProjectName returns the basename of the main repo containing
 // projectRoot, falling back to the basename of projectRoot itself
 // when not a git repo. Pass "" to use the current working directory.
+//
+// Resolved via `git rev-parse --git-common-dir`: in a linked worktree
+// this returns the main repo's .git path, so dirname yields the main
+// repo root regardless of cwd. Using --show-toplevel here would return
+// the worktree path and silently rename the project to the worktree
+// slug from any rover cwd.
 func ProjectName(projectRoot string) (string, error) {
 	if projectRoot == "" {
 		wd, err := os.Getwd()
@@ -93,10 +99,13 @@ func ProjectName(projectRoot string) (string, error) {
 		}
 		projectRoot = wd
 	}
-	if out, err := gitCmd(projectRoot, "rev-parse", "--show-toplevel").Output(); err == nil {
-		root := strings.TrimSpace(string(out))
-		if root != "" {
-			return filepath.Base(root), nil
+	if out, err := gitCmd(projectRoot, "rev-parse", "--git-common-dir").Output(); err == nil {
+		common := strings.TrimSpace(string(out))
+		if common != "" {
+			if !filepath.IsAbs(common) {
+				common = filepath.Join(projectRoot, common)
+			}
+			return filepath.Base(filepath.Dir(common)), nil
 		}
 	}
 	return filepath.Base(projectRoot), nil
