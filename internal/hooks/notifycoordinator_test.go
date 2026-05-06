@@ -96,7 +96,7 @@ func TestNotifyCoordinatorEnv_NoProjectIsNoop(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "")
-	t.Setenv("SKYBOT_INBOX", "")
+	t.Setenv("SPORE_TASK_INBOX", "")
 
 	if err := NotifyCoordinatorEnv(); err != nil {
 		t.Fatalf("NotifyCoordinatorEnv: %v", err)
@@ -111,7 +111,7 @@ func TestNotifyCoordinatorEnv_PokesProjectInbox(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
-	t.Setenv("SKYBOT_INBOX", filepath.Join(t.TempDir(), "rower-slug", "inbox"))
+	t.Setenv("SPORE_TASK_INBOX", filepath.Join(t.TempDir(), "rower-slug", "inbox"))
 
 	if err := NotifyCoordinatorEnv(); err != nil {
 		t.Fatalf("NotifyCoordinatorEnv: %v", err)
@@ -137,7 +137,7 @@ func TestNotifyCoordinatorEnv_SelfPokeIsNoop(t *testing.T) {
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
 	inbox := filepath.Join(state, "myproject", "inbox")
-	t.Setenv("SKYBOT_INBOX", inbox)
+	t.Setenv("SPORE_TASK_INBOX", inbox)
 
 	if err := NotifyCoordinatorEnv(); err != nil {
 		t.Fatalf("NotifyCoordinatorEnv: %v", err)

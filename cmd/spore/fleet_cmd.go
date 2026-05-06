@@ -38,7 +38,7 @@ Subcommands:
                   exits 0 when there is nothing to do. Short-circuits when
                   the kill-switch flag is missing.
   replenish-hook  Stop-hook variant of reconcile: reads context from env
-                  ($SKYBOT_INBOX, $WT_PROJECT, $WT_FLEET_FLOOR), no-ops in
+                  ($SPORE_TASK_INBOX, $WT_PROJECT, $WT_FLEET_FLOOR), no-ops in
                   non-coordinator sessions, skips when the budget advice
                   is tighten/ration, and never propagates errors.
   enable          Create the kill-switch flag (the reconciler resumes
@@ -224,7 +224,7 @@ func resolveMaxWorkers(flagVal int, projectRoot string) (int, error) {
 //
 //   - swallow stdin (claude-code feeds the hook payload there)
 //   - no-op when the firing session is not the coordinator (per
-//     $SKYBOT_INBOX vs $SKYHELM_STATE_DIR / $SPORE_COORDINATOR_STATE_DIR)
+//     $SPORE_TASK_INBOX vs $SKYHELM_STATE_DIR / $SPORE_COORDINATOR_STATE_DIR)
 //   - skip the spawn pass when budget advice is "tighten" / "ration"
 //   - never exit non-zero: a failing reconcile must not block the Stop
 //     hook
@@ -275,12 +275,12 @@ func runFleetReplenishHook(args []string) error {
 	return nil
 }
 
-// isCoordinatorSession reports whether $SKYBOT_INBOX points under the
+// isCoordinatorSession reports whether $SPORE_TASK_INBOX points under the
 // coordinator state dir (matching the bash self_id == "coordinator" test).
 // Honours both SKYHELM_STATE_DIR (legacy) and SPORE_COORDINATOR_STATE_DIR
 // (kernel-neutral) so the hook works during the rename transition.
 func isCoordinatorSession() bool {
-	inbox := os.Getenv("SKYBOT_INBOX")
+	inbox := os.Getenv("SPORE_TASK_INBOX")
 	if inbox == "" {
 		return false
 	}

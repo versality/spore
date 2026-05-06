@@ -422,7 +422,7 @@ func ensureSession(tasksDir, slug string) (string, error) {
 		"-e", "SPORE_TASK_SLUG="+slug,
 		"-e", "SPORE_PROJECT_ROOT="+projectRoot,
 		"-e", "WT_PROJECT="+project,
-		"-e", "SKYBOT_INBOX="+inbox,
+		"-e", "SPORE_TASK_INBOX="+inbox,
 		"-e", "SPORE_COORDINATOR_STATE_DIR="+coordinatorState,
 		agent,
 	).CombinedOutput()

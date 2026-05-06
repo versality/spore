@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Renamed the per-task inbox env var from `SKYBOT_INBOX` to
+  `SPORE_TASK_INBOX` to drop a foreign prefix that had leaked in
+  from a consumer harness. Spore sets and reads the new name only;
+  consumers that exported `SKYBOT_INBOX` for operator-side hooks
+  must rename on their side. No backward-compat alias.
+
 ## 0.4.2 - 2026-05-06
 
 - Fixed `spore coordinator start` lying about success when the agent

@@ -22,7 +22,7 @@ Subcommands:
                   override per-tier caps with $SPORE_WORKER_TOKEN_WRAP,
                   $SPORE_WORKER_TOKEN_WRAP_MAX, $SPORE_WORKER_TOKEN_WRAP_SUB.
                   Skips coordinator inboxes (handled by spore coordinator
-                  token-monitor) and sessions with no $SKYBOT_INBOX.
+                  token-monitor) and sessions with no $SPORE_TASK_INBOX.
 `
 
 func runWorker(args []string) int {
@@ -56,7 +56,7 @@ func runWorkerTokenMonitor(_ []string) int {
 	}
 
 	cfg := tokenmonitor.Config{
-		Inbox:        os.Getenv("SKYBOT_INBOX"),
+		Inbox:        os.Getenv("SPORE_TASK_INBOX"),
 		Tier:         os.Getenv("SPORE_ACCOUNT_TIER"),
 		WrapOverride: envInt("SPORE_WORKER_TOKEN_WRAP"),
 		WrapMax:      envInt("SPORE_WORKER_TOKEN_WRAP_MAX"),
