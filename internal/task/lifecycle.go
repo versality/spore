@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,12 +86,14 @@ func Ensure(tasksDir, slug string) (string, error) {
 	return ensureSession(tasksDir, slug)
 }
 
-// Reap kills the tmux session for slug. Status, worktree, and branch
-// are left untouched. Used by the fleet reconciler when a task
-// leaves active.
+// Reap kills every tmux session matching slug for the project (the
+// frontmatter-recorded one plus any duplicates that drifted during
+// spawn or got minted with a different tier tag). Status, worktree,
+// and branch are left untouched. Used by the fleet reconciler when a
+// task leaves active.
 func Reap(tasksDir, projectRoot, slug string) error {
-	session := taskTmuxSession(tasksDir, projectRoot, slug)
-	return exec.Command("tmux", "kill-session", "-t", session).Run()
+	killAllSlugSessions(tasksDir, projectRoot, slug)
+	return nil
 }
 
 // SpawnedSlugs lists slugs of every tmux session that matches the
@@ -116,24 +119,34 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 	return slugs, nil
 }
 
-// Pause flips an active task to paused. The worktree and tmux session
-// are left in place so the operator can stay attached. Refuses when
-// the inbox has unread messages.
+// Pause flips an active task to paused. The worktree is left in
+// place; the tmux session is reaped only if it has been idle past
+// IdleReapThreshold (model exited, pane sitting at an empty prompt).
+// A mid-tool-call rower stays alive so the operator can attach and
+// finish a thought. Refuses when the inbox has unread messages.
 func Pause(tasksDir, slug string) error {
 	if err := inboxGate(slug); err != nil {
 		return err
 	}
-	return flipStatus(tasksDir, slug, "active", "paused")
+	if err := flipStatus(tasksDir, slug, "active", "paused"); err != nil {
+		return err
+	}
+	reapIdleSlugSessions(tasksDir, slug)
+	return nil
 }
 
-// Block flips an active task to blocked. Same teardown semantics as
-// Pause: the worktree and tmux session are left in place. Refuses
-// when the inbox has unread messages.
+// Block flips an active task to blocked. Same idle-gated reap as
+// Pause: the worktree stays, the session is killed only if idle past
+// IdleReapThreshold. Refuses when the inbox has unread messages.
 func Block(tasksDir, slug string) error {
 	if err := inboxGate(slug); err != nil {
 		return err
 	}
-	return flipStatus(tasksDir, slug, "active", "blocked")
+	if err := flipStatus(tasksDir, slug, "active", "blocked"); err != nil {
+		return err
+	}
+	reapIdleSlugSessions(tasksDir, slug)
+	return nil
 }
 
 // Verify reads tasks/<slug>.md and runs the structural evidence
@@ -212,9 +225,8 @@ func Done(tasksDir, slug string, force bool) error {
 	notifyMatterDone(projectRoot, slug, m, os.Stderr)
 
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
-	session := taskTmuxSession(tasksDir, projectRoot, slug)
 
-	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+	killAllSlugSessions(tasksDir, projectRoot, slug)
 	_ = gitCmd(projectRoot, "worktree", "remove", "--force", worktree).Run()
 	_ = gitCmd(projectRoot, "branch", "-D", branch).Run()
 	return nil
@@ -546,6 +558,129 @@ func taskTmuxSession(tasksDir, projectRoot, slug string) string {
 
 func tmuxSessionPrefix(projectRoot string) string {
 	return fmt.Sprintf("spore/%s/", filepath.Base(projectRoot))
+}
+
+// IdleReapThreshold is how long a tmux session must sit without
+// activity before pause/block reaps it. Sessions younger than this
+// are kept alive: a mid-tool-call rower or a pane the operator just
+// stopped typing into is not "abandoned". Override via
+// SPORE_IDLE_REAP_SECS for tests / operator tuning.
+const IdleReapThreshold = 5 * time.Minute
+
+// matchingSlugSessions lists every tmux session whose name slot for
+// this slug matches, regardless of formula drift between spawn and
+// kill. Catches three shapes:
+//
+//   - spore-style "spore/<project>/<slug>"
+//   - wt-style "<icon> <project>/<slug>" or "<icon> <project>/<slug> [tag]"
+//   - any external spawner that recorded its own name in frontmatter
+//     and embedded "<project>/<slug>" in it
+//
+// Returns nil when tmux isn't running or no session matches. Pure
+// substring scan: the slug-end boundary is enforced by requiring the
+// next char to be end-of-string or a space (so slug "foo" doesn't
+// kill "foo-bar").
+func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		return nil
+	}
+	project := filepath.Base(projectRoot)
+	needle := project + "/" + slug
+	recorded := ""
+	if m, err := readTaskMeta(tasksDir, slug); err == nil {
+		recorded = m.Session
+	}
+	seen := map[string]bool{}
+	var matches []string
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		matches = append(matches, name)
+	}
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		i := strings.Index(line, needle)
+		if i < 0 {
+			continue
+		}
+		end := i + len(needle)
+		if end < len(line) && line[end] != ' ' {
+			continue
+		}
+		add(line)
+	}
+	if recorded != "" && hasSession(recorded) {
+		add(recorded)
+	}
+	return matches
+}
+
+// killAllSlugSessions tears down every tmux session matching slug
+// for the project. Errors are swallowed - this is best-effort cleanup;
+// the status flip stays the source of truth. Pass-through no-op when
+// tmux isn't running or nothing matches.
+func killAllSlugSessions(tasksDir, projectRoot, slug string) {
+	for _, name := range matchingSlugSessions(tasksDir, projectRoot, slug) {
+		_ = exec.Command("tmux", "kill-session", "-t", name).Run()
+	}
+}
+
+// reapIdleSlugSessions kills only the matching sessions whose tmux
+// activity is older than IdleReapThreshold (paused/blocked semantics:
+// keep mid-run sessions alive). projectRoot is derived from tasksDir;
+// any read or parse failure leaves the session alone.
+func reapIdleSlugSessions(tasksDir, slug string) {
+	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return
+	}
+	threshold := IdleReapThreshold
+	if v := os.Getenv("SPORE_IDLE_REAP_SECS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+			threshold = time.Duration(secs) * time.Second
+		}
+	}
+	now := time.Now()
+	for _, name := range matchingSlugSessions(tasksDir, projectRoot, slug) {
+		idle, ok := sessionIdle(name, now)
+		if !ok {
+			continue
+		}
+		if idle < threshold {
+			continue
+		}
+		_ = exec.Command("tmux", "kill-session", "-t", name).Run()
+	}
+}
+
+// sessionIdle reports how long a tmux session has gone without pane
+// activity. Returns (0, false) when the activity stamp can't be read
+// (session gone, tmux quiet, garbage value); the false signals the
+// caller to leave the session alone rather than treat unknown as
+// stale.
+func sessionIdle(name string, now time.Time) (time.Duration, bool) {
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", name, "#{session_activity}").Output()
+	if err != nil {
+		return 0, false
+	}
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return 0, false
+	}
+	secs, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	last := time.Unix(secs, 0)
+	if last.After(now) {
+		return 0, true
+	}
+	return now.Sub(last), true
 }
 
 func hasSession(name string) bool {
