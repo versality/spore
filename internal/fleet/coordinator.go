@@ -39,9 +39,15 @@ const CoordinatorAgentEnv = "SPORE_COORDINATOR_AGENT"
 
 // CoordinatorSessionName returns the tmux session for the singleton
 // coordinator: "spore/<project>/coordinator", parallel to worker
-// session names.
+// session names. Resolves the project name via task.ProjectName so
+// invocations from a worktree cwd still target the main repo session
+// instead of forking a stray "spore/<slug>/coordinator".
 func CoordinatorSessionName(projectRoot string) string {
-	return fmt.Sprintf("spore/%s/%s", filepath.Base(projectRoot), CoordinatorSlug)
+	name, err := task.ProjectName(projectRoot)
+	if err != nil || name == "" {
+		name = filepath.Base(projectRoot)
+	}
+	return fmt.Sprintf("spore/%s/%s", name, CoordinatorSlug)
 }
 
 // CoordinatorRolePath returns the override path from

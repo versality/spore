@@ -1,7 +1,9 @@
 package fleet
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -117,6 +119,42 @@ func TestReconcileCoordinatorDoesNotCountTowardCap(t *testing.T) {
 
 	if !hasSession(CoordinatorSessionName(dirs.project)) {
 		t.Errorf("expected coordinator session alive after reconcile")
+	}
+}
+
+func TestCoordinatorSessionNameUsesMainRepoFromWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	parent := t.TempDir()
+	main := filepath.Join(parent, "marketercom")
+	if err := os.MkdirAll(main, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+		{"commit", "-q", "--allow-empty", "-m", "init"},
+	} {
+		out, err := exec.Command("git", append([]string{"-C", main}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	worktree := filepath.Join(main, ".worktrees", "wt-rover-slug")
+	if err := os.MkdirAll(filepath.Dir(worktree), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("git", "-C", main, "worktree", "add", "-q", worktree, "-b", "wt/rover").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git worktree add: %v: %s", err, out)
+	}
+
+	got := CoordinatorSessionName(worktree)
+	want := "spore/marketercom/coordinator"
+	if got != want {
+		t.Errorf("CoordinatorSessionName(worktree) = %q, want %q", got, want)
 	}
 }
 
