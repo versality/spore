@@ -6,12 +6,21 @@
 //     IDs are stable).
 //  2. List issues in ready_state for team. For each issue not yet
 //     present on disk (no tasks/<slug>.md carries `matter_id: <id>`),
-//     create a tasks/<slug>.md and push the issue ready->in-progress.
+//     create a tasks/<slug>.md. Sync does NOT flip the issue
+//     ready->in-progress; that flip is bound to the rover-claim
+//     signal in OnSpawn, so the kanban only shows In Progress
+//     tickets that an actual worker session is owning.
 //  3. Walk tasks/. For every status=done task that carries
 //     `matter_id: <id>` and is missing `linear_done: yes`, push the
 //     issue to done_state and stamp `linear_done: yes`. This is the
 //     safety-net path; the synchronous push happens via OnDone the
 //     moment the task flips to done.
+//
+// OnSpawn fires when the fleet reconciler (or an interactive
+// `spore task <slug>`) creates a worker session for a Linear-tagged
+// task. The adapter pushes the issue ready->in-progress at that
+// moment. A re-fired OnSpawn for an issue already in the in-progress
+// state is a no-op upstream (Linear's issueUpdate is idempotent).
 //
 // The adapter registers itself under the name "linear" via init(),
 // so importing this package is enough to make `[matter.linear]` (or
@@ -152,8 +161,7 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 	if !ok {
 		return 0, 0, fmt.Errorf("matter.linear: ready_state %q not found in team %s", s.cfg.ReadyState, s.cfg.Team)
 	}
-	inProgressID, ok := s.stateIDs[s.cfg.InProgressState]
-	if !ok {
+	if _, ok := s.stateIDs[s.cfg.InProgressState]; !ok {
 		return 0, 0, fmt.Errorf("matter.linear: in_progress_state %q not found in team %s", s.cfg.InProgressState, s.cfg.Team)
 	}
 	doneID, ok := s.stateIDs[s.cfg.DoneState]
@@ -178,9 +186,9 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		if err != nil {
 			return created, updated, fmt.Errorf("matter.linear: adopt %s: %w", issue.Identifier, err)
 		}
-		if err := s.transitionIssue(issue.ID, inProgressID); err != nil {
-			return created, updated, fmt.Errorf("matter.linear: transition %s -> in_progress: %w", issue.Identifier, err)
-		}
+		// Issue stays in Ready upstream until OnSpawn fires for
+		// the worker that picks it up. Operators dragging the kanban
+		// see "projected, not yet claimed" vs "claimed by rover".
 		created++
 		known[issue.Identifier] = slug
 	}
@@ -199,6 +207,33 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		updated++
 	}
 	return created, updated, nil
+}
+
+// OnSpawn is the rover-claim push: the fleet reconciler (or
+// lifecycle.Start) just created a worker session for slug, so flip
+// the upstream issue ready->in-progress. The push is idempotent on
+// Linear's side, so a re-fire from a respawn after a crash is
+// harmless. No-op when the task carries no Linear matter id (the
+// task was created without a matter, or by a different adapter).
+//
+// Symmetric back-flips for paused/blocked land in a follow-up: the
+// adapter would need new pause_state / blocked_state config keys
+// and OnPause / OnBlock hooks on the matter.Matter interface.
+// Tracked separately to keep this PR focused on the
+// projection-vs-claim decoupling that mcom needs first.
+func (s *Source) OnSpawn(ctx context.Context, slug string, meta map[string]string) error {
+	id := issueIDFromMeta(meta)
+	if id == "" {
+		return nil
+	}
+	if err := s.loadStateIDs(); err != nil {
+		return err
+	}
+	inProgressID, ok := s.stateIDs[s.cfg.InProgressState]
+	if !ok {
+		return fmt.Errorf("matter.linear: in_progress_state %q not found in team %s", s.cfg.InProgressState, s.cfg.Team)
+	}
+	return s.transitionIssue(id, inProgressID)
 }
 
 // OnDone is the synchronous push for a task that just flipped to
@@ -448,10 +483,10 @@ func linearIDFromMeta(extra map[string]string) string {
 	return extra[legacyIDKey]
 }
 
-// issueIDFromMeta is the OnDone counterpart of linearIDFromMeta. It
-// is identical today but kept separate so future divergences (e.g.
-// preferring matter_url over matter_id for upstreams that key on
-// URL) stay scoped to one call site.
+// issueIDFromMeta is the OnSpawn / OnDone counterpart of
+// linearIDFromMeta. It is identical today but kept separate so
+// future divergences (e.g. preferring matter_url over matter_id for
+// upstreams that key on URL) stay scoped to one call site.
 func issueIDFromMeta(extra map[string]string) string {
 	return linearIDFromMeta(extra)
 }

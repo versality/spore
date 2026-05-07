@@ -416,6 +416,19 @@ func writeTaskWithExtra(t *testing.T, tasksDir, slug, status, key, val string) {
 	}
 }
 
+func writeTaskWithExtras(t *testing.T, tasksDir, slug, status string, extras map[string]string) {
+	t.Helper()
+	m := frontmatter.Meta{
+		Status: status,
+		Slug:   slug,
+		Title:  slug,
+		Extra:  extras,
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), frontmatter.Write(m, nil), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func flipStatus(t *testing.T, tasksDir, slug, status string) {
 	t.Helper()
 	path := filepath.Join(tasksDir, slug+".md")
