@@ -198,6 +198,10 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		}
 		updated++
 	}
+
+	if err := s.projectComments(projectRoot, tasksDir); err != nil {
+		return created, updated, fmt.Errorf("matter.linear: project comments: %w", err)
+	}
 	return created, updated, nil
 }
 
