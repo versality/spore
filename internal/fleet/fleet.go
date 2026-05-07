@@ -200,6 +200,13 @@ func Reconcile(cfg Config) (Result, error) {
 		if _, err := task.Ensure(cfg.TasksDir, slug); err != nil {
 			return res, fmt.Errorf("ensure %s: %w", slug, err)
 		}
+		// Fire OnSpawn now that the session is up: this is the
+		// rover-claim signal matter adapters bind their upstream
+		// "in progress" mirror to (e.g. Linear's Ready -> In
+		// Progress flip). Errors from a matter push do not roll
+		// back the spawn; the worker is real, the kanban catches
+		// up on the next reconcile pass.
+		task.NotifyMatterSpawn(cfg.ProjectRoot, cfg.TasksDir, slug, os.Stderr)
 		res.Spawned = append(res.Spawned, slug)
 		runningSet[slug] = true
 		agentCounts[picked]++

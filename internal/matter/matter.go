@@ -1,8 +1,11 @@
 // Package matter is the plugin layer for external work sources
 // (Linear, GitHub Issues, Jira, ad-hoc CSV, ...). A Matter polls its
 // upstream and projects ready tickets onto tasks/<slug>.md files;
+// when the fleet reconciler claims one of those tasks for a worker,
+// the matter is told via OnSpawn so it can mirror the claim upstream
+// (Linear flips Ready -> In Progress here, not at projection time);
 // when a task carrying its metadata flips to done, the matter is
-// asked to mirror that back upstream.
+// asked to mirror that back upstream via OnDone.
 //
 // The package is interface + registry only: adapters live in their
 // own subpackages (e.g. internal/matter/linear) and self-register
@@ -16,8 +19,8 @@
 //	matter_url: <url>       # adapter-defined deep link (optional)
 //
 // MatterKey, MatterIDKey, and MatterURLKey are the canonical names.
-// OnDone receives the parsed Extra map verbatim so adapters can read
-// any additional keys they wrote.
+// OnSpawn and OnDone receive the parsed Extra map verbatim so
+// adapters can read any additional keys they wrote.
 package matter
 
 import "context"
@@ -47,12 +50,25 @@ type Matter interface {
 	// the adapter was instantiated from.
 	Name() string
 
-	// Sync polls the upstream source and creates or updates
-	// tasks/<slug>.md files under projectRoot. Returns the number
-	// of task files created and updated by this pass. Implementations
-	// must be safe to call repeatedly: re-syncing an unchanged
-	// upstream should report 0/0 and touch nothing on disk.
+	// Sync polls the upstream source and projects ready tickets
+	// onto tasks/<slug>.md files under projectRoot. Returns the
+	// number of task files created and updated by this pass.
+	// Implementations must be safe to call repeatedly: re-syncing
+	// an unchanged upstream should report 0/0 and touch nothing on
+	// disk. Sync MUST NOT flip the upstream record's state on its
+	// own: the rover-claim signal (OnSpawn) is the source of truth
+	// for the Ready -> In Progress transition.
 	Sync(ctx context.Context, projectRoot string) (created, updated int, err error)
+
+	// OnSpawn is invoked when a worker session is created for a
+	// task carrying this matter's metadata - the rover-claim
+	// signal. The fleet reconciler fires it after task.Ensure
+	// brings up a new tmux session, and lifecycle.Start fires it
+	// when the operator manually starts (or resumes) a task.
+	// Adapters that mirror "in progress" state upstream should do
+	// so here. Idempotent: a re-fired OnSpawn for a record already
+	// in the in-progress state is not an error.
+	OnSpawn(ctx context.Context, slug string, meta map[string]string) error
 
 	// OnDone is invoked after a task carrying this matter's
 	// metadata flips to status=done. Meta is the task's frontmatter

@@ -258,7 +258,7 @@ func newSource(t *testing.T, srvURL string) *Source {
 	return src
 }
 
-func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
+func TestSyncProjectsTasksWithoutFlippingState(t *testing.T) {
 	stub := newStub(t)
 	stub.addReady("issue-uuid-1", "MAR-12", "Wire up onboarding email", "Send welcome email on signup.")
 	stub.addReady("issue-uuid-2", "MAR-13", "Crash on empty cart", "Repro: open cart without items.")
@@ -277,9 +277,13 @@ func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
 		t.Errorf("Sync = (created=%d, updated=%d), want (2, 0)", created, updated)
 	}
 
+	// Sync MUST leave Linear state alone: the rover-claim signal
+	// (OnSpawn) owns the Ready -> In Progress transition. A pre-
+	// MCOM-85 Sync flipped issues here at projection time and the
+	// kanban no longer matched reality.
 	for id, iss := range stub.issues {
-		if iss.StateID != stub.states["In Progress"] {
-			t.Errorf("issue %s state = %s, want In Progress", id, iss.StateID)
+		if iss.StateID != stub.states["Ready"] {
+			t.Errorf("issue %s state = %s, want Ready (Sync must not flip)", id, iss.StateID)
 		}
 	}
 
@@ -475,6 +479,81 @@ func TestSyncRecognisesLegacyLinearKey(t *testing.T) {
 	}
 	if iss.StateID != stub.states["Done"] {
 		t.Errorf("legacy task should have pushed Done, got state %q", iss.StateID)
+	}
+}
+
+func TestOnSpawnFlipsReadyToInProgress(t *testing.T) {
+	stub := newStub(t)
+	iss := stub.addReady("issue-uuid-50", "MAR-50", "Claim me", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnSpawn(context.Background(), "claim-me", map[string]string{
+		matter.MatterKey:   "linear",
+		matter.MatterIDKey: "MAR-50",
+	})
+	if err != nil {
+		t.Fatalf("OnSpawn: %v", err)
+	}
+	if iss.StateID != stub.states["In Progress"] {
+		t.Errorf("OnSpawn should have flipped issue to In Progress, got state %q", iss.StateID)
+	}
+}
+
+func TestOnSpawnIdempotentForAlreadyInProgress(t *testing.T) {
+	stub := newStub(t)
+	iss := stub.addReady("issue-uuid-51", "MAR-51", "Already claimed", "")
+	iss.StateID = stub.states["In Progress"]
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnSpawn(context.Background(), "already-claimed", map[string]string{
+		matter.MatterKey:   "linear",
+		matter.MatterIDKey: "MAR-51",
+	})
+	if err != nil {
+		t.Fatalf("OnSpawn (idempotent): %v", err)
+	}
+	if iss.StateID != stub.states["In Progress"] {
+		t.Errorf("issue should remain In Progress, got %q", iss.StateID)
+	}
+}
+
+func TestOnSpawnIgnoresUnrelatedMatter(t *testing.T) {
+	stub := newStub(t)
+	stub.addReady("issue-uuid-52", "MAR-52", "Wrong adapter", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnSpawn(context.Background(), "wrong-adapter", map[string]string{
+		matter.MatterKey:   "jira",
+		matter.MatterIDKey: "MAR-52",
+	})
+	if err != nil {
+		t.Fatalf("OnSpawn: %v", err)
+	}
+	if stub.calls != 0 {
+		t.Errorf("OnSpawn should make 0 GraphQL calls when matter != linear, got %d", stub.calls)
+	}
+}
+
+func TestOnSpawnNoOpWithoutID(t *testing.T) {
+	stub := newStub(t)
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	if err := src.OnSpawn(context.Background(), "no-id", map[string]string{}); err != nil {
+		t.Fatalf("OnSpawn: %v", err)
+	}
+	if stub.calls != 0 {
+		t.Errorf("want 0 calls, got %d", stub.calls)
 	}
 }
 
