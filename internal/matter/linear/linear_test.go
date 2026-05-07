@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -20,11 +21,23 @@ import (
 // drive the Sync paths. State and issues are mutable so a test can
 // verify a transition mutation actually moved the issue.
 type stubLinear struct {
-	t      *testing.T
-	team   string
-	states map[string]string // name -> id
-	issues map[string]*stubIssue
-	calls  int
+	t        *testing.T
+	team     string
+	states   map[string]string // name -> id
+	issues   map[string]*stubIssue
+	comments map[string][]stubComment // identifier -> comments, oldest first
+	calls    int
+}
+
+// stubComment is the test-side shape of a Linear comment. Identifier
+// keys the parent issue (matches comments map). CreatedAt is the
+// server-side timestamp the cursor compares against.
+type stubComment struct {
+	ID         string
+	Body       string
+	URL        string
+	AuthorName string
+	CreatedAt  time.Time
 }
 
 type stubIssue struct {
@@ -47,7 +60,8 @@ func newStub(t *testing.T) *stubLinear {
 			"In Progress": "state-doing",
 			"Done":        "state-done",
 		},
-		issues: map[string]*stubIssue{},
+		issues:   map[string]*stubIssue{},
+		comments: map[string][]stubComment{},
 	}
 }
 
@@ -107,6 +121,8 @@ func (s *stubLinear) handler() http.HandlerFunc {
 			s.respondIssueUpdate(w, body.Variables)
 		case strings.Contains(body.Query, "issues("):
 			s.respondIssues(w, body.Variables)
+		case strings.Contains(body.Query, "IssueComments"):
+			s.respondComments(w, body.Variables)
 		default:
 			http.Error(w, "unrecognised query: "+body.Query, http.StatusBadRequest)
 		}
@@ -179,6 +195,47 @@ func (s *stubLinear) respondIssueUpdate(w http.ResponseWriter, vars map[string]a
 	resp := map[string]any{
 		"data": map[string]any{
 			"issueUpdate": map[string]any{"success": true},
+		},
+	}
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// respondComments serves the IssueComments query the comment-projection
+// path issues. The test sets s.comments[<identifier>] to the comments
+// it wants returned for a given ticket, so production code's
+// fetchComments($id, $since) returns only the comments with
+// CreatedAt strictly greater than $since.
+func (s *stubLinear) respondComments(w http.ResponseWriter, vars map[string]any) {
+	id, _ := vars["id"].(string)
+	sinceStr, _ := vars["since"].(string)
+	since, _ := time.Parse(time.RFC3339Nano, sinceStr)
+
+	type user struct {
+		Name string `json:"name"`
+	}
+	type node struct {
+		ID        string    `json:"id"`
+		Body      string    `json:"body"`
+		URL       string    `json:"url"`
+		CreatedAt time.Time `json:"createdAt"`
+		User      user      `json:"user"`
+	}
+	var nodes []node
+	for _, c := range s.comments[id] {
+		if !since.IsZero() && !c.CreatedAt.After(since) {
+			continue
+		}
+		nodes = append(nodes, node{
+			ID: c.ID, Body: c.Body, URL: c.URL,
+			CreatedAt: c.CreatedAt,
+			User:      user{Name: c.AuthorName},
+		})
+	}
+	resp := map[string]any{
+		"data": map[string]any{
+			"issue": map[string]any{
+				"comments": map[string]any{"nodes": nodes},
+			},
 		},
 	}
 	_ = json.NewEncoder(w).Encode(resp)
