@@ -281,7 +281,7 @@ type linearComment struct {
 // surface area for an edge that, in practice, fires on operator
 // drive-by comments. A future iteration can add a `pageInfo` loop.
 func (s *Source) fetchComments(issueID string, since time.Time) ([]linearComment, error) {
-	const q = `query IssueComments($id: String!, $since: DateTime) {
+	const q = `query IssueComments($id: String!, $since: DateTimeOrDuration) {
   issue(id: $id) {
     comments(filter: {createdAt: {gt: $since}}) {
       nodes {
