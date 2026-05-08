@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `matter.linear`: Sync now projects new Linear comments per active
+  ticket as tell-envelope JSON files in the matching rover slug's
+  spore inbox dir, so an operator commenting on a Linear ticket
+  reaches the rover working it via the existing watch-inbox Stop
+  hook. Per-ticket cursor lives at
+  `<StateDirForProject>/<slug>/linear-comments.cursor`; first
+  observation seeds at "now" so historical comments do not flood
+  the inbox.
 - Renamed the per-task inbox env var from `SKYBOT_INBOX` to
   `SPORE_TASK_INBOX` to drop a foreign prefix that had leaked in
   from a consumer harness. Spore sets and reads the new name only;

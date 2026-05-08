@@ -74,7 +74,12 @@ func Start(tasksDir, slug string) (string, error) {
 	// replaces it so a resume gets a fresh agent and new-session
 	// does not collide on the name.
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
-	return ensureSession(tasksDir, slug)
+	out, err := ensureSession(tasksDir, slug)
+	if err != nil {
+		return "", err
+	}
+	notifyMatterSpawn(projectRoot, slug, m, os.Stderr)
+	return out, nil
 }
 
 // Ensure makes sure the wt/<slug> branch, worktree, and tmux session
@@ -266,6 +271,63 @@ func notifyMatterDone(projectRoot, slug string, m frontmatter.Meta, warnOut io.W
 	}
 	if err := matters[0].OnDone(context.Background(), slug, copyExtra(m.Extra)); err != nil {
 		fmt.Fprintf(warnOut, "spore task done %s: matter %s OnDone: %v\n", slug, name, err)
+	}
+}
+
+// NotifyMatterSpawn fires OnSpawn on the matter named in the task's
+// frontmatter (Extra["matter"]) - the rover-claim signal. The fleet
+// reconciler calls it after task.Ensure brings up a new tmux
+// session; lifecycle.Start calls the package-private notifyMatterSpawn
+// directly after creating its session. No-op when the key is absent
+// or the adapter isn't configured for this project. Errors land on
+// warnOut; the spawn itself is the source of truth.
+func NotifyMatterSpawn(projectRoot, tasksDir, slug string, warnOut io.Writer) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(warnOut, "spore notify-matter-spawn %s: read brief: %v\n", slug, err)
+		return
+	}
+	m, _, err := frontmatter.Parse(raw)
+	if err != nil {
+		fmt.Fprintf(warnOut, "spore notify-matter-spawn %s: parse brief: %v\n", slug, err)
+		return
+	}
+	notifyMatterSpawn(projectRoot, slug, m, warnOut)
+}
+
+// notifyMatterSpawn is the inner shared path used when the caller
+// already has the parsed Meta and can skip the re-read.
+func notifyMatterSpawn(projectRoot, slug string, m frontmatter.Meta, warnOut io.Writer) {
+	name := m.Extra[matter.MatterKey]
+	if name == "" {
+		return
+	}
+	configs, err := matter.LoadFromProject(projectRoot)
+	if err != nil {
+		fmt.Fprintf(warnOut, "spore notify-matter-spawn %s: matter load: %v\n", slug, err)
+		return
+	}
+	var cfg *matter.Config
+	for i := range configs {
+		if configs[i].Name == name && configs[i].Enabled {
+			cfg = &configs[i]
+			break
+		}
+	}
+	if cfg == nil {
+		return
+	}
+	matters, err := matter.FromConfig([]matter.Config{*cfg})
+	if err != nil {
+		fmt.Fprintf(warnOut, "spore notify-matter-spawn %s: matter %s: %v\n", slug, name, err)
+		return
+	}
+	if len(matters) == 0 {
+		return
+	}
+	if err := matters[0].OnSpawn(context.Background(), slug, copyExtra(m.Extra)); err != nil {
+		fmt.Fprintf(warnOut, "spore notify-matter-spawn %s: matter %s OnSpawn: %v\n", slug, name, err)
 	}
 }
 

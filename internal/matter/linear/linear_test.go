@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -20,11 +21,23 @@ import (
 // drive the Sync paths. State and issues are mutable so a test can
 // verify a transition mutation actually moved the issue.
 type stubLinear struct {
-	t      *testing.T
-	team   string
-	states map[string]string // name -> id
-	issues map[string]*stubIssue
-	calls  int
+	t        *testing.T
+	team     string
+	states   map[string]string // name -> id
+	issues   map[string]*stubIssue
+	comments map[string][]stubComment // identifier -> comments, oldest first
+	calls    int
+}
+
+// stubComment is the test-side shape of a Linear comment. Identifier
+// keys the parent issue (matches comments map). CreatedAt is the
+// server-side timestamp the cursor compares against.
+type stubComment struct {
+	ID         string
+	Body       string
+	URL        string
+	AuthorName string
+	CreatedAt  time.Time
 }
 
 type stubIssue struct {
@@ -47,7 +60,8 @@ func newStub(t *testing.T) *stubLinear {
 			"In Progress": "state-doing",
 			"Done":        "state-done",
 		},
-		issues: map[string]*stubIssue{},
+		issues:   map[string]*stubIssue{},
+		comments: map[string][]stubComment{},
 	}
 }
 
@@ -107,6 +121,8 @@ func (s *stubLinear) handler() http.HandlerFunc {
 			s.respondIssueUpdate(w, body.Variables)
 		case strings.Contains(body.Query, "issues("):
 			s.respondIssues(w, body.Variables)
+		case strings.Contains(body.Query, "IssueComments"):
+			s.respondComments(w, body.Variables)
 		default:
 			http.Error(w, "unrecognised query: "+body.Query, http.StatusBadRequest)
 		}
@@ -184,6 +200,47 @@ func (s *stubLinear) respondIssueUpdate(w http.ResponseWriter, vars map[string]a
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// respondComments serves the IssueComments query the comment-projection
+// path issues. The test sets s.comments[<identifier>] to the comments
+// it wants returned for a given ticket, so production code's
+// fetchComments($id, $since) returns only the comments with
+// CreatedAt strictly greater than $since.
+func (s *stubLinear) respondComments(w http.ResponseWriter, vars map[string]any) {
+	id, _ := vars["id"].(string)
+	sinceStr, _ := vars["since"].(string)
+	since, _ := time.Parse(time.RFC3339Nano, sinceStr)
+
+	type user struct {
+		Name string `json:"name"`
+	}
+	type node struct {
+		ID        string    `json:"id"`
+		Body      string    `json:"body"`
+		URL       string    `json:"url"`
+		CreatedAt time.Time `json:"createdAt"`
+		User      user      `json:"user"`
+	}
+	var nodes []node
+	for _, c := range s.comments[id] {
+		if !since.IsZero() && !c.CreatedAt.After(since) {
+			continue
+		}
+		nodes = append(nodes, node{
+			ID: c.ID, Body: c.Body, URL: c.URL,
+			CreatedAt: c.CreatedAt,
+			User:      user{Name: c.AuthorName},
+		})
+	}
+	resp := map[string]any{
+		"data": map[string]any{
+			"issue": map[string]any{
+				"comments": map[string]any{"nodes": nodes},
+			},
+		},
+	}
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 func newSource(t *testing.T, srvURL string) *Source {
 	t.Helper()
 	t.Setenv("LINEAR_API_KEY", "lin_test")
@@ -201,7 +258,7 @@ func newSource(t *testing.T, srvURL string) *Source {
 	return src
 }
 
-func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
+func TestSyncProjectsTasksWithoutFlippingState(t *testing.T) {
 	stub := newStub(t)
 	stub.addReady("issue-uuid-1", "MAR-12", "Wire up onboarding email", "Send welcome email on signup.")
 	stub.addReady("issue-uuid-2", "MAR-13", "Crash on empty cart", "Repro: open cart without items.")
@@ -220,9 +277,13 @@ func TestSyncCreatesTasksAndPushesReady(t *testing.T) {
 		t.Errorf("Sync = (created=%d, updated=%d), want (2, 0)", created, updated)
 	}
 
+	// Sync MUST leave Linear state alone: the rover-claim signal
+	// (OnSpawn) owns the Ready -> In Progress transition. A pre-
+	// MCOM-85 Sync flipped issues here at projection time and the
+	// kanban no longer matched reality.
 	for id, iss := range stub.issues {
-		if iss.StateID != stub.states["In Progress"] {
-			t.Errorf("issue %s state = %s, want In Progress", id, iss.StateID)
+		if iss.StateID != stub.states["Ready"] {
+			t.Errorf("issue %s state = %s, want Ready (Sync must not flip)", id, iss.StateID)
 		}
 	}
 
@@ -418,6 +479,81 @@ func TestSyncRecognisesLegacyLinearKey(t *testing.T) {
 	}
 	if iss.StateID != stub.states["Done"] {
 		t.Errorf("legacy task should have pushed Done, got state %q", iss.StateID)
+	}
+}
+
+func TestOnSpawnFlipsReadyToInProgress(t *testing.T) {
+	stub := newStub(t)
+	iss := stub.addReady("issue-uuid-50", "MAR-50", "Claim me", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnSpawn(context.Background(), "claim-me", map[string]string{
+		matter.MatterKey:   "linear",
+		matter.MatterIDKey: "MAR-50",
+	})
+	if err != nil {
+		t.Fatalf("OnSpawn: %v", err)
+	}
+	if iss.StateID != stub.states["In Progress"] {
+		t.Errorf("OnSpawn should have flipped issue to In Progress, got state %q", iss.StateID)
+	}
+}
+
+func TestOnSpawnIdempotentForAlreadyInProgress(t *testing.T) {
+	stub := newStub(t)
+	iss := stub.addReady("issue-uuid-51", "MAR-51", "Already claimed", "")
+	iss.StateID = stub.states["In Progress"]
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnSpawn(context.Background(), "already-claimed", map[string]string{
+		matter.MatterKey:   "linear",
+		matter.MatterIDKey: "MAR-51",
+	})
+	if err != nil {
+		t.Fatalf("OnSpawn (idempotent): %v", err)
+	}
+	if iss.StateID != stub.states["In Progress"] {
+		t.Errorf("issue should remain In Progress, got %q", iss.StateID)
+	}
+}
+
+func TestOnSpawnIgnoresUnrelatedMatter(t *testing.T) {
+	stub := newStub(t)
+	stub.addReady("issue-uuid-52", "MAR-52", "Wrong adapter", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	err := src.OnSpawn(context.Background(), "wrong-adapter", map[string]string{
+		matter.MatterKey:   "jira",
+		matter.MatterIDKey: "MAR-52",
+	})
+	if err != nil {
+		t.Fatalf("OnSpawn: %v", err)
+	}
+	if stub.calls != 0 {
+		t.Errorf("OnSpawn should make 0 GraphQL calls when matter != linear, got %d", stub.calls)
+	}
+}
+
+func TestOnSpawnNoOpWithoutID(t *testing.T) {
+	stub := newStub(t)
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	src := newSource(t, srv.URL)
+	if err := src.OnSpawn(context.Background(), "no-id", map[string]string{}); err != nil {
+		t.Fatalf("OnSpawn: %v", err)
+	}
+	if stub.calls != 0 {
+		t.Errorf("want 0 calls, got %d", stub.calls)
 	}
 }
 
