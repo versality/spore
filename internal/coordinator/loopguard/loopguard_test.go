@@ -122,6 +122,93 @@ func TestReset(t *testing.T) {
 	}
 }
 
+// TestCheckFPBugAVoluntaryWrapsDoNotTrip pins the regression for state.md
+// "Bug A": clean poke-driven respawns (Stop hook ran, agent killed the
+// session voluntarily) all share the respawn ledger with crash boots.
+// Without a kind distinction, N clean wraps in <Window trip the breaker
+// even though nothing crashed. The fixture mirrors the bash acceptance
+// criterion (4 voluntary wraps in 60s -> exit 0).
+func TestCheckFPBugAVoluntaryWrapsDoNotTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{StateDir: dir, MaxRespawns: 3, Window: time.Minute, Cooldown: time.Minute}
+
+	now := time.Now().UTC()
+	for i := 0; i < 4; i++ {
+		err := Record(cfg, RespawnEvent{
+			Timestamp: now.Add(-time.Duration(i) * time.Second),
+			SessionID: "wrap",
+			Kind:      KindVoluntary,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s, err := Check(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Tripped {
+		t.Fatalf("voluntary wraps must not trip the breaker, got Tripped=true (recent=%d)", s.RecentCount)
+	}
+	if s.RecentCount != 0 {
+		t.Errorf("RecentCount = %d, want 0 (voluntary events excluded)", s.RecentCount)
+	}
+	if _, err := os.Stat(tripMarkerPath(dir)); !os.IsNotExist(err) {
+		t.Error("trip marker must not be written for voluntary-only wraps")
+	}
+}
+
+// TestCheckMixedCountsOnlyCrashes covers the second bash acceptance:
+// 2 voluntary + 2 crash with N=3 -> not tripped (only 2 crashes count).
+func TestCheckMixedCountsOnlyCrashes(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{StateDir: dir, MaxRespawns: 3, Window: time.Minute, Cooldown: time.Minute}
+
+	now := time.Now().UTC()
+	Record(cfg, RespawnEvent{Timestamp: now.Add(-1 * time.Second), Kind: KindVoluntary})
+	Record(cfg, RespawnEvent{Timestamp: now.Add(-2 * time.Second), Kind: KindVoluntary})
+	Record(cfg, RespawnEvent{Timestamp: now.Add(-3 * time.Second)})
+	Record(cfg, RespawnEvent{Timestamp: now.Add(-4 * time.Second)})
+
+	s, err := Check(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Tripped {
+		t.Fatal("expected not tripped: 2 crashes < threshold 3")
+	}
+	if s.RecentCount != 2 {
+		t.Errorf("RecentCount = %d, want 2 (crashes only)", s.RecentCount)
+	}
+}
+
+// TestCheckCrashesStillTripWithVoluntaryNoise pins that voluntary rows
+// neither shadow nor cancel real crashes once the threshold is crossed.
+func TestCheckCrashesStillTripWithVoluntaryNoise(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{StateDir: dir, MaxRespawns: 3, Window: time.Minute, Cooldown: time.Minute}
+
+	now := time.Now().UTC()
+	for i := 0; i < 5; i++ {
+		Record(cfg, RespawnEvent{Timestamp: now.Add(-time.Duration(i) * time.Second), Kind: KindVoluntary})
+	}
+	for i := 0; i < 3; i++ {
+		Record(cfg, RespawnEvent{Timestamp: now.Add(-time.Duration(i) * time.Second)})
+	}
+
+	s, err := Check(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Tripped {
+		t.Fatal("expected tripped: 3 crash respawns >= threshold 3 regardless of voluntary noise")
+	}
+	if s.RecentCount != 3 {
+		t.Errorf("RecentCount = %d, want 3 (crashes only)", s.RecentCount)
+	}
+}
+
 func TestLedgerPath(t *testing.T) {
 	got := ledgerPath("/tmp/state")
 	want := filepath.Join("/tmp/state", ledgerName)

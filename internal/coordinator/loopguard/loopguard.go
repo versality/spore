@@ -19,6 +19,12 @@ const (
 	DefaultCooldown    = 5 * time.Minute
 	ledgerName         = "respawn-events.jsonl"
 	tripMarkerName     = "loopguard-tripped"
+
+	// KindVoluntary marks a respawn that was preceded by a clean
+	// session wrap (Stop-hook ran, token-monitor reminder honored).
+	// The breaker subtracts voluntary events from the recent count
+	// so legitimate poke-driven respawns do not trip it.
+	KindVoluntary = "voluntary"
 )
 
 type Config struct {
@@ -32,6 +38,9 @@ type RespawnEvent struct {
 	Timestamp time.Time `json:"ts"`
 	SessionID string    `json:"session_id,omitempty"`
 	Reason    string    `json:"reason,omitempty"`
+	// Kind is "" (default, treated as crash respawn) or
+	// KindVoluntary. Crashes drive the breaker; voluntaries do not.
+	Kind string `json:"kind,omitempty"`
 }
 
 type Status struct {
@@ -117,13 +126,20 @@ func Check(cfg Config) (Status, error) {
 		return Status{}, err
 	}
 
+	crashes := 0
+	for _, ev := range events {
+		if ev.Kind != KindVoluntary {
+			crashes++
+		}
+	}
+
 	s := Status{
-		RecentCount:   len(events),
+		RecentCount:   crashes,
 		WindowSeconds: int(cfg.Window.Seconds()),
 		MaxRespawns:   cfg.MaxRespawns,
 	}
 
-	if len(events) >= cfg.MaxRespawns {
+	if crashes >= cfg.MaxRespawns {
 		s.Tripped = true
 		s.TrippedAt = now
 		f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)

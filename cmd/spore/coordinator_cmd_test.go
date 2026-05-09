@@ -313,3 +313,45 @@ func TestRunCoordinatorTokenMonitorOkWritesLedger(t *testing.T) {
 		t.Errorf("expected sid-ok in ledger, got %q", string(body))
 	}
 }
+
+// TestRunCoordinatorTokenMonitorHardFires is the stop-hook integration
+// test for the hard-cap path: a transcript above hard cap fires a
+// hard reminder regardless of soft-marker state, exits 2, and lands a
+// hard_fired=true ledger row. Closes the gap between the soft-cap +
+// ok-band tests above and the worker-side TokenMonitorWrap coverage.
+func TestRunCoordinatorTokenMonitorHardFires(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "coord")
+	inbox := filepath.Join(stateDir, "proj", "inbox")
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", stateDir)
+	t.Setenv("SPORE_TASK_INBOX", inbox)
+
+	transcriptFile := filepath.Join(dir, "session.jsonl")
+	line := `{"role":"assistant","usage":{"input_tokens":195000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`
+	if err := os.WriteFile(transcriptFile, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"session_id":"sid-hard","transcript_path":"` + transcriptFile + `"}`
+	code, stderr := captureCoordinatorTokenMonitor(t, payload)
+	if code != 2 {
+		t.Fatalf("expected exit 2 on hard, got %d (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stderr, "COORDINATOR TOKEN MONITOR (hard)") {
+		t.Errorf("expected hard reminder in stderr, got %q", stderr)
+	}
+	if !strings.Contains(stderr, "tmux kill-session") {
+		t.Errorf("expected wrap-up instruction in stderr, got %q", stderr)
+	}
+	ledger := filepath.Join(stateDir, "token-monitor.jsonl")
+	body, err := os.ReadFile(ledger)
+	if err != nil {
+		t.Fatalf("expected ledger row, got read err %v", err)
+	}
+	if !strings.Contains(string(body), `"hard_fired":true`) {
+		t.Errorf("expected hard_fired:true in ledger, got %q", string(body))
+	}
+	if !strings.Contains(string(body), `"session_id":"sid-hard"`) {
+		t.Errorf("expected sid-hard in ledger, got %q", string(body))
+	}
+}
