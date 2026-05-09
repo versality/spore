@@ -166,3 +166,150 @@ func tail(s string, n int) string {
 	}
 	return s[len(s)-n:]
 }
+
+// captureCoordinatorTokenMonitor mirrors the worker-side helper: pipes
+// `input` through stdin and captures stderr, so the test can assert exit
+// code + reminder body without touching the real fds.
+func captureCoordinatorTokenMonitor(t *testing.T, input string) (code int, stderr string) {
+	t.Helper()
+
+	origIn, origOut, origErr := os.Stdin, os.Stdout, os.Stderr
+	t.Cleanup(func() { os.Stdin, os.Stdout, os.Stderr = origIn, origOut, origErr })
+
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdin: %v", err)
+	}
+	if _, err := inW.Write([]byte(input)); err != nil {
+		t.Fatalf("write stdin: %v", err)
+	}
+	inW.Close()
+	os.Stdin = inR
+
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+	os.Stdout, os.Stderr = outW, errW
+
+	code = runCoordinatorTokenMonitor(nil)
+
+	outW.Close()
+	errW.Close()
+	io.Copy(io.Discard, outR)
+	var errBuf bytes.Buffer
+	io.Copy(&errBuf, errR)
+	return code, errBuf.String()
+}
+
+func TestRunCoordinatorTokenMonitorSkipNoInbox(t *testing.T) {
+	t.Setenv("SPORE_TASK_INBOX", "")
+	code, stderr := captureCoordinatorTokenMonitor(t, `{"session_id":"s","transcript_path":""}`)
+	if code != 0 {
+		t.Fatalf("expected exit 0 with no inbox, got %d (stderr=%q)", code, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("expected empty stderr on skip, got %q", stderr)
+	}
+}
+
+// Regression: prior to spore commit 50443d7, the coordinator inbox
+// gate read $SKYBOT_INBOX. After the rename, only $SPORE_TASK_INBOX is
+// honoured. Pin that contract: setting only the legacy env still
+// produces a silent skip (no ledger row, no fire). Catches a future
+// reintroduction of the legacy alias.
+func TestRunCoordinatorTokenMonitorIgnoresLegacyAlias(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "coord")
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", stateDir)
+	t.Setenv("SKYBOT_INBOX", filepath.Join(stateDir, "proj", "inbox"))
+	t.Setenv("SPORE_TASK_INBOX", "")
+
+	transcriptFile := filepath.Join(dir, "session.jsonl")
+	line := `{"role":"assistant","usage":{"input_tokens":160000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`
+	if err := os.WriteFile(transcriptFile, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"session_id":"sid","transcript_path":"` + transcriptFile + `"}`
+	code, stderr := captureCoordinatorTokenMonitor(t, payload)
+	if code != 0 {
+		t.Fatalf("expected exit 0 (silent skip) when only SKYBOT_INBOX set, got %d (stderr=%q)", code, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("expected empty stderr, got %q", stderr)
+	}
+	ledger := filepath.Join(stateDir, "token-monitor.jsonl")
+	if _, err := os.Stat(ledger); err == nil {
+		t.Errorf("expected no ledger when only legacy SKYBOT_INBOX is set; ledger exists at %s", ledger)
+	}
+}
+
+func TestRunCoordinatorTokenMonitorSoftFires(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "coord")
+	inbox := filepath.Join(stateDir, "proj", "inbox")
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", stateDir)
+	t.Setenv("SPORE_TASK_INBOX", inbox)
+
+	transcriptFile := filepath.Join(dir, "session.jsonl")
+	line := `{"role":"assistant","usage":{"input_tokens":160000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`
+	if err := os.WriteFile(transcriptFile, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"session_id":"sid-soft","transcript_path":"` + transcriptFile + `"}`
+	code, stderr := captureCoordinatorTokenMonitor(t, payload)
+	if code != 2 {
+		t.Fatalf("expected exit 2 on soft, got %d (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stderr, "COORDINATOR TOKEN MONITOR (soft)") {
+		t.Errorf("expected soft reminder in stderr, got %q", stderr)
+	}
+	ledger := filepath.Join(stateDir, "token-monitor.jsonl")
+	body, err := os.ReadFile(ledger)
+	if err != nil {
+		t.Fatalf("expected ledger row, got read err %v", err)
+	}
+	if !strings.Contains(string(body), `"soft_fired":true`) {
+		t.Errorf("expected soft_fired:true in ledger, got %q", string(body))
+	}
+	if !strings.Contains(string(body), `"session_id":"sid-soft"`) {
+		t.Errorf("expected sid-soft in ledger, got %q", string(body))
+	}
+}
+
+func TestRunCoordinatorTokenMonitorOkWritesLedger(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "coord")
+	inbox := filepath.Join(stateDir, "proj", "inbox")
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", stateDir)
+	t.Setenv("SPORE_TASK_INBOX", inbox)
+
+	transcriptFile := filepath.Join(dir, "session.jsonl")
+	line := `{"role":"assistant","usage":{"input_tokens":50000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`
+	if err := os.WriteFile(transcriptFile, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"session_id":"sid-ok","transcript_path":"` + transcriptFile + `"}`
+	code, stderr := captureCoordinatorTokenMonitor(t, payload)
+	if code != 0 {
+		t.Fatalf("expected exit 0 below cap, got %d (stderr=%q)", code, stderr)
+	}
+	ledger := filepath.Join(stateDir, "token-monitor.jsonl")
+	body, err := os.ReadFile(ledger)
+	if err != nil {
+		t.Fatalf("expected ledger row at every Stop, got read err %v", err)
+	}
+	if !strings.Contains(string(body), `"soft_fired":false`) || !strings.Contains(string(body), `"hard_fired":false`) {
+		t.Errorf("expected soft_fired:false hard_fired:false in ok-band row, got %q", string(body))
+	}
+	if !strings.Contains(string(body), `"session_id":"sid-ok"`) {
+		t.Errorf("expected sid-ok in ledger, got %q", string(body))
+	}
+}
