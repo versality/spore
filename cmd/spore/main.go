@@ -39,6 +39,7 @@ Commands:
   lint       Run portable lints over the working tree.
   hooks      Install or run claude-code / git hooks.
   budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
+  account    Per-driver multi-account store, switch, and auto-pick.
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
   worker     Worker support hooks (token-monitor).
   event      Canonical fleet event bus (publish / tail / watch).
@@ -162,6 +163,8 @@ func main() {
 		os.Exit(runInstall(args))
 	case "budget":
 		os.Exit(runBudget(args))
+	case "account":
+		os.Exit(runAccount(args))
 	case "coordinator":
 		os.Exit(runCoordinator(args))
 	case "worker":
