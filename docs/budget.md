@@ -3,7 +3,7 @@
 `spore budget` aggregates Anthropic spend across all claude-code
 sessions for the current user on this host into rolling short (5h)
 and long (7d) windows, then surfaces threshold-band advice
-("ok"/"tighten"/"ration") for stop-hook gating and one-line summaries.
+("ok"/"ration") for stop-hook gating and one-line summaries.
 
 ## Subcommands
 
@@ -22,14 +22,13 @@ spore budget debug-usage   Hit /usage once and print raw + parsed response
 
 Two rolling windows, each with its own cap:
 
-| Window | Default cap | Tighten at | Ration at |
-| ------ | ----------- | ---------- | --------- |
-| short (5h) | $250 | 80% | 90% |
-| long (7d)  | $2000 | 80% | 80% |
+| Window | Default cap | Ration at |
+| ------ | ----------- | --------- |
+| short (5h) | $250 | 90% |
+| long (7d)  | $2000 | 90% |
 
 The advice band is the OR of the two windows: if either window is in
-"ration", the advice is `ration`. Otherwise, if either is in
-"tighten", the advice is `tighten`. Otherwise `ok`. Per-window bands
+"ration", the advice is `ration`. Otherwise `ok`. Per-window bands
 are tracked separately for the stop-hook fresh-crossing detector.
 
 Caps are configurable via `AGENT_BUDGET_SHORT_CAP` and
@@ -127,7 +126,7 @@ code and stderr.
 | Exit | Meaning |
 | ---- | ------- |
 | 0    | No fresh band crossing, or band == "ok". Silent; nothing on stderr. |
-| 2    | Fresh crossing into "tighten" or "ration". Prints a one-line reminder on stderr. |
+| 2    | Fresh crossing into "ration". Prints a one-line reminder on stderr. |
 
 Spore's stop-hook does not gate on an orchestrator-identity env: the
 consumer wires the hook into their settings.json only for the agents
@@ -137,19 +136,17 @@ hook config, not in this binary.
 
 ### Marker semantics
 
-`spore budget` keeps per-window-per-band markers under
+`spore budget` keeps per-window ration markers under
 `$AGENT_BUDGET_STATE_DIR/markers/`:
 
 ```
-short-tighten  short-ration  long-tighten  long-ration
+short-ration  long-ration
 ```
 
 Invariants:
 
-- band == ok:      both markers absent.
-- band == tighten: tighten marker present, ration marker absent.
-- band == ration:  both markers present (so a future drop back to
-  tighten does not re-fire the tighten reminder).
+- band == ok:     ration marker absent.
+- band == ration: ration marker present.
 
 A "fresh crossing" is defined as creating a marker that was absent on
 entry. Drop a marker by hand to re-arm the reminder for a window.
@@ -157,14 +154,13 @@ entry. Drop a marker by hand to re-arm the reminder for a window.
 ### Reminder text
 
 ```
-AGENT BUDGET (tighten): short=82% (resets in 1h12m), long=18%.
-Defer non-urgent runner starts. Route lightweight turns through a cheaper
-model. Reserve top-tier models for tool-use loops and code edits.
+AGENT BUDGET (ration): short=92% (resets in 1h12m), long=18%.
+Stop spawning runners this window. Only spend top-tier model time on turns
+that genuinely need it. Post the blocker and idle until reset otherwise.
 ```
 
-The "(resets in ...)" hint appears only on the binding window for the
-band - the one whose frac actually crossed. The advice tail is band-
-specific.
+The "(resets in ...)" hint appears only on the binding window - the
+one whose frac actually crossed.
 
 ## State file
 

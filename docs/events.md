@@ -104,7 +104,7 @@ A non-zero handler exit logs to stderr but does not stop the watcher.
     --source token-monitor --kind token-monitor:cap \
     --level warn --slug "$WT_SLUG" \
     --data "$(jq -nc --arg pct "$PCT" '{pct: ($pct|tonumber)}')" \
-    -- "short window crossed tighten"
+    -- "short window crossed ration"
   ```
 
 - **Go consumers**: import `github.com/versality/spore/internal/event`

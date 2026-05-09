@@ -250,8 +250,8 @@ func TestRefreshSubscriptionPrefersUsage(t *testing.T) {
 	if s.UsageSnapshot == nil {
 		t.Fatal("usage_snapshot not persisted")
 	}
-	if s.Advice != "tighten" {
-		t.Errorf("advice: got %q want tighten (short=82%%)", s.Advice)
+	if s.Advice != "ok" {
+		t.Errorf("advice: got %q want ok (short=82%%, long=40%%; ration threshold 90%%)", s.Advice)
 	}
 }
 

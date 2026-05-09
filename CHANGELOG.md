@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **BREAKING:** `spore budget` drops the `tighten` advice band entirely;
+  `Advice()`, `query`, `summary`, the stop-hook, and `bandFor` now emit
+  only `"ok"` or `"ration"`. The mid-band reminder is gone; the stop-hook
+  fires only on a fresh ration crossing. `spore fleet replenish-hook`
+  skips reconcile only on `ration`. Marker layout under
+  `$AGENT_BUDGET_STATE_DIR/markers/` collapses to `<window>-ration` only;
+  any pre-existing `<window>-tighten` markers are stale and harmless to
+  remove. Consumers that branched on `advice == "tighten"` must drop
+  that arm.
 - `matter.linear`: Sync now projects new Linear comments per active
   ticket as tell-envelope JSON files in the matching rover slug's
   spore inbox dir, so an operator commenting on a Linear ticket

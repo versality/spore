@@ -35,16 +35,14 @@ import (
 )
 
 const (
-	shortWindow      = 5 * time.Hour
-	longWindow       = 7 * 24 * time.Hour
-	defaultShortCap  = 250.0
-	defaultLongCap   = 2000.0
-	tightenShortFrac = 0.8
-	tightenLongFrac  = 0.8
-	rationShortFrac  = 0.9
-	rationLongFrac   = 0.9
-	stateFileMode    = 0o600
-	stateDirMode     = 0o700
+	shortWindow     = 5 * time.Hour
+	longWindow      = 7 * 24 * time.Hour
+	defaultShortCap = 250.0
+	defaultLongCap  = 2000.0
+	rationShortFrac = 0.9
+	rationLongFrac  = 0.9
+	stateFileMode   = 0o600
+	stateDirMode    = 0o700
 )
 
 type message struct {
@@ -534,9 +532,6 @@ func adviceFor(shortFrac, longFrac float64) string {
 	if shortFrac >= rationShortFrac || longFrac >= rationLongFrac {
 		return "ration"
 	}
-	if shortFrac >= tightenShortFrac || longFrac >= tightenLongFrac {
-		return "tighten"
-	}
 	return "ok"
 }
 
@@ -633,15 +628,11 @@ func costForUsage(model string, u *usageBlock) (cost float64, totalTokens int64)
 // bandFor maps a single window's frac to its band. Mirrors the
 // OR-of-windows logic in adviceFor but applied per window so the
 // stop-hook can detect per-window crossings independently.
-func bandFor(frac, tighten, ration float64) string {
-	switch {
-	case frac >= ration:
+func bandFor(frac, ration float64) string {
+	if frac >= ration {
 		return "ration"
-	case frac >= tighten:
-		return "tighten"
-	default:
-		return "ok"
 	}
+	return "ok"
 }
 
 func markersDir() (string, error) {
@@ -652,30 +643,20 @@ func markersDir() (string, error) {
 	return filepath.Join(d, "markers"), nil
 }
 
-// updateMarkers reconciles the on-disk per-window-per-band markers
-// with the current band and reports whether this is a fresh crossing
-// for window. Marker invariants:
-//   - band == "ok":      both tighten + ration markers absent.
-//   - band == "tighten": tighten marker present, ration marker absent.
-//   - band == "ration":  both markers present (so a future drop to
-//     tighten does not re-fire the tighten reminder).
+// updateMarkers reconciles the on-disk per-window ration marker with
+// the current band and reports whether this is a fresh crossing for
+// window. Marker invariants:
+//   - band == "ok":     ration marker absent.
+//   - band == "ration": ration marker present.
 //
 // "Fresh" = the marker for the current band did not exist on entry.
 func updateMarkers(dir, window, band string) (bool, error) {
-	tighten := filepath.Join(dir, window+"-tighten")
 	ration := filepath.Join(dir, window+"-ration")
 	switch band {
 	case "ok":
-		_ = os.Remove(tighten)
 		_ = os.Remove(ration)
 		return false, nil
-	case "tighten":
-		_ = os.Remove(ration)
-		return createMarker(tighten)
 	case "ration":
-		if _, err := createMarker(tighten); err != nil {
-			return false, err
-		}
 		return createMarker(ration)
 	}
 	return false, nil
@@ -694,28 +675,18 @@ func createMarker(path string) (bool, error) {
 }
 
 func reminderTextFor(s *state, band string) string {
-	tail := map[string]string{
-		"tighten": "Defer non-urgent runner starts. Route lightweight turns through a cheaper model. Reserve top-tier models for tool-use loops and code edits.",
-		"ration":  "Stop spawning runners this window. Only spend top-tier model time on turns that genuinely need it. Post the blocker and idle until reset otherwise.",
-	}
-	short := windowFragment("short", s.Short, shortWindow, band, tightenShortFrac, rationShortFrac)
-	long := windowFragment("long", s.Long, longWindow, band, tightenLongFrac, rationLongFrac)
-	return fmt.Sprintf("AGENT BUDGET (%s): %s, %s.\n%s", band, short, long, tail[band])
+	tail := "Stop spawning runners this window. Only spend top-tier model time on turns that genuinely need it. Post the blocker and idle until reset otherwise."
+	short := windowFragment("short", s.Short, shortWindow, rationShortFrac)
+	long := windowFragment("long", s.Long, longWindow, rationLongFrac)
+	return fmt.Sprintf("AGENT BUDGET (%s): %s, %s.\n%s", band, short, long, tail)
 }
 
 // windowFragment renders one window's slice of the reminder, appending
 // "(resets in ...)" only when this window is the one that triggered
-// band. Without that gate every reminder would carry two reset hints;
-// the brief prefers the binding window only.
-func windowFragment(label string, w windowState, dur time.Duration, band string, tighten, ration float64) string {
-	binding := false
-	switch band {
-	case "ration":
-		binding = w.Frac >= ration
-	case "tighten":
-		binding = w.Frac >= tighten
-	}
-	if binding {
+// the ration band. Without that gate every reminder would carry two
+// reset hints; the brief prefers the binding window only.
+func windowFragment(label string, w windowState, dur time.Duration, ration float64) string {
+	if w.Frac >= ration {
 		return fmt.Sprintf("%s=%d%% (resets in %s)", label, pct(w.Frac), windowResetHint(w, dur))
 	}
 	return fmt.Sprintf("%s=%d%%", label, pct(w.Frac))
@@ -724,8 +695,7 @@ func windowFragment(label string, w windowState, dur time.Duration, band string,
 // StopHook is the spore-budget Stop-hook entry. It refreshes state,
 // recomputes bands, and returns the desired process exit code:
 //   - 0 silent (no fresh band crossing or band == ok).
-//   - 2 with a reminder line on stderr (fresh crossing into tighten or
-//     ration).
+//   - 2 with a reminder line on stderr (fresh crossing into ration).
 //
 // Spore does not gate this on an orchestrator-identity env: consumers
 // wire the hook into settings.json only for the agents they want
@@ -751,8 +721,8 @@ func StopHook() int {
 		return 0
 	}
 
-	shortBand := bandFor(s.Short.Frac, tightenShortFrac, rationShortFrac)
-	longBand := bandFor(s.Long.Frac, tightenLongFrac, rationLongFrac)
+	shortBand := bandFor(s.Short.Frac, rationShortFrac)
+	longBand := bandFor(s.Long.Frac, rationLongFrac)
 
 	freshShort, _ := updateMarkers(dir, "short", shortBand)
 	freshLong, _ := updateMarkers(dir, "long", longBand)

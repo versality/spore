@@ -40,7 +40,7 @@ Subcommands:
   replenish-hook  Stop-hook variant of reconcile: reads context from env
                   ($SPORE_TASK_INBOX, $WT_PROJECT, $WT_FLEET_FLOOR), no-ops in
                   non-coordinator sessions, skips when the budget advice
-                  is tighten/ration, and never propagates errors.
+                  is ration, and never propagates errors.
   enable          Create the kill-switch flag (the reconciler resumes
                   spawning on the next pass).
   disable         Remove the kill-switch flag (the reconciler stops
@@ -225,7 +225,7 @@ func resolveMaxWorkers(flagVal int, projectRoot string) (int, error) {
 //   - swallow stdin (claude-code feeds the hook payload there)
 //   - no-op when the firing session is not the coordinator (per
 //     $SPORE_TASK_INBOX vs $SKYHELM_STATE_DIR / $SPORE_COORDINATOR_STATE_DIR)
-//   - skip the spawn pass when budget advice is "tighten" / "ration"
+//   - skip the spawn pass when budget advice is "ration"
 //   - never exit non-zero: a failing reconcile must not block the Stop
 //     hook
 //
@@ -242,7 +242,7 @@ func runFleetReplenishHook(args []string) error {
 		return nil
 	}
 
-	if a := budget.Advice(); a == "tighten" || a == "ration" {
+	if a := budget.Advice(); a == "ration" {
 		fmt.Fprintf(os.Stderr, "replenish-hook: skipping reconcile (budget advice=%s)\n", a)
 		return nil
 	}
