@@ -42,6 +42,7 @@ Commands:
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
   worker     Worker support hooks (token-monitor).
   event      Canonical fleet event bus (publish / tail / watch).
+  shrink     Harness-thinness metrics (probe).
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
@@ -167,6 +168,8 @@ func main() {
 		os.Exit(runWorker(args))
 	case "event":
 		os.Exit(runEvent(args))
+	case "shrink":
+		os.Exit(runShrink(args))
 	default:
 		fmt.Fprintf(os.Stderr, "spore: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
