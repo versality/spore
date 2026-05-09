@@ -47,9 +47,17 @@ const lintUsage = `spore lint - run portable lints over the working tree
 
 Usage:
   spore lint [--root <path>]
+  spore lint bash-net-positive [--repo-root <path>] [--base-ref <ref>] [--format text|json]
 
 Flags:
   --root   Repo root to lint. Defaults to the current directory.
+
+Subcommands:
+  bash-net-positive  Refuse if harness/ bash LOC grows vs base ref, or
+                     a new harness/*.sh is not listed under
+                     keep-here-glue in docs/harness-inventory.md.
+                     Override with "allow-bash-net-positive: <reason>"
+                     in any commit body in the diff range.
 
 Exits non-zero when any lint reports an issue.
 `
