@@ -197,9 +197,13 @@ See [nixosModules/spore-fleet.nix](nixosModules/spore-fleet.nix).
 
 The fleet reconciler picks a worker agent (Claude, Codex, or any
 binary on PATH) for each task it spawns. Default behaviour without
-`spore.toml` is "all Claude". To run a mix, declare a default,
-optionally a ratio, and optionally rules keyed on a task's
-`complexity:` extra:
+`spore.toml` is "all Claude". Run `spore init` to scaffold a
+documented default `spore.toml` (worker ratio plus commented stubs
+for `[coordinator]`, `[align]`, and `[matter.linear]`). The command
+is a no-op on an existing file; pass `--force` to overwrite or
+`--section <name>` to append a single missing block. To run a mix,
+declare a default, optionally a ratio, and optionally rules keyed on
+a task's `complexity:` extra:
 
 ```toml
 # spore.toml
