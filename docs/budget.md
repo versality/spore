@@ -3,7 +3,7 @@
 `spore budget` aggregates Anthropic spend across all claude-code
 sessions for the current user on this host into rolling short (5h)
 and long (7d) windows, then surfaces threshold-band advice
-("ok"/"tighten"/"ration") for stop-hook gating and one-line summaries.
+("ok"/"tighten") for stop-hook gating and one-line summaries.
 
 ## Subcommands
 
@@ -22,14 +22,13 @@ spore budget debug-usage   Hit /usage once and print raw + parsed response
 
 Two rolling windows, each with its own cap:
 
-| Window | Default cap | Tighten at | Ration at |
-| ------ | ----------- | ---------- | --------- |
-| short (5h) | $250 | 80% | 90% |
-| long (7d)  | $2000 | 80% | 80% |
+| Window | Default cap | Tighten at |
+| ------ | ----------- | ---------- |
+| short (5h) | $250 | 80% |
+| long (7d)  | $2000 | 80% |
 
 The advice band is the OR of the two windows: if either window is in
-"ration", the advice is `ration`. Otherwise, if either is in
-"tighten", the advice is `tighten`. Otherwise `ok`. Per-window bands
+`tighten`, the advice is `tighten`. Otherwise `ok`. Per-window bands
 are tracked separately for the stop-hook fresh-crossing detector.
 
 Caps are configurable via `AGENT_BUDGET_SHORT_CAP` and
@@ -127,7 +126,7 @@ code and stderr.
 | Exit | Meaning |
 | ---- | ------- |
 | 0    | No fresh band crossing, or band == "ok". Silent; nothing on stderr. |
-| 2    | Fresh crossing into "tighten" or "ration". Prints a one-line reminder on stderr. |
+| 2    | Fresh crossing into "tighten". Prints a one-line reminder on stderr. |
 
 Spore's stop-hook does not gate on an orchestrator-identity env: the
 consumer wires the hook into their settings.json only for the agents
@@ -141,15 +140,13 @@ hook config, not in this binary.
 `$AGENT_BUDGET_STATE_DIR/markers/`:
 
 ```
-short-tighten  short-ration  long-tighten  long-ration
+short-tighten  long-tighten
 ```
 
 Invariants:
 
-- band == ok:      both markers absent.
-- band == tighten: tighten marker present, ration marker absent.
-- band == ration:  both markers present (so a future drop back to
-  tighten does not re-fire the tighten reminder).
+- band == ok:      marker absent.
+- band == tighten: marker present.
 
 A "fresh crossing" is defined as creating a marker that was absent on
 entry. Drop a marker by hand to re-arm the reminder for a window.
