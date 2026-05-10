@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- New `spore search nix {packages|options} QUERY` subcommand. Queries
+  the same Elasticsearch backend behind https://search.nixos.org so
+  agents get fast, scriptable nixpkgs / NixOS-option lookup without
+  evaluating the registry. Default output is TSV (attr/version/description
+  for packages, name/type/description for options); `--json` swaps in a
+  structured array. Flags: `-c CHANNEL` (default `unstable`), `-n SIZE`
+  (default 10). Env overrides: `NIXOS_SEARCH_VERSION`,
+  `NIXOS_SEARCH_USER`, `NIXOS_SEARCH_PASS`. Lifted from
+  `nix-config:harness/search-nix.sh`; nix-config keeps a thin shim so
+  the script keeps working.
+
 - `spore install` now also drops the bundled harness shell scripts
   (`auto-commit-tasks.sh`, `hooks-render.sh`, `quiet-run.sh`,
   `report-main-worktree-dirty.sh`) into `<root>/harness/`. These
