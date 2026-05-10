@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	spore "github.com/versality/spore"
@@ -14,6 +17,7 @@ import (
 	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/operatoringress"
+	"github.com/versality/spore/internal/coordinator/queueclassifier"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
@@ -50,6 +54,7 @@ Subcommands:
   operator-ingress UserPromptSubmit hook: persist operator prompt to ledger.
   comm-feedback   UserPromptSubmit hook: log +++/--- to comm-feedback ledger.
   failure-summary  Cross-ledger failure aggregator with recovery actions.
+  queue-classify  Classify task queue rows from frontmatter + state signals.
 `
 
 func runCoordinator(args []string) int {
@@ -88,6 +93,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorCommFeedback(rest)
 	case "failure-summary":
 		return runCoordinatorFailureSummary(rest)
+	case "queue-classify":
+		return runCoordinatorQueueClassify(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -614,4 +621,95 @@ func runCoordinatorLoopGuard(args []string) int {
 	fmt.Printf("loop-guard: ok (recent=%d, max=%d)\n",
 		status.RecentCount, status.MaxRespawns)
 	return 0
+}
+
+func runCoordinatorQueueClassify(args []string) int {
+	fs := flag.NewFlagSet("coordinator queue-classify", flag.ContinueOnError)
+	project := fs.String("project", "", "project root (default: git common-dir parent)")
+	stateFile := fs.String("state", "", "state.md path (default: $SKYHELM_STATE_FILE or $SKYHELM_STATE_DIR/state.md)")
+	activeLive := fs.String("active-live", "", "current active-live count (default: $SKYHELM_QUEUE_ACTIVE_LIVE or 0)")
+	floor := fs.String("floor", "", "fleet occupancy floor (default: $WT_FLEET_FLOOR or 6)")
+	budget := fs.String("budget-advice", "", "budget advice: ok|tighten|ration (default: $SKYHELM_QUEUE_BUDGET_ADVICE or ok)")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator queue-classify:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator queue-classify - classify task queue rows")
+		fmt.Println("  --project DIR        project root (default: git common-dir parent)")
+		fmt.Println("  --state FILE         state.md path")
+		fmt.Println("  --active-live N      current active-live count")
+		fmt.Println("  --floor N            fleet occupancy floor (default 6)")
+		fmt.Println("  --budget-advice X    ok|tighten|ration")
+		fmt.Println("Output: TSV `class\\tslug\\tstatus\\treason\\n`. Exit 0 always.")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator queue-classify [flags]")
+		return 2
+	}
+
+	cfg := queueclassifier.Config{
+		Project:      firstNonEmpty(*project, queueClassifyProject()),
+		StateFile:    *stateFile,
+		ActiveLive:   parseIntDefault(*activeLive, "SKYHELM_QUEUE_ACTIVE_LIVE", 0),
+		Floor:        parseIntDefault(*floor, "WT_FLEET_FLOOR", 0),
+		BudgetAdvice: firstNonEmpty(*budget, os.Getenv("SKYHELM_QUEUE_BUDGET_ADVICE")),
+	}
+
+	rows, err := queueclassifier.Classify(cfg)
+	if err != nil {
+		fmt.Print(queueclassifier.FormatTSV([]queueclassifier.Row{
+			{Class: "classifier-error", Reason: err.Error()},
+		}))
+		return 0
+	}
+	fmt.Print(queueclassifier.FormatTSV(rows))
+	return 0
+}
+
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func parseIntDefault(flagVal, envKey string, fallback int) int {
+	raw := flagVal
+	if raw == "" {
+		raw = os.Getenv(envKey)
+	}
+	if raw == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n < 0 {
+		return fallback
+	}
+	return n
+}
+
+// queueClassifyProject returns the project root from `git
+// rev-parse --git-common-dir`'s parent, or "" when outside a repo.
+func queueClassifyProject() string {
+	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	common := strings.TrimSpace(string(out))
+	if common == "" {
+		return ""
+	}
+	if !filepath.IsAbs(common) {
+		wd, _ := os.Getwd()
+		common = filepath.Join(wd, common)
+	}
+	return filepath.Clean(filepath.Join(common, ".."))
 }
