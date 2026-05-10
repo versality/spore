@@ -4,16 +4,19 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/versality/spore/internal/lints"
 )
 
-// runLint runs every default lint over the working tree and prints
-// findings. Exits 0 when clean, 1 on any issue, 2 on usage error.
+// runLint runs the default lint set or a single named lint over the
+// working tree and prints findings. Exits 0 when clean, 1 on any
+// issue, 2 on usage error.
 func runLint(args []string) int {
 	fs := flag.NewFlagSet("lint", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root to lint")
+	list := fs.Bool("list", false, "list every named lint and exit")
 	help := fs.Bool("h", false, "show help")
 	helpLong := fs.Bool("help", false, "show help")
 	if err := fs.Parse(args); err != nil {
@@ -25,15 +28,33 @@ func runLint(args []string) int {
 		fmt.Print(lintUsage)
 		return 0
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "spore lint: unexpected positional args:", fs.Args())
+	if *list {
+		printLintList(os.Stdout)
+		return 0
+	}
+
+	var toRun []lints.Lint
+	switch fs.NArg() {
+	case 0:
+		toRun = lints.Default()
+	case 1:
+		name := fs.Arg(0)
+		l, ok := lints.Named()[name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "spore lint: unknown lint %q\n\n", name)
+			printLintList(os.Stderr)
+			return 2
+		}
+		toRun = []lints.Lint{l}
+	default:
+		fmt.Fprintln(os.Stderr, "spore lint: expected at most one positional <name>:", fs.Args())
 		return 2
 	}
 
 	bad := false
 	taskEvidenceWarnOnly := lints.EvidenceWarnOnly()
 	var firstErr error
-	for _, l := range lints.Default() {
+	for _, l := range toRun {
 		issues, err := l.Run(*root)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "spore lint: %s: %v\n", l.Name(), err)
@@ -58,6 +79,26 @@ func runLint(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func printLintList(w *os.File) {
+	defaults := map[string]bool{}
+	for _, l := range lints.Default() {
+		defaults[l.Name()] = true
+	}
+	names := make([]string, 0, len(lints.Named()))
+	for n := range lints.Named() {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	fmt.Fprintln(w, "available lints (D = in spore lint default set):")
+	for _, n := range names {
+		marker := " "
+		if defaults[n] {
+			marker = "D"
+		}
+		fmt.Fprintf(w, "  [%s] %s\n", marker, n)
+	}
 }
 
 func prefix(name, msg string) string {

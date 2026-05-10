@@ -49,6 +49,53 @@ func Default() []Lint {
 	}
 }
 
+// Named returns every named lint spore knows about, including those
+// not in Default(). The map keys are stable Lint.Name() values; the
+// values carry default configuration suitable for the nix-config
+// layout (overridable by callers wiring their own struct).
+//
+// Lints not in Default() are project-policy-shaped: they assume a
+// specific layout (docs/todo, harness/tech-debt-rulings.md, the
+// configs/claude/ hooks render pipeline, the nix-config nix eval
+// surfaces, ...). Consumers invoke them by name via
+// `spore lint <name>` after their own opt-in.
+func Named() map[string]Lint {
+	out := map[string]Lint{}
+	for _, l := range Default() {
+		out[l.Name()] = l
+	}
+	for _, l := range []Lint{
+		TaskBrief{},
+		TodoPriority{},
+		NoCrossRepoTasks{
+			ForbiddenSlugs: map[string]string{
+				"spore-":    "~/projects/spore",
+				"marketer-": "~/projects/marketer",
+			},
+			ForbiddenPaths: map[string]string{
+				"~/projects/spore":              "~/projects/spore",
+				"/home/sky/projects/spore":      "~/projects/spore",
+				"github.com/versality/spore":    "~/projects/spore",
+				"~/projects/marketer":           "~/projects/marketer",
+				"/home/sky/projects/marketer":   "~/projects/marketer",
+				"github.com/versality/marketer": "~/projects/marketer",
+			},
+		},
+		Orphans{},
+		OverviewDrift{},
+		PlanFirstRequired{},
+		CodexEffortHighOnly{},
+		HooksDrift{},
+		TechDebtRulings{},
+		TaskDoneZeroCommits{},
+		UserSkillsParity{Hosts: []string{"skypad", "skytower", "skywing"}},
+		CaptureSignalCoverage{},
+	} {
+		out[l.Name()] = l
+	}
+	return out
+}
+
 // listFiles runs `git ls-files` rooted at root. extOnly, when
 // non-empty, filters results to repo-relative paths whose extension is
 // in the set; basenames in extOnly (e.g. "Makefile") match by name.
