@@ -2,7 +2,7 @@
   description = "spore - drop-in harness template for LLM-coding agents";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -19,13 +19,19 @@
       perSystem = flake-utils.lib.eachDefaultSystem (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          # Pin the toolchain to the 1.25 series. nixpkgs.go currently
+          # tracks 1.26.x; both GO-2026-4971 and GO-2026-4918 (stdlib
+          # net) are unfixed there until 1.26.3, which has not landed
+          # in this channel yet. 1.25.10 carries the same fixes.
+          go = pkgs.go_1_25;
+          buildGoModule = pkgs.buildGo125Module;
           version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
           commit =
             if self ? rev then self.rev
             else if self ? dirtyRev then self.dirtyRev
             else "unknown";
 
-          spore = pkgs.buildGoModule {
+          spore = buildGoModule {
             pname = "spore";
             inherit version;
             src = ./.;
@@ -75,8 +81,9 @@
           };
 
           devShells.default = pkgs.mkShell {
-            packages = (with pkgs; [
+            packages = [
               go
+            ] ++ (with pkgs; [
               golangci-lint
               govulncheck
               gopls
@@ -94,7 +101,7 @@
           checks = {
             go-fmt = pkgs.runCommand "spore-go-fmt"
               {
-                nativeBuildInputs = [ pkgs.go ];
+                nativeBuildInputs = [ go ];
               } ''
               cp -r ${./.}/. ./src
               cd src
@@ -109,7 +116,7 @@
             '';
             go-vet = pkgs.runCommand "spore-go-vet"
               {
-                nativeBuildInputs = [ pkgs.go ];
+                nativeBuildInputs = [ go ];
               } ''
               cp -r ${./.}/. ./src
               cd src
@@ -123,7 +130,7 @@
             '';
             golangci-lint = pkgs.runCommand "spore-golangci-lint"
               {
-                nativeBuildInputs = [ pkgs.go pkgs.golangci-lint ];
+                nativeBuildInputs = [ go pkgs.golangci-lint ];
               } ''
               cp -r ${./.}/. ./src
               cd src
@@ -137,7 +144,7 @@
             '';
             go-test = pkgs.runCommand "spore-go-test"
               {
-                nativeBuildInputs = [ pkgs.go pkgs.git pkgs.just ];
+                nativeBuildInputs = [ go pkgs.git pkgs.just ];
               } ''
               cp -r ${./.}/. ./src
               cd src
@@ -151,7 +158,7 @@
             '';
             spore-lint = pkgs.runCommand "spore-lint"
               {
-                nativeBuildInputs = [ pkgs.go pkgs.git ];
+                nativeBuildInputs = [ go pkgs.git ];
               } ''
               cp -r ${./.}/. ./src
               cd src
