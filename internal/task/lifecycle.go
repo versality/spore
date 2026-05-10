@@ -28,7 +28,7 @@ const EvidenceWarnOnlyEnv = "SPORE_EVIDENCE_WARN_ONLY"
 // the per-task tmux session. Defaults to defaultAgentBinary when unset.
 const AgentBinaryEnv = "SPORE_AGENT_BINARY"
 
-const defaultAgentBinary = "claude-code"
+const defaultAgentBinary = "claude"
 
 // CodexModelEnv optionally pins the model for `agent: codex` task
 // launches. Empty lets the codex CLI use its own default.
@@ -37,10 +37,12 @@ const CodexModelEnv = "SPORE_CODEX_MODEL"
 // Start flips status to active and (when starting from backlog) creates
 // the worktree and wt/<slug> branch under <projectRoot>/.worktrees/.
 // In every case it spawns a detached tmux session named
-// "spore/<project>/<slug>" running ${SPORE_AGENT_BINARY:-claude-code}
-// in the worktree, with SPORE_TASK_SLUG=<slug> in the session env.
-// Returns the tmux session name on success.
-func Start(tasksDir, slug string) (string, error) {
+// "spore/<project>/<slug>" running ${SPORE_AGENT_BINARY:-claude} in the
+// worktree, with SPORE_TASK_SLUG=<slug> in the session env. extraEnv
+// adds KEY=VAL pairs to the tmux session env (mirrors `-e KEY=VAL`
+// repeats on tmux new-session). Returns the tmux session name on
+// success.
+func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -74,16 +76,29 @@ func Start(tasksDir, slug string) (string, error) {
 	// replaces it so a resume gets a fresh agent and new-session
 	// does not collide on the name.
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
-	return ensureSession(tasksDir, slug)
+	return ensureSession(tasksDir, slug, extraEnv)
 }
 
 // Ensure makes sure the wt/<slug> branch, worktree, and tmux session
 // for slug exist. Idempotent: missing pieces get created, present
-// ones are left alone. Status is not touched. Used by the fleet
-// reconciler to bring an active task into the running state without
-// flipping its status.
-func Ensure(tasksDir, slug string) (string, error) {
-	return ensureSession(tasksDir, slug)
+// ones are left alone. Status is preserved (never flipped). Refuses
+// when the task file is absent or its status is done. Used by the
+// fleet reconciler to revive an active+no-tmux task without changing
+// its frontmatter. extraEnv mirrors Start.
+func Ensure(tasksDir, slug string, extraEnv []string) (string, error) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	m, _, err := frontmatter.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("parse %s: %w", path, err)
+	}
+	if IsDone(m.Status) {
+		return "", fmt.Errorf("task %s: already done", slug)
+	}
+	return ensureSession(tasksDir, slug, extraEnv)
 }
 
 // Reap kills every tmux session matching slug for the project (the
@@ -369,8 +384,13 @@ func metaToAny(m frontmatter.Meta) map[string]any {
 // ensureSession is the shared idempotent path for Start and Ensure.
 // It creates the worktree + branch when missing (re-attaching to an
 // existing branch when the worktree was removed) and (re)spawns the
-// tmux session when not already alive.
-func ensureSession(tasksDir, slug string) (string, error) {
+// tmux session when not already alive. The session name comes from
+// frontmatter `session:` when set (so external spawners that recorded
+// their own naming convention - e.g. wt-go's "<icon> <project>/<slug>
+// [<tag>]" - keep their name across respawns); otherwise the kernel's
+// "spore/<project>/<slug>" form. extraEnv lands on tmux new-session
+// as additional `-e KEY=VAL` repeats.
+func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	projectRoot, err := projectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return "", err
@@ -405,10 +425,10 @@ func ensureSession(tasksDir, slug string) (string, error) {
 		}
 	}
 
-	if external := meta.Session; external != "" && hasSession(external) {
-		return external, nil
-	}
 	session := tmuxSessionName(projectRoot, slug)
+	if meta.Session != "" {
+		session = meta.Session
+	}
 	if hasSession(session) {
 		return session, nil
 	}
@@ -428,17 +448,24 @@ func ensureSession(tasksDir, slug string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out, err := exec.Command(
-		"tmux", "new-session", "-d",
+	args := []string{
+		"new-session", "-d",
 		"-s", session,
 		"-c", worktree,
-		"-e", "SPORE_TASK_SLUG="+slug,
-		"-e", "SPORE_PROJECT_ROOT="+projectRoot,
-		"-e", "WT_PROJECT="+project,
-		"-e", "SPORE_TASK_INBOX="+inbox,
-		"-e", "SPORE_COORDINATOR_STATE_DIR="+coordinatorState,
-		agent,
-	).CombinedOutput()
+		"-e", "SPORE_TASK_SLUG=" + slug,
+		"-e", "SPORE_PROJECT_ROOT=" + projectRoot,
+		"-e", "WT_PROJECT=" + project,
+		"-e", "SPORE_TASK_INBOX=" + inbox,
+		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
+	}
+	for _, kv := range extraEnv {
+		if kv == "" {
+			continue
+		}
+		args = append(args, "-e", kv)
+	}
+	args = append(args, agent)
+	out, err := exec.Command("tmux", args...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
 	}

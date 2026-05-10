@@ -41,7 +41,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 
 	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
 
-	session, err := Start(tasksDir, slug)
+	session, err := Start(tasksDir, slug, nil)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestStartResumesPaused(t *testing.T) {
 
 	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
 
-	session, err := Start(tasksDir, slug)
+	session, err := Start(tasksDir, slug, nil)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestStartResumesPaused(t *testing.T) {
 		t.Fatalf("Pause: %v", err)
 	}
 
-	resumed, err := Start(tasksDir, slug)
+	resumed, err := Start(tasksDir, slug, nil)
 	if err != nil {
 		t.Fatalf("Start (resume from paused): %v", err)
 	}
@@ -266,7 +266,7 @@ func TestStartRefusesActive(t *testing.T) {
 	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Start(tasksDir, "x"); err == nil {
+	if _, err := Start(tasksDir, "x", nil); err == nil {
 		t.Fatal("Start on active task should error, got nil")
 	}
 }
@@ -277,7 +277,7 @@ func TestStartRefusesDone(t *testing.T) {
 	if err := os.WriteFile(taskPath, []byte("---\nstatus: done\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Start(tasksDir, "x"); err == nil {
+	if _, err := Start(tasksDir, "x", nil); err == nil {
 		t.Fatal("Start on done task should error, got nil")
 	}
 }
