@@ -12,7 +12,7 @@ import (
 
 func TestInstallDropsSkillsWithCorrectModes(t *testing.T) {
 	root := t.TempDir()
-	res, err := install.Install(root, spore.BundledSkills, "bootstrap/skills")
+	res, err := install.Install(root, spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
@@ -50,11 +50,11 @@ func TestInstallDropsSkillsWithCorrectModes(t *testing.T) {
 
 func TestInstallIsIdempotent(t *testing.T) {
 	root := t.TempDir()
-	first, err := install.Install(root, spore.BundledSkills, "bootstrap/skills")
+	first, err := install.Install(root, spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err != nil {
 		t.Fatalf("Install #1: %v", err)
 	}
-	second, err := install.Install(root, spore.BundledSkills, "bootstrap/skills")
+	second, err := install.Install(root, spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err != nil {
 		t.Fatalf("Install #2: %v", err)
 	}
@@ -68,14 +68,14 @@ func TestInstallIsIdempotent(t *testing.T) {
 
 func TestInstallOverwritesDriftedFile(t *testing.T) {
 	root := t.TempDir()
-	if _, err := install.Install(root, spore.BundledSkills, "bootstrap/skills"); err != nil {
+	if _, err := install.Install(root, spore.BundledSkills, "bootstrap/skills", ".claude/skills"); err != nil {
 		t.Fatalf("Install #1: %v", err)
 	}
 	target := filepath.Join(root, ".claude", "skills", "spore-bootstrap", "SKILL.md")
 	if err := os.WriteFile(target, []byte("# drifted\n"), 0o644); err != nil {
 		t.Fatalf("seed drift: %v", err)
 	}
-	res, err := install.Install(root, spore.BundledSkills, "bootstrap/skills")
+	res, err := install.Install(root, spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err != nil {
 		t.Fatalf("Install #2: %v", err)
 	}
@@ -99,9 +99,47 @@ func TestInstallOverwritesDriftedFile(t *testing.T) {
 }
 
 func TestInstallEmptyRootReturnsError(t *testing.T) {
-	_, err := install.Install("", spore.BundledSkills, "bootstrap/skills")
+	_, err := install.Install("", spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err == nil {
 		t.Fatal("Install(\"\") returned nil error; want non-nil")
+	}
+}
+
+func TestInstallDropsScriptsExecutable(t *testing.T) {
+	root := t.TempDir()
+	res, err := install.Install(root, spore.BundledScripts, "bootstrap/scripts", "harness")
+	if err != nil {
+		t.Fatalf("Install scripts: %v", err)
+	}
+	if len(res.Written) == 0 {
+		t.Fatal("Install wrote 0 script files; want > 0")
+	}
+
+	for _, name := range []string{"hooks-render.sh", "auto-commit-tasks.sh", "quiet-run.sh", "report-main-worktree-dirty.sh"} {
+		path := filepath.Join(root, "harness", name)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", name, err)
+		}
+		if info.Mode().Perm()&0o100 == 0 {
+			t.Errorf("%s not executable: mode=%v", name, info.Mode().Perm())
+		}
+	}
+
+	readme := filepath.Join(root, "harness", "README.md")
+	info, err := os.Stat(readme)
+	if err != nil {
+		t.Fatalf("stat README.md: %v", err)
+	}
+	if info.Mode().Perm()&0o100 != 0 {
+		t.Errorf("README.md unexpectedly executable: mode=%v", info.Mode().Perm())
+	}
+}
+
+func TestInstallEmptyDestSubpathReturnsError(t *testing.T) {
+	_, err := install.Install(t.TempDir(), spore.BundledSkills, "bootstrap/skills", "")
+	if err == nil {
+		t.Fatal("Install(destSubpath=\"\") returned nil error; want non-nil")
 	}
 }
 

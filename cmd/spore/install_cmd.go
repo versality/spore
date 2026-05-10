@@ -11,15 +11,17 @@ import (
 	"github.com/versality/spore/internal/install"
 )
 
-const installUsage = `spore install - drop spore skills into a target project
+const installUsage = `spore install - drop spore assets into a target project
 
 Usage:
   spore install [--root <path>]
 
-Copies the bundled skill bodies (spore-bootstrap, diagram) into
-<root>/.claude/skills/ so claude-code in that project can discover and
-run them. Idempotent: re-runs only rewrite files whose contents drifted
-from the embedded copy.
+Copies bundled assets into the target checkout:
+  - skill bodies (spore-bootstrap, diagram) into <root>/.claude/skills/
+  - generic harness shell scripts into <root>/harness/
+
+Idempotent: re-runs only rewrite files whose contents drifted from the
+embedded copy.
 
 Flags:
   --root   Project root to install into. Defaults to the current
@@ -56,19 +58,30 @@ func runInstall(args []string) int {
 		dest = cwd
 	}
 
-	res, err := install.Install(dest, spore.BundledSkills, "bootstrap/skills")
+	skills, err := install.Install(dest, spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore install:", err)
 		return 1
 	}
-	for _, p := range res.Written {
+	scripts, err := install.Install(dest, spore.BundledScripts, "bootstrap/scripts", "harness")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore install:", err)
+		return 1
+	}
+	for _, p := range skills.Written {
 		rel, _ := filepath.Rel(dest, p)
 		fmt.Printf("wrote %s\n", rel)
 	}
-	if len(res.Written) == 0 {
+	for _, p := range scripts.Written {
+		rel, _ := filepath.Rel(dest, p)
+		fmt.Printf("wrote %s\n", rel)
+	}
+	total := len(skills.Written) + len(scripts.Written)
+	if total == 0 {
 		fmt.Println("install: already up to date")
 	} else {
-		fmt.Printf("installed %d file(s) under %s/.claude/skills/\n", len(res.Written), dest)
+		fmt.Printf("installed %d skill file(s) under %s/.claude/skills/, %d harness script(s) under %s/harness/\n",
+			len(skills.Written), dest, len(scripts.Written), dest)
 	}
 	return 0
 }
