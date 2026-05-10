@@ -43,7 +43,7 @@ Commands:
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
   worker     Worker support hooks (token-monitor).
   search     Lookup helpers (nix packages / options against search.nixos.org).
-  secret     Add an age-encrypted secret via tmux popup.
+  secret     Manage age secrets (add via tmux popup; audit registration / consumers).
   signal     Record warning / error signals from a wrapped command.
 `
 
