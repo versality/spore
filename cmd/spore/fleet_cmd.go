@@ -224,7 +224,7 @@ func resolveMaxWorkers(flagVal int, projectRoot string) (int, error) {
 //
 //   - swallow stdin (claude-code feeds the hook payload there)
 //   - no-op when the firing session is not the coordinator (per
-//     $SPORE_TASK_INBOX vs $SKYHELM_STATE_DIR / $SPORE_COORDINATOR_STATE_DIR)
+//     $SPORE_TASK_INBOX vs $SPORE_COORDINATOR_STATE_DIR)
 //   - skip the spawn pass when budget advice is "tighten"
 //   - never exit non-zero: a failing reconcile must not block the Stop
 //     hook
@@ -276,22 +276,15 @@ func runFleetReplenishHook(args []string) error {
 }
 
 // isCoordinatorSession reports whether $SPORE_TASK_INBOX points under the
-// coordinator state dir (matching the bash self_id == "coordinator" test).
-// Honours both SKYHELM_STATE_DIR (legacy) and SPORE_COORDINATOR_STATE_DIR
-// (kernel-neutral) so the hook works during the rename transition.
+// coordinator state dir.
 func isCoordinatorSession() bool {
 	inbox := os.Getenv("SPORE_TASK_INBOX")
 	if inbox == "" {
 		return false
 	}
-	for _, key := range []string{"SKYHELM_STATE_DIR", "SPORE_COORDINATOR_STATE_DIR"} {
-		root := strings.TrimRight(os.Getenv(key), "/")
-		if root == "" {
-			continue
-		}
-		if inbox == root || strings.HasPrefix(inbox, root+"/") {
-			return true
-		}
+	root := strings.TrimRight(os.Getenv("SPORE_COORDINATOR_STATE_DIR"), "/")
+	if root == "" {
+		return false
 	}
-	return false
+	return inbox == root || strings.HasPrefix(inbox, root+"/")
 }

@@ -33,11 +33,11 @@
   `no-ask-via-tool`, `wt-merge-unblock`) are out of scope for this
   cut and tracked as separate lift drafts.
 
-- Renamed the per-task inbox env var from `SKYBOT_INBOX` to
-  `SPORE_TASK_INBOX` to drop a foreign prefix that had leaked in
-  from a consumer harness. Spore sets and reads the new name only;
-  consumers that exported `SKYBOT_INBOX` for operator-side hooks
-  must rename on their side. No backward-compat alias.
+- Renamed the per-task inbox env var to `SPORE_TASK_INBOX` to drop a
+  foreign prefix that had leaked in from a consumer harness. Spore
+  sets and reads the new name only; consumers exporting the previous
+  name for their own hooks must rename on their side. No
+  backward-compat alias.
 
 ## 0.4.2 - 2026-05-06
 
@@ -67,7 +67,7 @@ start the coordinator?" now has the same answer for every consumer:
 - Added `spore coordinator start [--wait] [--poll-sec N]`,
   `stop`, `restart`, and `status` over the existing fleet
   coordinator helpers. `start` is idempotent; `--wait` blocks
-  until the session exits (helm-spawn / skyhelm-spawn shape).
+  until the session exits.
 - Added the `[coordinator]` section in `spore.toml` with `driver`,
   `model`, and `brief` keys. Env vars still win; driver "claude"
   maps to `claude-code`, "codex" to `codex`, and any other value

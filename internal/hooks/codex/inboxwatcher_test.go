@@ -61,7 +61,7 @@ func TestRunInboxWatcher_WakesOnNewFile(t *testing.T) {
 	cfg := &InboxWatcherConfig{
 		StateDir:    stateDir,
 		Projects:    []ProjectInbox{{Name: "proj1", Path: inbox}},
-		SessionName: "skyhelm",
+		SessionName: "coordinator",
 		PaneCmds:    []string{"codex-raw"},
 		WakeArgv:    []string{"wake-cmd"},
 		Driver:      "codex",
@@ -107,7 +107,7 @@ func TestRunInboxWatcher_NoCodexDriver_Idles(t *testing.T) {
 	cfg := &InboxWatcherConfig{
 		StateDir:    stateDir,
 		Projects:    []ProjectInbox{{Name: "proj1", Path: inbox}},
-		SessionName: "skyhelm",
+		SessionName: "coordinator",
 		PaneCmds:    []string{"codex-raw"},
 		WakeArgv:    []string{"wake-cmd"},
 		Driver:      "claude",
@@ -138,7 +138,7 @@ func TestRunInboxWatcher_RecordOnlyMode(t *testing.T) {
 	cfg := &InboxWatcherConfig{
 		StateDir:    stateDir,
 		Projects:    []ProjectInbox{{Name: "proj1", Path: inbox}},
-		SessionName: "skyhelm",
+		SessionName: "coordinator",
 		PaneCmds:    []string{"codex-raw"},
 		WakeArgv:    []string{"wake"},
 		WakeMode:    WakeModeRecordOnly,
@@ -163,7 +163,7 @@ func TestRunInboxWatcher_SessionGoneNoLoop(t *testing.T) {
 	cfg := &InboxWatcherConfig{
 		StateDir:    t.TempDir(),
 		Projects:    []ProjectInbox{{Name: "p", Path: t.TempDir()}},
-		SessionName: "skyhelm",
+		SessionName: "coordinator",
 		PaneCmds:    []string{"x"},
 		WakeArgv:    []string{"wake"},
 		Driver:      "codex",
