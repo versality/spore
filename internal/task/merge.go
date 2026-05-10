@@ -148,7 +148,7 @@ func closeMergedTask(tasksDir, slug string) error {
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", path, err)
 	}
-	if m.Status == "done" {
+	if IsDone(m.Status) {
 		return nil
 	}
 	if err := inboxGate(slug); err != nil {
@@ -158,7 +158,7 @@ func closeMergedTask(tasksDir, slug string) error {
 		return err
 	}
 
-	m.Status = "done"
+	m.Status = StatusDone
 	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return err
 	}

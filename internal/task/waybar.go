@@ -32,13 +32,13 @@ func Waybar(tasksDir string) ([]byte, error) {
 			continue
 		}
 		switch m.Status {
-		case "draft":
+		case StatusDraft, StatusBacklog, StatusParked:
 			draft++
-		case "active":
+		case StatusActive:
 			active++
-		case "paused":
+		case StatusPaused:
 			paused++
-		case "blocked":
+		case StatusBlocked:
 			blocked++
 		}
 	}

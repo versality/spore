@@ -106,7 +106,7 @@ func Reconcile(cfg Config) (Result, error) {
 	sortOrderBySlug := map[string]float64{}
 	for _, m := range metas {
 		statusBySlug[m.Slug] = m.Status
-		if m.Status == "active" {
+		if task.IsActive(m.Status) {
 			activeSet[m.Slug] = true
 		}
 		if v := m.Extra[matter.MatterSortOrderKey]; v != "" {
@@ -142,7 +142,7 @@ func Reconcile(cfg Config) (Result, error) {
 	// are reaped.
 	for _, slug := range workerSlugs {
 		switch statusBySlug[slug] {
-		case "active", "paused", "blocked":
+		case task.StatusActive, task.StatusPaused, task.StatusBlocked:
 			res.Kept = append(res.Kept, slug)
 			continue
 		}

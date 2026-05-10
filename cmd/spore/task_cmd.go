@@ -27,6 +27,7 @@ Subcommands:
   pick                         Interactive rofi/fzf task picker.
   start <slug>                 Flip to active, spawn worktree + tmux session.
   pause <slug>                 Flip active task to paused (no teardown).
+  park <slug>                  Flip active task to parked (no teardown).
   block <slug>                 Flip active task to blocked (no teardown).
   done <slug> [--force]         Flip to done, kill tmux + remove worktree.
   merge <slug> [--force-merge-red <reason>]
@@ -71,6 +72,8 @@ func runTask(args []string) error {
 		return runTaskStart(rest)
 	case "pause":
 		return runTaskPause(rest)
+	case "park":
+		return runTaskPark(rest)
 	case "block":
 		return runTaskBlock(rest)
 	case "done":
@@ -176,14 +179,28 @@ func runTaskPause(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: spore task pause <slug>")
 	}
+	warnDeprecatedStatusCommand("pause")
 	return task.Pause("tasks", args[0])
+}
+
+func runTaskPark(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spore task park <slug>")
+	}
+	warnDeprecatedStatusCommand("park")
+	return task.Park("tasks", args[0])
 }
 
 func runTaskBlock(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: spore task block <slug>")
 	}
+	warnDeprecatedStatusCommand("block")
 	return task.Block("tasks", args[0])
+}
+
+func warnDeprecatedStatusCommand(cmd string) {
+	fmt.Fprintf(os.Stderr, "status: %s is deprecated, use park\n", cmd)
 }
 
 func runTaskDone(args []string) error {
@@ -335,10 +352,10 @@ func runTaskLs(args []string) error {
 	}
 	fmt.Println("SLUG\tSTATUS\tTITLE")
 	for _, m := range metas {
-		if *doneOnly && m.Status != "done" {
+		if *doneOnly && !task.IsDone(m.Status) {
 			continue
 		}
-		if !*all && !*doneOnly && m.Status == "done" {
+		if !*all && !*doneOnly && task.IsDone(m.Status) {
 			continue
 		}
 		fmt.Printf("%s\t%s\t%s\n", m.Slug, m.Status, m.Title)

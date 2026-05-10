@@ -108,6 +108,32 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListMixedLegacyAndBacklogStatuses(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("legacy.md", "---\nstatus: parked\nslug: legacy\ntitle: Legacy\n---\n")
+	write("new.md", "---\nstatus: backlog\nslug: new\ntitle: New\ngate: waiting\n---\n")
+
+	metas, err := List(dir)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(metas) != 2 {
+		t.Fatalf("expected 2 metas, got %d", len(metas))
+	}
+	if metas[0].Status != "parked" || CanonicalStatus(metas[0].Status) != StatusBacklog {
+		t.Errorf("legacy status = %q canonical=%q", metas[0].Status, CanonicalStatus(metas[0].Status))
+	}
+	if metas[1].Status != "backlog" || metas[1].Gate != "waiting" {
+		t.Errorf("new backlog meta = %+v", metas[1])
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

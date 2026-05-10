@@ -1,6 +1,9 @@
 package main
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,4 +48,67 @@ func TestRunTaskMergeMissingSlug(t *testing.T) {
 	if !strings.Contains(err.Error(), "usage:") {
 		t.Errorf("error = %q should be a usage hint", err)
 	}
+}
+
+func TestRunTaskStatusCommandsWarnAndFlip(t *testing.T) {
+	cases := []struct {
+		name       string
+		run        func([]string) error
+		wantStatus string
+		wantWarn   string
+	}{
+		{"pause", runTaskPause, "paused", "status: pause is deprecated, use park\n"},
+		{"park", runTaskPark, "parked", "status: park is deprecated, use park\n"},
+		{"block", runTaskBlock, "blocked", "status: block is deprecated, use park\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Chdir(root)
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if err := os.Mkdir("tasks", 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join("tasks", "demo.md")
+			if err := os.WriteFile(path, []byte("---\nstatus: active\nslug: demo\ntitle: Demo\n---\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			errOut := captureTaskStderr(t, func() {
+				if err := tc.run([]string{"demo"}); err != nil {
+					t.Fatalf("%s: %v", tc.name, err)
+				}
+			})
+			if errOut != tc.wantWarn {
+				t.Errorf("stderr = %q, want %q", errOut, tc.wantWarn)
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(raw), "status: "+tc.wantStatus+"\n") {
+				t.Errorf("task status not flipped to %s:\n%s", tc.wantStatus, raw)
+			}
+		})
+	}
+}
+
+func captureTaskStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = orig })
+	fn()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
 }
