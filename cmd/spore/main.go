@@ -47,11 +47,16 @@ const lintUsage = `spore lint - run portable lints over the working tree
 
 Usage:
   spore lint [--root <path>]
+  spore lint <name> [--root <path>]
+  spore lint --list
 
 Flags:
   --root   Repo root to lint. Defaults to the current directory.
+  --list   Print every named lint with a marker for default-set membership.
 
-Exits non-zero when any lint reports an issue.
+With no positional, runs the default set. With a name, runs that single
+named lint (default-set or not). Exits non-zero when any lint reports
+an issue.
 `
 
 const hooksUsage = `spore hooks - install or run kernel hooks
