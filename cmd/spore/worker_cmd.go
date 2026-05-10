@@ -23,6 +23,12 @@ Subcommands:
                   $SPORE_WORKER_TOKEN_WRAP_MAX, $SPORE_WORKER_TOKEN_WRAP_SUB.
                   Skips coordinator inboxes (handled by spore coordinator
                   token-monitor) and sessions with no $SPORE_TASK_INBOX.
+                  On a wrap fire, the per-(slug, session) marker dedups
+                  re-fires inside one session and the per-slug counter
+                  at $WT_STATE/worker-wrap-count/<slug> ticks once per
+                  resume cycle, surfacing in the wrap message and in
+                  $WT_STATE/worker-voluntary-events.jsonl plus
+                  $WT_STATE/events.jsonl.
 `
 
 func runWorker(args []string) int {
@@ -65,7 +71,9 @@ func runWorkerTokenMonitor(_ []string) int {
 
 	result := tokenmonitor.Check(cfg, payload)
 	if result.ShouldFire {
-		fmt.Fprint(os.Stderr, result.Message)
+		bk := tokenmonitor.Bookkeep(tokenmonitor.BookkeepingConfig{}, payload.SessionID, result)
+		msg := tokenmonitor.AnnotateMessage(result.Message, bk, result.Slug)
+		fmt.Fprint(os.Stderr, msg)
 		return 2
 	}
 	return 0
