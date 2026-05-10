@@ -19,6 +19,7 @@ import (
 	"github.com/versality/spore/internal/coordinator/operatoringress"
 	"github.com/versality/spore/internal/coordinator/proactiveloop"
 	"github.com/versality/spore/internal/coordinator/queueclassifier"
+	"github.com/versality/spore/internal/coordinator/rowerwatch"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
@@ -57,6 +58,7 @@ Subcommands:
   failure-summary  Cross-ledger failure aggregator with recovery actions.
   queue-classify  Classify task queue rows from frontmatter + state signals.
   proactive-loop  Periodic 5m driver: dispatch wakes when state warrants attention.
+  rower-watch     Stop hook: surface rower transitions to next coordinator turn.
 `
 
 func runCoordinator(args []string) int {
@@ -99,6 +101,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorQueueClassify(rest)
 	case "proactive-loop":
 		return runCoordinatorProactiveLoop(rest)
+	case "rower-watch":
+		return runCoordinatorRowerWatch(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -750,4 +754,35 @@ func queueClassifyProject() string {
 		common = filepath.Join(wd, common)
 	}
 	return filepath.Clean(filepath.Join(common, ".."))
+}
+
+func runCoordinatorRowerWatch(args []string) int {
+	fs := flag.NewFlagSet("coordinator rower-watch", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator rower-watch:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator rower-watch - surface rower-state transitions")
+		fmt.Println("  Stop-hook helper. Self-gates by SKYBOT_INBOX vs SKYHELM_STATE_DIR.")
+		fmt.Println("  Drains stdin (claude-code hook payload), exits 2 with stderr block")
+		fmt.Println("  on transitions, exits 0 otherwise.")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator rower-watch")
+		return 2
+	}
+
+	io.Copy(io.Discard, os.Stdin)
+
+	res := rowerwatch.Watch(rowerwatch.Config{})
+	if res.Skipped || len(res.Transitions) == 0 {
+		return 0
+	}
+	fmt.Fprint(os.Stderr, res.Format())
+	return 2
 }
