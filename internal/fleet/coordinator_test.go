@@ -127,7 +127,7 @@ func TestCoordinatorSessionNameUsesMainRepoFromWorktree(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	parent := t.TempDir()
-	main := filepath.Join(parent, "marketercom")
+	main := filepath.Join(parent, "exampleproj")
 	if err := os.MkdirAll(main, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestCoordinatorSessionNameUsesMainRepoFromWorktree(t *testing.T) {
 	}
 
 	got := CoordinatorSessionName(worktree)
-	want := "spore/marketercom/coordinator"
+	want := "spore/exampleproj/coordinator"
 	if got != want {
 		t.Errorf("CoordinatorSessionName(worktree) = %q, want %q", got, want)
 	}
@@ -192,12 +192,12 @@ func TestEnsureCoordinatorDefersToExternalSession(t *testing.T) {
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "spore.toml"),
-		[]byte("[coordinator]\nexternal_session_pattern = \"^helm-mcom( \\[.*\\])?$\"\n"),
+		[]byte("[coordinator]\nexternal_session_pattern = \"^external-coord( \\[.*\\])?$\"\n"),
 		0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	external := "helm-mcom [opus]"
+	external := "external-coord [opus]"
 	if err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", external, "sleep 86400").Run(); err != nil {
 		t.Fatalf("spawn external session: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestEnsureCoordinatorPatternNoMatchSpawnsKernel(t *testing.T) {
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "spore.toml"),
-		[]byte("[coordinator]\nexternal_session_pattern = \"^helm-mcom\"\n"),
+		[]byte("[coordinator]\nexternal_session_pattern = \"^external-coord\"\n"),
 		0o600); err != nil {
 		t.Fatal(err)
 	}

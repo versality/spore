@@ -8,6 +8,21 @@ import (
 	"testing"
 )
 
+// TestMain clears any ambient SPORE_MATTER_* env vars so tests do
+// not pick up operator-specific config from the host shell.
+func TestMain(m *testing.M) {
+	for _, kv := range os.Environ() {
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			continue
+		}
+		if strings.HasPrefix(kv[:eq], EnvPrefix) {
+			os.Unsetenv(kv[:eq])
+		}
+	}
+	os.Exit(m.Run())
+}
+
 func TestParseMatterTOMLBasic(t *testing.T) {
 	src := `
 # top-level comment
