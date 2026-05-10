@@ -51,7 +51,7 @@ func Merge(tasksDir, slug string) error {
 
 // MergeWithOptions is Merge with a knob for the just check gate.
 // Pass MergeOptions{ForceMergeRed: reason} to bypass and log the
-// override. Mirrors nix-config's wt cmd_merge --force-merge-red.
+// override.
 func MergeWithOptions(tasksDir, slug string, opts MergeOptions) error {
 	projectRoot, err := projectRootFromTasksDir(tasksDir)
 	if err != nil {

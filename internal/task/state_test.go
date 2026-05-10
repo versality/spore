@@ -128,7 +128,7 @@ func TestProjectNameResolvesMainRepoFromWorktree(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	parent := t.TempDir()
-	main := filepath.Join(parent, "marketercom")
+	main := filepath.Join(parent, "exampleproj")
 	if err := os.MkdirAll(main, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -143,16 +143,16 @@ func TestProjectNameResolvesMainRepoFromWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectName(worktree): %v", err)
 	}
-	if got != "marketercom" {
-		t.Errorf("ProjectName(worktree) = %q, want %q", got, "marketercom")
+	if got != "exampleproj" {
+		t.Errorf("ProjectName(worktree) = %q, want %q", got, "exampleproj")
 	}
 
 	gotMain, err := ProjectName(main)
 	if err != nil {
 		t.Fatalf("ProjectName(main): %v", err)
 	}
-	if gotMain != "marketercom" {
-		t.Errorf("ProjectName(main) = %q, want %q", gotMain, "marketercom")
+	if gotMain != "exampleproj" {
+		t.Errorf("ProjectName(main) = %q, want %q", gotMain, "exampleproj")
 	}
 
 	t.Chdir(worktree)
@@ -160,8 +160,8 @@ func TestProjectNameResolvesMainRepoFromWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectName(\"\"): %v", err)
 	}
-	if gotCwd != "marketercom" {
-		t.Errorf("ProjectName(\"\") from worktree cwd = %q, want %q", gotCwd, "marketercom")
+	if gotCwd != "exampleproj" {
+		t.Errorf("ProjectName(\"\") from worktree cwd = %q, want %q", gotCwd, "exampleproj")
 	}
 }
 
@@ -170,7 +170,7 @@ func TestStateDirForProjectFromWorktree(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	parent := t.TempDir()
-	main := filepath.Join(parent, "marketercom")
+	main := filepath.Join(parent, "exampleproj")
 	if err := os.MkdirAll(main, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestStateDirForProjectFromWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StateDirForProject(worktree): %v", err)
 	}
-	want := filepath.Join("/tmp/xdg-spore-test", "spore", "marketercom")
+	want := filepath.Join("/tmp/xdg-spore-test", "spore", "exampleproj")
 	if got != want {
 		t.Errorf("StateDirForProject(worktree) = %q, want %q", got, want)
 	}

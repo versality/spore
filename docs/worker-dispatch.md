@@ -89,6 +89,6 @@ place so the worker can fix the failing recipe. Pass
 `spore task merge <slug> --force-merge-red <reason>` for genuine
 emergencies; the bypass appends a row to
 `$XDG_STATE_HOME/spore/<project>/merge-override.jsonl` so operators
-can audit who shipped red and why. Hard-coded `just check` mirrors
-the upstream nix-config bash gate; per-project recipe configuration
-is out of scope for the initial gate.
+can audit who shipped red and why. The gate is hard-coded to `just
+check`; per-project recipe configuration is out of scope for the
+initial gate.
