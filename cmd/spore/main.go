@@ -34,6 +34,7 @@ Commands:
   fleet      Run the worker fleet against the task queue (up/down/status).
   align      Track and exit the pilot-agent alignment period.
   bootstrap  Walk a fresh project through the stage gates.
+  init       Write a default spore.toml when one is missing.
   install    Drop the spore skills into a project's .claude/skills/.
   infect     Bootstrap a fresh server with NixOS via nixos-anywhere.
   lint       Run portable lints over the working tree.
@@ -163,6 +164,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, "spore bootstrap:", err)
 			os.Exit(1)
 		}
+	case "init":
+		os.Exit(runInit(args))
 	case "install":
 		os.Exit(runInstall(args))
 	case "budget":
