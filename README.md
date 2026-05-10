@@ -274,6 +274,16 @@ nix develop --command just check
 The CLI is plain Go. Start at [cmd/spore/main.go](cmd/spore/main.go)
 for command routing.
 
+## Releases
+
+`just release X.Y.Z` is the only supported way to cut a release. The
+recipe runs `just check`, bumps `VERSION`, commits, tags `vX.Y.Z`,
+pushes both to origin, and creates a GitHub release with
+auto-generated notes in one shot. Tag and GitHub release move
+together: never tag without a release, never release without a tag.
+The recipe refuses to run off `main`, on a dirty tree, on a duplicate
+tag, or on a red `just check`.
+
 ## Architecture
 
 ```mermaid

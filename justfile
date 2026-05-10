@@ -45,12 +45,17 @@ go-build:
 nix-build:
     nix build .
 
-# release X.Y.Z: bump VERSION, commit, and tag vX.Y.Z. Aborts on a
-# dirty tree, a failing `just check`, or an existing tag. Does NOT
-# push -- inspect the commit + tag, then `git push origin main vX.Y.Z`.
+# release X.Y.Z: bump VERSION, commit, tag vX.Y.Z, push to origin, and
+# create the matching GitHub release with auto-generated notes. Aborts
+# on a non-main branch, a dirty tree, a failing `just check`, or an
+# existing tag. Tag and GitHub release stay in lockstep -- never tag
+# without releasing, never release without tagging.
 release VERSION:
     @if [ -z "$(echo {{VERSION}} | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$')" ]; then \
       echo "release: version must be X.Y.Z, got {{VERSION}}"; exit 2; \
+    fi
+    @if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then \
+      echo "release: must be on main, got $(git rev-parse --abbrev-ref HEAD)"; exit 2; \
     fi
     @if [ -n "$(git status --porcelain)" ]; then \
       echo "release: tree is dirty; commit or stash first"; \
@@ -64,6 +69,7 @@ release VERSION:
     git add VERSION
     git commit -m "release: v{{VERSION}}"
     git tag -a "v{{VERSION}}" -m "v{{VERSION}}"
+    git push origin main "v{{VERSION}}"
+    gh release create "v{{VERSION}}" --title "v{{VERSION}}" --generate-notes --latest
     @echo
-    @echo "release: committed VERSION={{VERSION}} and tagged v{{VERSION}}"
-    @echo "next:    git push origin main v{{VERSION}}"
+    @echo "release: published v{{VERSION}} (commit + tag pushed, GH release created)"
