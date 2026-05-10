@@ -43,6 +43,7 @@ Commands:
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
   worker     Worker support hooks (token-monitor).
   search     Lookup helpers (nix packages / options against search.nixos.org).
+  secret     Add an age-encrypted secret via tmux popup.
   signal     Record warning / error signals from a wrapped command.
 `
 
@@ -176,6 +177,8 @@ func main() {
 		os.Exit(runWorker(args))
 	case "search":
 		os.Exit(runSearch(args))
+	case "secret":
+		os.Exit(runSecret(args))
 	case "signal":
 		os.Exit(runSignal(args))
 	default:
