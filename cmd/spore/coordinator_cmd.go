@@ -17,6 +17,7 @@ import (
 	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/operatoringress"
+	"github.com/versality/spore/internal/coordinator/proactiveloop"
 	"github.com/versality/spore/internal/coordinator/queueclassifier"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
@@ -55,6 +56,7 @@ Subcommands:
   comm-feedback   UserPromptSubmit hook: log +++/--- to comm-feedback ledger.
   failure-summary  Cross-ledger failure aggregator with recovery actions.
   queue-classify  Classify task queue rows from frontmatter + state signals.
+  proactive-loop  Periodic 5m driver: dispatch wakes when state warrants attention.
 `
 
 func runCoordinator(args []string) int {
@@ -95,6 +97,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorFailureSummary(rest)
 	case "queue-classify":
 		return runCoordinatorQueueClassify(rest)
+	case "proactive-loop":
+		return runCoordinatorProactiveLoop(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -537,6 +541,40 @@ func runCoordinatorFailureSummary(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+func runCoordinatorProactiveLoop(args []string) int {
+	fs := flag.NewFlagSet("coordinator proactive-loop", flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "do not write inbox, loop-state, or events")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator proactive-loop:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator proactive-loop - periodic 5m skyhelm driver")
+		fmt.Println("  --dry-run   classify and print the wake message without writing inbox")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator proactive-loop [--dry-run]")
+		return 2
+	}
+
+	failOnStall := os.Getenv("SKYHELM_PROACTIVE_LOOP_FAIL_ON_STALL") != "0"
+	res := proactiveloop.Tick(proactiveloop.Config{
+		DryRun:      *dryRun,
+		FailOnStall: failOnStall,
+	})
+	if res.Stdout != "" {
+		fmt.Fprint(os.Stdout, res.Stdout)
+	}
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
 }
 
 func runCoordinatorMonitor(args []string) int {
