@@ -121,7 +121,7 @@ func (c StopConfig) stopDefaults() StopConfig {
 }
 
 // DefaultCoordSoftCap / DefaultCoordHardCap mirror the bash adapter's
-// defaults (CODEX_SKYHELM_CONTEXT_SOFT / _HARD).
+// defaults.
 const (
 	DefaultCoordSoftCap = 150000
 	DefaultCoordHardCap = 190000

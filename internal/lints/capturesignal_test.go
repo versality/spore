@@ -34,29 +34,21 @@ func TestCaptureSignalCoverage_Pass(t *testing.T) {
 		"| just default | - | oos | alias |",
 		"| just check | - | direct | wraps |",
 		"| just fmt | - | unwrapped | follow-up X |",
-		"| just switch | - | oos | operator-only |",
-		"| nix/packages/wt/wt-task | - | unwrapped | n |",
-		"| nix/packages/wt/skyhelm-* | - | unwrapped | n |",
-		"| nix/packages/wt/codex-* | - | unwrapped | n |",
-		"| nix/packages/sky-harness/sky-harness.sh | - | unwrapped | n |",
-		"| nix/packages/skyler-tools/skyler-report-bug.sh | - | unwrapped | n |",
-		"| harness/skyhelm-boot | - | unwrapped | n |",
-		"| harness/skyhelm-no-source-edits.sh | - | unwrapped | n |",
-		"| harness/opencode-rower-liveness.sh | - | unwrapped | n |",
+		"| just switch | - | oos | manual-only |",
+		"| bin/wrap-* | - | unwrapped | n |",
+		"| bin/tool | - | unwrapped | n |",
 	}
 	root := newTestRepo(t, map[string]string{
-		"justfile": justfileFixture,
-		"docs/todo/harness-universal-error-warning.md":   mkCaptureSignalDoc(rows...),
-		"nix/packages/wt/wt-task":                        "x\n",
-		"nix/packages/wt/skyhelm-boot":                   "x\n",
-		"nix/packages/wt/codex-stop-hook":                "x\n",
-		"nix/packages/sky-harness/sky-harness.sh":        "x\n",
-		"nix/packages/skyler-tools/skyler-report-bug.sh": "x\n",
-		"harness/skyhelm-boot":                           "x\n",
-		"harness/skyhelm-no-source-edits.sh":             "x\n",
-		"harness/opencode-rower-liveness.sh":             "x\n",
+		"justfile":         justfileFixture,
+		"docs/coverage.md": mkCaptureSignalDoc(rows...),
+		"bin/wrap-a":       "x\n",
+		"bin/wrap-b":       "x\n",
+		"bin/tool":         "x\n",
 	})
-	issues, err := CaptureSignalCoverage{}.Run(root)
+	issues, err := CaptureSignalCoverage{
+		DocPath:      "docs/coverage.md",
+		BoundedFiles: []string{"bin/*"},
+	}.Run(root)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -72,29 +64,18 @@ func TestCaptureSignalCoverage_MissingRecipe(t *testing.T) {
 	rows := []string{
 		"| just default | - | oos | alias |",
 		"| just check | - | direct | wraps |",
-		"| just switch | - | oos | operator-only |",
-		"| nix/packages/wt/wt-task | - | unwrapped | n |",
-		"| nix/packages/wt/skyhelm-* | - | unwrapped | n |",
-		"| nix/packages/wt/codex-* | - | unwrapped | n |",
-		"| nix/packages/sky-harness/sky-harness.sh | - | unwrapped | n |",
-		"| nix/packages/skyler-tools/skyler-report-bug.sh | - | unwrapped | n |",
-		"| harness/skyhelm-boot | - | unwrapped | n |",
-		"| harness/skyhelm-no-source-edits.sh | - | unwrapped | n |",
-		"| harness/opencode-rower-liveness.sh | - | unwrapped | n |",
+		"| just switch | - | oos | manual-only |",
+		"| bin/tool | - | unwrapped | n |",
 	}
 	root := newTestRepo(t, map[string]string{
-		"justfile": justfileFixture,
-		"docs/todo/harness-universal-error-warning.md":   mkCaptureSignalDoc(rows...),
-		"nix/packages/wt/wt-task":                        "x\n",
-		"nix/packages/wt/skyhelm-boot":                   "x\n",
-		"nix/packages/wt/codex-stop-hook":                "x\n",
-		"nix/packages/sky-harness/sky-harness.sh":        "x\n",
-		"nix/packages/skyler-tools/skyler-report-bug.sh": "x\n",
-		"harness/skyhelm-boot":                           "x\n",
-		"harness/skyhelm-no-source-edits.sh":             "x\n",
-		"harness/opencode-rower-liveness.sh":             "x\n",
+		"justfile":         justfileFixture,
+		"docs/coverage.md": mkCaptureSignalDoc(rows...),
+		"bin/tool":         "x\n",
 	})
-	issues, err := CaptureSignalCoverage{}.Run(root)
+	issues, err := CaptureSignalCoverage{
+		DocPath:      "docs/coverage.md",
+		BoundedFiles: []string{"bin/*"},
+	}.Run(root)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -115,10 +96,10 @@ func TestCaptureSignalCoverage_EmptyMatrix(t *testing.T) {
 		t.Skip("just not on PATH")
 	}
 	root := newTestRepo(t, map[string]string{
-		"justfile": justfileFixture,
-		"docs/todo/harness-universal-error-warning.md": "## Coverage Matrix\n\n(no rows)\n",
+		"justfile":         justfileFixture,
+		"docs/coverage.md": "## Coverage Matrix\n\n(no rows)\n",
 	})
-	issues, err := CaptureSignalCoverage{}.Run(root)
+	issues, err := CaptureSignalCoverage{DocPath: "docs/coverage.md"}.Run(root)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -129,11 +110,22 @@ func TestCaptureSignalCoverage_EmptyMatrix(t *testing.T) {
 
 func TestCaptureSignalCoverage_MissingDoc(t *testing.T) {
 	root := newTestRepo(t, map[string]string{"README.md": "x\n"})
-	issues, err := CaptureSignalCoverage{}.Run(root)
+	issues, err := CaptureSignalCoverage{DocPath: "docs/coverage.md"}.Run(root)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if len(issues) != 1 || !strings.Contains(issues[0].Message, "missing doc") {
 		t.Fatalf("expected missing-doc issue, got %v", issues)
+	}
+}
+
+func TestCaptureSignalCoverage_NoDocPath_NoOp(t *testing.T) {
+	root := newTestRepo(t, map[string]string{"README.md": "x\n"})
+	issues, err := CaptureSignalCoverage{}.Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("expected no issues with empty DocPath, got %v", issues)
 	}
 }

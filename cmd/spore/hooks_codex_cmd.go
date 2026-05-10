@@ -35,7 +35,7 @@ Events:
                   respawn the coordinator pane when a fresh message
                   arrives. Reads $SPORE_PROJECTS_FILE (one absolute
                   project path per line, # comments allowed),
-                  $SPORE_COORDINATOR_SESSION (default "skyhelm"),
+                  $SPORE_COORDINATOR_SESSION (default "coordinator"),
                   $SPORE_INBOX_WATCHER_PANE_CMDS (colon-separated tmux
                   pane current_command values; default "codex-raw"),
                   $SPORE_INBOX_WATCHER_WAKE_CMD (argv as one shell-style
@@ -181,7 +181,7 @@ func runHooksCodexInboxWatcher(args []string) int {
 
 	session := os.Getenv("SPORE_COORDINATOR_SESSION")
 	if session == "" {
-		session = "skyhelm"
+		session = "coordinator"
 	}
 	paneCmds := []string{"codex-raw"}
 	if v := os.Getenv("SPORE_INBOX_WATCHER_PANE_CMDS"); v != "" {
@@ -257,8 +257,8 @@ func readProjectsFile(path, stateDir string) ([]codex.ProjectInbox, error) {
 
 // splitShellArgs is a minimal whitespace-and-quote splitter for the
 // wake command env var. Single + double quotes group tokens; no
-// escape handling beyond that, which is plenty for things like
-// `wt-task launch-skyhelm`.
+// escape handling beyond that, which is plenty for typical wake
+// commands like `wt-task launch-coordinator`.
 func splitShellArgs(s string) []string {
 	s = strings.TrimSpace(s)
 	if s == "" {

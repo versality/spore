@@ -17,7 +17,7 @@ harness: coordinator-verify-done
 
 The lesson body here.
 
-### SKYHELM SELF-LESSON: watch the reflog (2026-03-01)
+### COORDINATOR SELF-LESSON: watch the reflog (2026-03-01)
 
 Old lesson without harness pointer.
 
@@ -49,7 +49,7 @@ func TestScanClassifications(t *testing.T) {
 		class   Classification
 	}{
 		{"CRITICAL LESSON: always verify", Lifted},
-		{"SKYHELM SELF-LESSON: watch the reflog", StaleLiftCandidate},
+		{"COORDINATOR SELF-LESSON: watch the reflog", StaleLiftCandidate},
 		{"RULE: no force push", StaleLiftCandidate},
 		{"CRITICAL LESSON: fresh insight", Pending},
 	}

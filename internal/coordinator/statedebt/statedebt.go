@@ -1,7 +1,7 @@
 // Package statedebt scans a coordinator state.md file for prose
 // lessons (CRITICAL LESSON / <prefix> SELF-LESSON / RULE blocks under
 // H2/H3 headings) that should have been lifted to the harness. The
-// SELF-LESSON prefix is consumer-supplied (e.g. SKYHELM SELF-LESSON);
+// SELF-LESSON prefix is consumer-supplied (e.g. COORDINATOR SELF-LESSON);
 // any single-word prefix matches.
 package statedebt
 

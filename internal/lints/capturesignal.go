@@ -12,9 +12,8 @@ import (
 
 // CaptureSignalCoverage asserts that every entry in the
 // "bounded set" (just recipes + a configured BoundedFiles globbed
-// list) has a row under `## Coverage Matrix` in DocPath. Defaults
-// match nix-config: DocPath=docs/todo/harness-universal-error-warning.md,
-// BoundedFiles populated from the nix-config layout.
+// list) has a row under `## Coverage Matrix` in DocPath. Both DocPath
+// and BoundedFiles are consumer-supplied; the kernel ships no defaults.
 type CaptureSignalCoverage struct {
 	DocPath      string
 	BoundedFiles []string
@@ -22,33 +21,12 @@ type CaptureSignalCoverage struct {
 
 func (CaptureSignalCoverage) Name() string { return "capture-signal-coverage" }
 
-// DefaultCaptureSignalBoundedFiles enumerates the file paths
-// nix-config tracks. Glob entries (containing `*`) are expanded
-// against the project root at lint time.
-var DefaultCaptureSignalBoundedFiles = []string{
-	"nix/packages/wt/skyhelm-*",
-	"nix/packages/wt/codex-*",
-	"nix/packages/wt/wt",
-	"nix/packages/wt/wt-task",
-	"nix/packages/wt/rower-token-monitor",
-	"nix/packages/wt/spore-context-tee",
-	"nix/packages/wt-go/cmd/wt-go/main.go",
-	"nix/packages/sky-harness/*.sh",
-	"nix/packages/skyler-tools/*.sh",
-	"harness/skyhelm-boot",
-	"harness/skyhelm-no-source-edits.sh",
-	"harness/opencode-*.sh",
-}
-
 func (l CaptureSignalCoverage) Run(root string) ([]Issue, error) {
 	docPath := l.DocPath
 	if docPath == "" {
-		docPath = "docs/todo/harness-universal-error-warning.md"
+		return nil, nil
 	}
 	bounded := l.BoundedFiles
-	if bounded == nil {
-		bounded = DefaultCaptureSignalBoundedFiles
-	}
 
 	docAbs := filepath.Join(root, docPath)
 	raw, err := os.ReadFile(docAbs)

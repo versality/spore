@@ -10,21 +10,18 @@ func TestIsCoordinatorSession(t *testing.T) {
 	cases := []struct {
 		name     string
 		envInbox string
-		envState string
 		envCoord string
 		want     bool
 	}{
-		{"empty inbox is not coordinator", "", state, "", false},
-		{"inbox exactly the legacy state dir", state, state, "", true},
-		{"inbox under legacy state dir", filepath.Join(state, "proj/inbox"), state, "", true},
-		{"inbox under kernel-neutral state dir", filepath.Join(state, "proj/inbox"), "", state, true},
-		{"inbox unrelated to state dirs", "/tmp/rower-x/inbox", state, state, false},
-		{"trailing slash on state dir is normalised", filepath.Join(state, "proj/inbox"), state + "/", "", true},
+		{"empty inbox is not coordinator", "", state, false},
+		{"inbox exactly the state dir", state, state, true},
+		{"inbox under state dir", filepath.Join(state, "proj/inbox"), state, true},
+		{"inbox unrelated to state dir", "/tmp/rower-x/inbox", state, false},
+		{"trailing slash on state dir is normalised", filepath.Join(state, "proj/inbox"), state + "/", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("SPORE_TASK_INBOX", tc.envInbox)
-			t.Setenv("SKYHELM_STATE_DIR", tc.envState)
 			t.Setenv("SPORE_COORDINATOR_STATE_DIR", tc.envCoord)
 			if got := isCoordinatorSession(); got != tc.want {
 				t.Errorf("isCoordinatorSession() = %v, want %v", got, tc.want)

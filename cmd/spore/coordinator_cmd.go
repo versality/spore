@@ -6,20 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	spore "github.com/versality/spore"
-	"github.com/versality/spore/internal/coordinator/commfeedback"
-	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
-	"github.com/versality/spore/internal/coordinator/operatoringress"
-	"github.com/versality/spore/internal/coordinator/proactiveloop"
-	"github.com/versality/spore/internal/coordinator/queueclassifier"
-	"github.com/versality/spore/internal/coordinator/rowerwatch"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
@@ -53,15 +44,6 @@ Subcommands:
   loop-guard      Check the respawn circuit breaker.
   token-monitor   Stop-hook: check coordinator context budget.
   monitor         Boot-time verdict over the token-monitor ledger.
-  operator-ingress UserPromptSubmit hook: persist operator prompt to ledger.
-  comm-feedback   UserPromptSubmit hook: log +++/--- to comm-feedback ledger.
-  failure-summary  Cross-ledger failure aggregator with recovery actions.
-  queue-classify  Classify task queue rows from frontmatter + state signals.
-  proactive-loop  Periodic 5m driver: dispatch wakes when state warrants attention.
-  rower-watch     Stop hook: surface rower transitions to next coordinator turn.
-  sla-scan        Scan state.md for stale / done / orphan open items.
-  idle-watchdog   Quiet-idle gate: scan fleet/queue/state.md for findings.
-  spawn           ExecStart wrapper: bring up coordinator tmux session, block until it dies.
 `
 
 func runCoordinator(args []string) int {
@@ -94,24 +76,6 @@ func runCoordinator(args []string) int {
 		return runCoordinatorTokenMonitor(rest)
 	case "monitor":
 		return runCoordinatorMonitor(rest)
-	case "operator-ingress":
-		return runCoordinatorOperatorIngress(rest)
-	case "comm-feedback":
-		return runCoordinatorCommFeedback(rest)
-	case "failure-summary":
-		return runCoordinatorFailureSummary(rest)
-	case "queue-classify":
-		return runCoordinatorQueueClassify(rest)
-	case "proactive-loop":
-		return runCoordinatorProactiveLoop(rest)
-	case "rower-watch":
-		return runCoordinatorRowerWatch(rest)
-	case "sla-scan":
-		return runCoordinatorSLAScan(rest)
-	case "idle-watchdog":
-		return runCoordinatorIdleWatchdog(rest)
-	case "spawn":
-		return runCoordinatorSpawn(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -442,154 +406,6 @@ func runCoordinatorTokenMonitor(_ []string) int {
 	return 0
 }
 
-func runCoordinatorOperatorIngress(args []string) int {
-	fs := flag.NewFlagSet("coordinator operator-ingress", flag.ContinueOnError)
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator operator-ingress:", err)
-		return 2
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator operator-ingress - persist operator prompt to ledger")
-		fmt.Println("  Reads claude-code UserPromptSubmit JSON payload on stdin.")
-		fmt.Println("  Self-gates by SKYBOT_INBOX vs SKYHELM_STATE_DIR; no-op for non-skyhelm sessions.")
-		fmt.Println("  Exits 2 with stderr if persistence fails (blocks the prompt).")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator operator-ingress")
-		return 2
-	}
-
-	body, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "skyhelm-operator-ingress: read stdin:", err)
-		return 2
-	}
-
-	res := operatoringress.Run(operatoringress.Config{}, body)
-	if res.Failed {
-		fmt.Fprintln(os.Stderr, "skyhelm-operator-ingress:", res.ErrorMsg)
-		return 2
-	}
-	return 0
-}
-
-func runCoordinatorCommFeedback(args []string) int {
-	fs := flag.NewFlagSet("coordinator comm-feedback", flag.ContinueOnError)
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator comm-feedback:", err)
-		return 2
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator comm-feedback - log +++/--- feedback to ledger")
-		fmt.Println("  Reads claude-code UserPromptSubmit JSON payload on stdin.")
-		fmt.Println("  Self-gates by SKYBOT_INBOX vs SKYHELM_STATE_DIR; no-op for non-skyhelm sessions.")
-		fmt.Println("  Always exits 0; warns to stderr on persistence failure.")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator comm-feedback")
-		return 2
-	}
-
-	body, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "skyhelm-comm-feedback: read stdin:", err)
-		return 0
-	}
-
-	var transcript []byte
-	var hp commfeedback.HookPayload
-	if err := json.Unmarshal(body, &hp); err == nil && hp.TranscriptPath != "" {
-		if data, err := os.ReadFile(hp.TranscriptPath); err == nil {
-			transcript = data
-		}
-	}
-
-	res := commfeedback.Run(commfeedback.Config{}, body, transcript)
-	if res.Warning != "" {
-		fmt.Fprintln(os.Stderr, "skyhelm-comm-feedback:", res.Warning)
-	}
-	return 0
-}
-
-func runCoordinatorFailureSummary(args []string) int {
-	fs := flag.NewFlagSet("coordinator failure-summary", flag.ContinueOnError)
-	since := fs.Int64("since", 0, "window in seconds (overrides SKYHELM_FAILURE_WINDOW_SECS)")
-	floor := fs.Int("floor", 0, "active-live floor (overrides WT_FLEET_FLOOR)")
-	quiet := fs.Bool("quiet", false, "suppress header + counts; only emit actionable lines")
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator failure-summary:", err)
-		return 1
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator failure-summary - cross-ledger failure aggregator")
-		fmt.Println("  --since SECS  window in seconds (default 86400)")
-		fmt.Println("  --floor N     active-live floor (default 6)")
-		fmt.Println("  --quiet       suppress header + counts; only emit actionable lines")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator failure-summary [--since SECS] [--floor N] [--quiet]")
-		return 1
-	}
-
-	cfg := failuresummary.Config{
-		WindowSecs: *since,
-		Floor:      *floor,
-		Quiet:      *quiet,
-	}
-	summary := failuresummary.Summarize(cfg)
-	fmt.Print(summary.Format(*quiet))
-	if len(summary.Actions) > 0 {
-		return 2
-	}
-	return 0
-}
-
-func runCoordinatorProactiveLoop(args []string) int {
-	fs := flag.NewFlagSet("coordinator proactive-loop", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "do not write inbox, loop-state, or events")
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator proactive-loop:", err)
-		return 2
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator proactive-loop - periodic 5m skyhelm driver")
-		fmt.Println("  --dry-run   classify and print the wake message without writing inbox")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator proactive-loop [--dry-run]")
-		return 2
-	}
-
-	failOnStall := os.Getenv("SKYHELM_PROACTIVE_LOOP_FAIL_ON_STALL") != "0"
-	res := proactiveloop.Tick(proactiveloop.Config{
-		DryRun:      *dryRun,
-		FailOnStall: failOnStall,
-	})
-	if res.Stdout != "" {
-		fmt.Fprint(os.Stdout, res.Stdout)
-	}
-	if res.Stderr != "" {
-		fmt.Fprint(os.Stderr, res.Stderr)
-	}
-	return res.ExitCode
-}
-
 func runCoordinatorMonitor(args []string) int {
 	fs := flag.NewFlagSet("coordinator monitor", flag.ContinueOnError)
 	threshold := fs.Int("threshold", 3, "consecutive-broken count")
@@ -672,126 +488,4 @@ func runCoordinatorLoopGuard(args []string) int {
 	fmt.Printf("loop-guard: ok (recent=%d, max=%d)\n",
 		status.RecentCount, status.MaxRespawns)
 	return 0
-}
-
-func runCoordinatorQueueClassify(args []string) int {
-	fs := flag.NewFlagSet("coordinator queue-classify", flag.ContinueOnError)
-	project := fs.String("project", "", "project root (default: git common-dir parent)")
-	stateFile := fs.String("state", "", "state.md path (default: $SKYHELM_STATE_FILE or $SKYHELM_STATE_DIR/state.md)")
-	activeLive := fs.String("active-live", "", "current active-live count (default: $SKYHELM_QUEUE_ACTIVE_LIVE or 0)")
-	floor := fs.String("floor", "", "fleet occupancy floor (default: $WT_FLEET_FLOOR or 6)")
-	budget := fs.String("budget-advice", "", "budget advice: ok|tighten|ration (default: $SKYHELM_QUEUE_BUDGET_ADVICE or ok)")
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator queue-classify:", err)
-		return 2
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator queue-classify - classify task queue rows")
-		fmt.Println("  --project DIR        project root (default: git common-dir parent)")
-		fmt.Println("  --state FILE         state.md path")
-		fmt.Println("  --active-live N      current active-live count")
-		fmt.Println("  --floor N            fleet occupancy floor (default 6)")
-		fmt.Println("  --budget-advice X    ok|tighten|ration")
-		fmt.Println("Output: TSV `class\\tslug\\tstatus\\treason\\n`. Exit 0 always.")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator queue-classify [flags]")
-		return 2
-	}
-
-	cfg := queueclassifier.Config{
-		Project:      firstNonEmpty(*project, queueClassifyProject()),
-		StateFile:    *stateFile,
-		ActiveLive:   parseIntDefault(*activeLive, "SKYHELM_QUEUE_ACTIVE_LIVE", 0),
-		Floor:        parseIntDefault(*floor, "WT_FLEET_FLOOR", 0),
-		BudgetAdvice: firstNonEmpty(*budget, os.Getenv("SKYHELM_QUEUE_BUDGET_ADVICE")),
-	}
-
-	rows, err := queueclassifier.Classify(cfg)
-	if err != nil {
-		fmt.Print(queueclassifier.FormatTSV([]queueclassifier.Row{
-			{Class: "classifier-error", Reason: err.Error()},
-		}))
-		return 0
-	}
-	fmt.Print(queueclassifier.FormatTSV(rows))
-	return 0
-}
-
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-func parseIntDefault(flagVal, envKey string, fallback int) int {
-	raw := flagVal
-	if raw == "" {
-		raw = os.Getenv(envKey)
-	}
-	if raw == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n < 0 {
-		return fallback
-	}
-	return n
-}
-
-// queueClassifyProject returns the project root from `git
-// rev-parse --git-common-dir`'s parent, or "" when outside a repo.
-func queueClassifyProject() string {
-	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	common := strings.TrimSpace(string(out))
-	if common == "" {
-		return ""
-	}
-	if !filepath.IsAbs(common) {
-		wd, _ := os.Getwd()
-		common = filepath.Join(wd, common)
-	}
-	return filepath.Clean(filepath.Join(common, ".."))
-}
-
-func runCoordinatorRowerWatch(args []string) int {
-	fs := flag.NewFlagSet("coordinator rower-watch", flag.ContinueOnError)
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator rower-watch:", err)
-		return 2
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator rower-watch - surface rower-state transitions")
-		fmt.Println("  Stop-hook helper. Self-gates by SKYBOT_INBOX vs SKYHELM_STATE_DIR.")
-		fmt.Println("  Drains stdin (claude-code hook payload), exits 2 with stderr block")
-		fmt.Println("  on transitions, exits 0 otherwise.")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator rower-watch")
-		return 2
-	}
-
-	io.Copy(io.Discard, os.Stdin)
-
-	res := rowerwatch.Watch(rowerwatch.Config{})
-	if res.Skipped || len(res.Transitions) == 0 {
-		return 0
-	}
-	fmt.Fprint(os.Stderr, res.Format())
-	return 2
 }

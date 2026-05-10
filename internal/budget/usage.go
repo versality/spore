@@ -177,31 +177,20 @@ func normalizeTier(subscriptionType string) string {
 // normalized tier (max, pro, team, free) on a single line. Callers
 // (orchestrator spawn paths, token monitors) gate on this output.
 func ActiveTier() error {
-	tier, err := LookupActiveTier()
-	if err != nil {
-		return err
-	}
-	fmt.Println(tier)
-	return nil
-}
-
-// LookupActiveTier returns the normalized account tier from the live
-// OAuth credentials. In-process callers (e.g. coordinator spawn) use
-// this instead of shelling out to `spore budget active-tier`.
-func LookupActiveTier() (string, error) {
 	path := oauthCredsPath()
 	if path == "" {
-		return "", errors.New("oauth credentials path unresolved")
+		return errors.New("oauth credentials path unresolved")
 	}
 	cf, err := loadCredentials(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 	tier := normalizeTier(cf.oauth.SubscriptionType)
 	if tier == "" {
-		return "", errors.New("subscriptionType missing from credentials")
+		return errors.New("subscriptionType missing from credentials")
 	}
-	return tier, nil
+	fmt.Println(tier)
+	return nil
 }
 
 // fetchUsage hits /usage, refreshing the access token once on a 401 if
