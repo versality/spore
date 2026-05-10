@@ -34,7 +34,7 @@ const defaultAgentBinary = "claude-code"
 // launches. Empty lets the codex CLI use its own default.
 const CodexModelEnv = "SPORE_CODEX_MODEL"
 
-// Start flips status to active and (when starting from draft) creates
+// Start flips status to active and (when starting from backlog) creates
 // the worktree and wt/<slug> branch under <projectRoot>/.worktrees/.
 // In every case it spawns a detached tmux session named
 // "spore/<project>/<slug>" running ${SPORE_AGENT_BINARY:-claude-code}
@@ -51,16 +51,16 @@ func Start(tasksDir, slug string) (string, error) {
 		return "", fmt.Errorf("parse %s: %w", path, err)
 	}
 	prev := m.Status
-	switch prev {
-	case "draft", "paused", "blocked":
-	case "active":
+	switch CanonicalStatus(prev) {
+	case StatusBacklog:
+	case StatusActive:
 		return "", fmt.Errorf("task %s: already active", slug)
-	case "done":
+	case StatusDone:
 		return "", fmt.Errorf("task %s: already done", slug)
 	default:
 		return "", fmt.Errorf("task %s: unexpected status %q", slug, prev)
 	}
-	m.Status = "active"
+	m.Status = StatusActive
 	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return "", err
 	}
@@ -128,7 +128,20 @@ func Pause(tasksDir, slug string) error {
 	if err := inboxGate(slug); err != nil {
 		return err
 	}
-	if err := flipStatus(tasksDir, slug, "active", "paused"); err != nil {
+	if err := flipStatus(tasksDir, slug, StatusActive, StatusPaused); err != nil {
+		return err
+	}
+	reapIdleSlugSessions(tasksDir, slug)
+	return nil
+}
+
+// Park flips an active task to parked. The worktree is left in place;
+// idle sessions are reaped on the same policy as Pause and Block.
+func Park(tasksDir, slug string) error {
+	if err := inboxGate(slug); err != nil {
+		return err
+	}
+	if err := flipStatus(tasksDir, slug, StatusActive, StatusParked); err != nil {
 		return err
 	}
 	reapIdleSlugSessions(tasksDir, slug)
@@ -142,7 +155,7 @@ func Block(tasksDir, slug string) error {
 	if err := inboxGate(slug); err != nil {
 		return err
 	}
-	if err := flipStatus(tasksDir, slug, "active", "blocked"); err != nil {
+	if err := flipStatus(tasksDir, slug, StatusActive, StatusBlocked); err != nil {
 		return err
 	}
 	reapIdleSlugSessions(tasksDir, slug)
@@ -185,7 +198,7 @@ func Done(tasksDir, slug string, force bool) error {
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", path, err)
 	}
-	if m.Status == "done" {
+	if IsDone(m.Status) {
 		return nil
 	}
 
@@ -217,7 +230,7 @@ func Done(tasksDir, slug string, force bool) error {
 		return err
 	}
 
-	m.Status = "done"
+	m.Status = StatusDone
 	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return err
 	}

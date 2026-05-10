@@ -30,7 +30,7 @@ Usage:
 Commands:
   version    Print the spore version.
   compose    Render agent instructions from a consumer's rule list.
-  task       Manage tasks (new, ls, start, pause, block, done, tell).
+  task       Manage tasks (new, ls, start, pause, park, block, done, tell).
   fleet      Run the worker fleet against the task queue (up/down/status).
   align      Track and exit the pilot-agent alignment period.
   bootstrap  Walk a fresh project through the stage gates.

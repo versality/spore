@@ -18,7 +18,7 @@ func Pick(tasksDir string) (string, error) {
 	}
 	var lines []string
 	for _, m := range metas {
-		if m.Status == "done" {
+		if IsDone(m.Status) {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("%s\t%s\t%s", m.Slug, m.Status, m.Title))

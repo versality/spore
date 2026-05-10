@@ -17,9 +17,9 @@ import (
 )
 
 // Meta is the parsed frontmatter view. Status, Slug, Title, Created,
-// Project, Host, Agent, and Session are first-class scalars; Needs is
-// a first-class list. Any other recognised key lands in Extra so a
-// Parse / Write round trip preserves it.
+// Project, Host, Agent, Session, and Gate are first-class scalars;
+// Needs is a first-class list. Any other recognised key lands in Extra
+// so a Parse / Write round trip preserves it.
 //
 // Session is the tmux session name the spawner registered for this
 // task. The kernel's own ensureSession path uses the computed
@@ -36,8 +36,11 @@ type Meta struct {
 	Host    string
 	Agent   string
 	Session string
+	Gate    string
 	Needs   []string
 	Extra   map[string]string
+
+	gateSet bool
 }
 
 // Parse splits content at the leading and closing `---` fence lines
@@ -91,6 +94,9 @@ func Parse(content []byte) (Meta, []byte, error) {
 			m.Agent = val
 		case "session":
 			m.Session = val
+		case "gate":
+			m.Gate = val
+			m.gateSet = true
 		case "needs":
 			listTarget = &m.Needs
 		default:
@@ -99,6 +105,10 @@ func Parse(content []byte) (Meta, []byte, error) {
 			}
 			m.Extra[key] = val
 		}
+	}
+
+	if m.Gate == "" && m.Extra != nil {
+		m.Gate = m.Extra["scheduler"]
 	}
 
 	if !closed {
@@ -128,6 +138,9 @@ func Write(m Meta, body []byte) []byte {
 	writeScalar(&buf, "host", m.Host)
 	writeScalar(&buf, "agent", m.Agent)
 	writeScalar(&buf, "session", m.Session)
+	if m.Gate != "" && (m.gateSet || m.Extra == nil || m.Extra["scheduler"] != m.Gate) {
+		writeScalar(&buf, "gate", m.Gate)
+	}
 	writeBlockList(&buf, "needs", m.Needs)
 
 	keys := make([]string, 0, len(m.Extra))
