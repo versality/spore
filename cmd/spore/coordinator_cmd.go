@@ -10,6 +10,7 @@ import (
 	"time"
 
 	spore "github.com/versality/spore"
+	"github.com/versality/spore/internal/coordinator/commfeedback"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/operatoringress"
 	"github.com/versality/spore/internal/coordinator/statedebt"
@@ -46,6 +47,7 @@ Subcommands:
   token-monitor   Stop-hook: check coordinator context budget.
   monitor         Boot-time verdict over the token-monitor ledger.
   operator-ingress UserPromptSubmit hook: persist operator prompt to ledger.
+  comm-feedback   UserPromptSubmit hook: log +++/--- to comm-feedback ledger.
 `
 
 func runCoordinator(args []string) int {
@@ -80,6 +82,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorMonitor(rest)
 	case "operator-ingress":
 		return runCoordinatorOperatorIngress(rest)
+	case "comm-feedback":
+		return runCoordinatorCommFeedback(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -441,6 +445,48 @@ func runCoordinatorOperatorIngress(args []string) int {
 	if res.Failed {
 		fmt.Fprintln(os.Stderr, "skyhelm-operator-ingress:", res.ErrorMsg)
 		return 2
+	}
+	return 0
+}
+
+func runCoordinatorCommFeedback(args []string) int {
+	fs := flag.NewFlagSet("coordinator comm-feedback", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator comm-feedback:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator comm-feedback - log +++/--- feedback to ledger")
+		fmt.Println("  Reads claude-code UserPromptSubmit JSON payload on stdin.")
+		fmt.Println("  Self-gates by SKYBOT_INBOX vs SKYHELM_STATE_DIR; no-op for non-skyhelm sessions.")
+		fmt.Println("  Always exits 0; warns to stderr on persistence failure.")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator comm-feedback")
+		return 2
+	}
+
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "skyhelm-comm-feedback: read stdin:", err)
+		return 0
+	}
+
+	var transcript []byte
+	var hp commfeedback.HookPayload
+	if err := json.Unmarshal(body, &hp); err == nil && hp.TranscriptPath != "" {
+		if data, err := os.ReadFile(hp.TranscriptPath); err == nil {
+			transcript = data
+		}
+	}
+
+	res := commfeedback.Run(commfeedback.Config{}, body, transcript)
+	if res.Warning != "" {
+		fmt.Fprintln(os.Stderr, "skyhelm-comm-feedback:", res.Warning)
 	}
 	return 0
 }
