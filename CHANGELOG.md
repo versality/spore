@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- `spore install` now also drops the bundled harness shell scripts
+  (`auto-commit-tasks.sh`, `hooks-render.sh`, `quiet-run.sh`,
+  `report-main-worktree-dirty.sh`) into `<root>/harness/`. These
+  generic-core wrappers were lifted out of nix-config so consumers
+  pick them up via the spore binary instead of vendoring per-project.
+  `internal/install.Install` gained a `destSubpath` parameter so the
+  same walker handles both skill and script asset trees. `quiet-run`'s
+  build-lock file/env renamed from `nix-config-build.lock` /
+  `NIX_CONFIG_BUILD_LOCK_HELD` to `spore-build.lock` /
+  `SPORE_BUILD_LOCK_HELD`; `hooks-render` reads the claude config dir
+  from `$SPORE_HOOKS_CLAUDE_DIR` (default `<repo>/configs/claude`).
+  Coordinator/operator binaries, the four scripts flagged for Go
+  ports (`capture-command-signal`, `opencode-fleet-stop`,
+  `opencode-rower-liveness`, `merge-integrity-audit`), and the
+  consumer-coupled bundle (`sweep-tech-debt`, `archive-aged-maybes`,
+  `self-care`, `notify-attention`, `block-sources-inference`,
+  `look-desk`, `look-web.mjs`, `plan-first-enforcement`,
+  `no-ask-via-tool`, `wt-merge-unblock`) are out of scope for this
+  cut and tracked as separate lift drafts.
+
 - Renamed the per-task inbox env var from `SKYBOT_INBOX` to
   `SPORE_TASK_INBOX` to drop a foreign prefix that had leaked in
   from a consumer harness. Spore sets and reads the new name only;

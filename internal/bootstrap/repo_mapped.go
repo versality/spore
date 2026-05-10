@@ -69,9 +69,13 @@ func detectRepoMapped(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	skills, err := install.Install(root, spore.BundledSkills, "bootstrap/skills")
+	skills, err := install.Install(root, spore.BundledSkills, "bootstrap/skills", ".claude/skills")
 	if err != nil {
 		return "", fmt.Errorf("install skills: %w", err)
+	}
+	scripts, err := install.Install(root, spore.BundledScripts, "bootstrap/scripts", "harness")
+	if err != nil {
+		return "", fmt.Errorf("install scripts: %w", err)
 	}
 
 	notes := "detected: " + strings.Join(hits, ",")
@@ -80,6 +84,9 @@ func detectRepoMapped(root string) (string, error) {
 	}
 	if len(skills.Written) > 0 {
 		notes += fmt.Sprintf("; installed %d skill file(s)", len(skills.Written))
+	}
+	if len(scripts.Written) > 0 {
+		notes += fmt.Sprintf("; installed %d harness script(s)", len(scripts.Written))
 	}
 	return notes, nil
 }

@@ -1,8 +1,8 @@
-// Package install drops the spore skill bodies into a target
-// project's .claude/skills/ directory so claude-code in that project
-// can discover and run them. The skill source ships with the spore
-// binary via embed.FS (see embed.go), so this works under `nix run`
-// without a source-tree checkout.
+// Package install drops embedded asset trees (skills, harness scripts)
+// into a target project's checkout so claude-code in that project can
+// discover and run them. The asset source ships with the spore binary
+// via embed.FS (see embed.go), so this works under `nix run` without
+// a source-tree checkout.
 package install
 
 import (
@@ -25,28 +25,32 @@ type Result struct {
 	Skipped []string
 }
 
-// Install copies every embedded skill under <prefix>/<name>/ into
-// <root>/.claude/skills/<name>/. Files whose content begins with `#!`
-// are written 0755; the rest are 0644. Files named `.gitkeep` are
-// dropped (they exist only to keep the source tree tidy).
+// Install copies every embedded file under srcPrefix into
+// <root>/<destSubpath>/, preserving relative paths under srcPrefix.
+// Files whose content begins with `#!` are written 0755; the rest are
+// 0644. Files named `.gitkeep` are dropped (they exist only to keep
+// the source tree tidy).
 //
 // Install is idempotent: re-running it with no source changes is a
 // no-op. If a destination file exists with different content, Install
 // overwrites it.
-func Install(root string, src embed.FS, prefix string) (Result, error) {
+func Install(root string, src embed.FS, srcPrefix, destSubpath string) (Result, error) {
 	var res Result
 	if root == "" {
 		return res, errors.New("install: root is empty")
 	}
+	if destSubpath == "" {
+		return res, errors.New("install: destSubpath is empty")
+	}
 
-	err := fs.WalkDir(src, prefix, func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(src, srcPrefix, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(prefix, p)
+		rel, err := filepath.Rel(srcPrefix, p)
 		if err != nil {
 			return err
 		}
@@ -61,7 +65,7 @@ func Install(root string, src embed.FS, prefix string) (Result, error) {
 		if bytes.HasPrefix(body, []byte("#!")) {
 			mode = 0o755
 		}
-		dest := filepath.Join(root, ".claude", "skills", rel)
+		dest := filepath.Join(root, destSubpath, rel)
 		if existing, err := os.ReadFile(dest); err == nil && bytes.Equal(existing, body) {
 			res.Skipped = append(res.Skipped, dest)
 			if err := os.Chmod(dest, mode); err != nil {
