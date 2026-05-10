@@ -53,10 +53,10 @@ func TestAdviceBands(t *testing.T) {
 		{0.79, 0.79, "ok"},
 		{0.80, 0, "tighten"},
 		{0.89, 0.79, "tighten"},
-		{0.90, 0, "ration"},
+		{0.90, 0, "tighten"},
 		{0, 0.80, "tighten"},
-		{0, 0.90, "ration"},
-		{1.5, 0.1, "ration"},
+		{0, 0.90, "tighten"},
+		{1.5, 0.1, "tighten"},
 	}
 	for _, c := range cases {
 		if got := adviceFor(c.short, c.long); got != c.want {
@@ -243,19 +243,19 @@ func TestStateRoundTrip(t *testing.T) {
 
 func TestBandFor(t *testing.T) {
 	cases := []struct {
-		frac, tighten, ration float64
-		want                  string
+		frac, tighten float64
+		want          string
 	}{
-		{0, 0.7, 0.9, "ok"},
-		{0.69, 0.7, 0.9, "ok"},
-		{0.70, 0.7, 0.9, "tighten"},
-		{0.89, 0.7, 0.9, "tighten"},
-		{0.90, 0.7, 0.9, "ration"},
-		{1.5, 0.7, 0.9, "ration"},
+		{0, 0.7, "ok"},
+		{0.69, 0.7, "ok"},
+		{0.70, 0.7, "tighten"},
+		{0.89, 0.7, "tighten"},
+		{0.90, 0.7, "tighten"},
+		{1.5, 0.7, "tighten"},
 	}
 	for _, c := range cases {
-		if got := bandFor(c.frac, c.tighten, c.ration); got != c.want {
-			t.Errorf("bandFor(%.2f, %.2f, %.2f) = %q want %q", c.frac, c.tighten, c.ration, got, c.want)
+		if got := bandFor(c.frac, c.tighten); got != c.want {
+			t.Errorf("bandFor(%.2f, %.2f) = %q want %q", c.frac, c.tighten, got, c.want)
 		}
 	}
 }
@@ -283,38 +283,17 @@ func TestUpdateMarkersTransitions(t *testing.T) {
 		t.Errorf("first tighten: want fresh=true")
 	}
 	must("short-tighten")
-	mustAbsent("short-ration")
 
 	fresh, _ = updateMarkers(dir, "short", "tighten")
 	if fresh {
 		t.Errorf("repeat tighten: want fresh=false")
 	}
 
-	fresh, _ = updateMarkers(dir, "short", "ration")
-	if !fresh {
-		t.Errorf("crossing into ration: want fresh=true")
-	}
-	must("short-tighten")
-	must("short-ration")
-
-	fresh, _ = updateMarkers(dir, "short", "ration")
-	if fresh {
-		t.Errorf("repeat ration: want fresh=false")
-	}
-
-	fresh, _ = updateMarkers(dir, "short", "tighten")
-	if fresh {
-		t.Errorf("ration -> tighten dip: want fresh=false (tighten marker held)")
-	}
-	must("short-tighten")
-	mustAbsent("short-ration")
-
 	fresh, _ = updateMarkers(dir, "short", "ok")
 	if fresh {
 		t.Errorf("drop to ok must not be fresh")
 	}
 	mustAbsent("short-tighten")
-	mustAbsent("short-ration")
 
 	fresh, _ = updateMarkers(dir, "short", "tighten")
 	if !fresh {
@@ -348,15 +327,11 @@ func TestReminderTextBindingHints(t *testing.T) {
 		t.Errorf("missing tighten advice tail (runner mention): %q", got)
 	}
 
-	rationShort := windowState{Frac: 0.92, OldestEventAt: ptrTime(now.Add(-4*time.Hour - 22*time.Minute))}
-	rationLong := windowState{Frac: 0.22, OldestEventAt: ptrTime(now.Add(-2 * 24 * time.Hour))}
-	r := &state{Short: rationShort, Long: rationLong}
-	gotR := reminderTextFor(r, "ration")
-	if !strings.Contains(gotR, "AGENT BUDGET (ration):") {
-		t.Errorf("missing ration header: %q", gotR)
-	}
-	if !strings.Contains(gotR, "Stop spawning runners") {
-		t.Errorf("missing ration advice tail: %q", gotR)
+	highShort := windowState{Frac: 0.92, OldestEventAt: ptrTime(now.Add(-4*time.Hour - 22*time.Minute))}
+	r := &state{Short: highShort, Long: long}
+	gotHigh := reminderTextFor(r, "tighten")
+	if !strings.Contains(gotHigh, "short=92%") {
+		t.Errorf("missing high-utilization short pct: %q", gotHigh)
 	}
 }
 
