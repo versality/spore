@@ -42,6 +42,8 @@ Commands:
   budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
   worker     Worker support hooks (token-monitor).
+  opencode   Opencode-driver lifecycle helpers (fleet-stop, liveness).
+  merge      Post-merge integrity helpers (audit, unblock).
   search     Lookup helpers (nix packages / options against search.nixos.org).
   secret     Manage age secrets (add via tmux popup; audit registration / consumers).
   signal     Record warning / error signals from a wrapped command.
@@ -175,6 +177,10 @@ func main() {
 		os.Exit(runCoordinator(args))
 	case "worker":
 		os.Exit(runWorker(args))
+	case "opencode":
+		os.Exit(runOpencode(args))
+	case "merge":
+		os.Exit(runMerge(args))
 	case "search":
 		os.Exit(runSearch(args))
 	case "secret":
