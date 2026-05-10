@@ -59,6 +59,7 @@ Subcommands:
   queue-classify  Classify task queue rows from frontmatter + state signals.
   proactive-loop  Periodic 5m driver: dispatch wakes when state warrants attention.
   rower-watch     Stop hook: surface rower transitions to next coordinator turn.
+  sla-scan        Scan state.md for stale / done / orphan open items.
 `
 
 func runCoordinator(args []string) int {
@@ -103,6 +104,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorProactiveLoop(rest)
 	case "rower-watch":
 		return runCoordinatorRowerWatch(rest)
+	case "sla-scan":
+		return runCoordinatorSLAScan(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
