@@ -11,6 +11,7 @@ import (
 
 	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/coordinator/commfeedback"
+	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/operatoringress"
 	"github.com/versality/spore/internal/coordinator/statedebt"
@@ -48,6 +49,7 @@ Subcommands:
   monitor         Boot-time verdict over the token-monitor ledger.
   operator-ingress UserPromptSubmit hook: persist operator prompt to ledger.
   comm-feedback   UserPromptSubmit hook: log +++/--- to comm-feedback ledger.
+  failure-summary  Cross-ledger failure aggregator with recovery actions.
 `
 
 func runCoordinator(args []string) int {
@@ -84,6 +86,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorOperatorIngress(rest)
 	case "comm-feedback":
 		return runCoordinatorCommFeedback(rest)
+	case "failure-summary":
+		return runCoordinatorFailureSummary(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -487,6 +491,43 @@ func runCoordinatorCommFeedback(args []string) int {
 	res := commfeedback.Run(commfeedback.Config{}, body, transcript)
 	if res.Warning != "" {
 		fmt.Fprintln(os.Stderr, "skyhelm-comm-feedback:", res.Warning)
+	}
+	return 0
+}
+
+func runCoordinatorFailureSummary(args []string) int {
+	fs := flag.NewFlagSet("coordinator failure-summary", flag.ContinueOnError)
+	since := fs.Int64("since", 0, "window in seconds (overrides SKYHELM_FAILURE_WINDOW_SECS)")
+	floor := fs.Int("floor", 0, "active-live floor (overrides WT_FLEET_FLOOR)")
+	quiet := fs.Bool("quiet", false, "suppress header + counts; only emit actionable lines")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator failure-summary:", err)
+		return 1
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator failure-summary - cross-ledger failure aggregator")
+		fmt.Println("  --since SECS  window in seconds (default 86400)")
+		fmt.Println("  --floor N     active-live floor (default 6)")
+		fmt.Println("  --quiet       suppress header + counts; only emit actionable lines")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator failure-summary [--since SECS] [--floor N] [--quiet]")
+		return 1
+	}
+
+	cfg := failuresummary.Config{
+		WindowSecs: *since,
+		Floor:      *floor,
+		Quiet:      *quiet,
+	}
+	summary := failuresummary.Summarize(cfg)
+	fmt.Print(summary.Format(*quiet))
+	if len(summary.Actions) > 0 {
+		return 2
 	}
 	return 0
 }
