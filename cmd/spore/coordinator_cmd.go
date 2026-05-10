@@ -11,6 +11,7 @@ import (
 
 	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/coordinator/loopguard"
+	"github.com/versality/spore/internal/coordinator/operatoringress"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
@@ -44,6 +45,7 @@ Subcommands:
   loop-guard      Check the respawn circuit breaker.
   token-monitor   Stop-hook: check coordinator context budget.
   monitor         Boot-time verdict over the token-monitor ledger.
+  operator-ingress UserPromptSubmit hook: persist operator prompt to ledger.
 `
 
 func runCoordinator(args []string) int {
@@ -76,6 +78,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorTokenMonitor(rest)
 	case "monitor":
 		return runCoordinatorMonitor(rest)
+	case "operator-ingress":
+		return runCoordinatorOperatorIngress(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -401,6 +405,41 @@ func runCoordinatorTokenMonitor(_ []string) int {
 	result := tokenmonitor.Check(cfg, payload)
 	if result.ShouldFire {
 		fmt.Fprint(os.Stderr, result.Message)
+		return 2
+	}
+	return 0
+}
+
+func runCoordinatorOperatorIngress(args []string) int {
+	fs := flag.NewFlagSet("coordinator operator-ingress", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator operator-ingress:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator operator-ingress - persist operator prompt to ledger")
+		fmt.Println("  Reads claude-code UserPromptSubmit JSON payload on stdin.")
+		fmt.Println("  Self-gates by SKYBOT_INBOX vs SKYHELM_STATE_DIR; no-op for non-skyhelm sessions.")
+		fmt.Println("  Exits 2 with stderr if persistence fails (blocks the prompt).")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator operator-ingress")
+		return 2
+	}
+
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "skyhelm-operator-ingress: read stdin:", err)
+		return 2
+	}
+
+	res := operatoringress.Run(operatoringress.Config{}, body)
+	if res.Failed {
+		fmt.Fprintln(os.Stderr, "skyhelm-operator-ingress:", res.ErrorMsg)
 		return 2
 	}
 	return 0
