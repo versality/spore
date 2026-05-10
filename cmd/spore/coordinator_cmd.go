@@ -61,6 +61,7 @@ Subcommands:
   rower-watch     Stop hook: surface rower transitions to next coordinator turn.
   sla-scan        Scan state.md for stale / done / orphan open items.
   idle-watchdog   Quiet-idle gate: scan fleet/queue/state.md for findings.
+  spawn           ExecStart wrapper: bring up coordinator tmux session, block until it dies.
 `
 
 func runCoordinator(args []string) int {
@@ -109,6 +110,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorSLAScan(rest)
 	case "idle-watchdog":
 		return runCoordinatorIdleWatchdog(rest)
+	case "spawn":
+		return runCoordinatorSpawn(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
