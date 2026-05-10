@@ -73,6 +73,14 @@ Subcommands:
   notify-coordinator [project]
                               Write a poke to the coordinator's project inbox.
                               With no project, reads $WT_PROJECT.
+  codex <event>          Codex hook adapters. Events: session-start.
+  context-tee            Stop-hook: write a per-session token JSON
+                         snapshot for status displays. Reads
+                         $SPORE_TASK_INBOX (and $SPORE_COORDINATOR_STATE_DIR
+                         for the role decision); writes
+                         <state>/token.json (coordinator) or
+                         <SPORE_WORKER_TOKEN_DIR>/<slug>.json (worker).
+                         Always exits 0.
 `
 
 const infectUsage = `spore infect - bootstrap a fresh server with NixOS via nixos-anywhere

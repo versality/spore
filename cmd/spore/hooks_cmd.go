@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/hooks/contexttee"
 )
 
 func runHooks(args []string) int {
@@ -36,6 +37,10 @@ func runHooks(args []string) int {
 		return runHooksWatchInbox(rest)
 	case "notify-coordinator":
 		return runHooksNotifyCoordinator(rest)
+	case "codex":
+		return runHooksCodex(rest)
+	case "context-tee":
+		return runHooksContextTee(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore hooks: unknown subcommand %q\n\n%s", sub, hooksUsage)
 		return 2
@@ -208,6 +213,31 @@ func runHooksNotifyCoordinator(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator [project]")
 		return 2
 	}
+}
+
+func runHooksContextTee(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks context-tee: takes no args")
+		return 2
+	}
+	cfg := contexttee.Config{
+		Inbox:               os.Getenv("SPORE_TASK_INBOX"),
+		CoordinatorStateDir: defaultCoordinatorStateDirEnv(),
+		Tier:                os.Getenv("SPORE_ACCOUNT_TIER"),
+		CoordSoftCap:        envInt("SPORE_COORDINATOR_TOKEN_SOFT"),
+		CoordHardCap:        envInt("SPORE_COORDINATOR_TOKEN_HARD"),
+		WorkerWrapMax:       envInt("SPORE_WORKER_TOKEN_WRAP_MAX"),
+		WorkerWrapSub:       envInt("SPORE_WORKER_TOKEN_WRAP_SUB"),
+		WorkerWrapOverride:  envInt("SPORE_WORKER_TOKEN_WRAP"),
+	}
+	if d := os.Getenv("SPORE_WORKER_TOKEN_DIR"); d != "" {
+		cfg.WorkerTokenDir = d
+	}
+	if _, err := contexttee.Run(cfg, os.Stdin); err != nil {
+		// Best-effort: log and exit 0 so the Stop chain keeps going.
+		fmt.Fprintln(os.Stderr, "spore hooks context-tee:", err)
+	}
+	return 0
 }
 
 func repoRoot() (string, error) {
