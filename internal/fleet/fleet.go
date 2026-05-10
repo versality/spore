@@ -197,7 +197,7 @@ func Reconcile(cfg Config) (Result, error) {
 		if err != nil {
 			return res, fmt.Errorf("assign agent %s: %w", slug, err)
 		}
-		if _, err := task.Ensure(cfg.TasksDir, slug); err != nil {
+		if _, err := task.Ensure(cfg.TasksDir, slug, nil); err != nil {
 			return res, fmt.Errorf("ensure %s: %w", slug, err)
 		}
 		res.Spawned = append(res.Spawned, slug)
