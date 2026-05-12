@@ -10,7 +10,7 @@ fmt:
     nixpkgs-fmt $(find . -name '*.nix' -not -path './.git/*' -not -path './.worktrees/*' | sort)
 
 fmt-check:
-    @unformatted="$(gofmt -l $(find . -name '*.go' -not -path './.git/*' -not -path './.worktrees/*' | sort))"; \
+    @unformatted="$(gofmt -d -l $(find . -name '*.go' -not -path './.git/*' -not -path './.worktrees/*' | sort))"; \
     if [ -n "$unformatted" ]; then \
       printf 'gofmt needed:\n%s\n' "$unformatted"; \
       exit 1; \

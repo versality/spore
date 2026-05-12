@@ -27,6 +27,8 @@ func runHooks(args []string) int {
 		return runHooksInstall(rest)
 	case "commit-msg":
 		return runHooksCommitMsg(rest)
+	case "pre-commit":
+		return runHooksPreCommit(rest)
 	case "pretooluse":
 		return runHooksPreToolUse()
 	case "stop":
@@ -73,6 +75,23 @@ func runHooksCommitMsg(args []string) int {
 	}
 	if err := hooks.CommitMsg(args[0]); err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks commit-msg:", err)
+		return 1
+	}
+	return 0
+}
+
+func runHooksPreCommit(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks pre-commit: takes no args")
+		return 2
+	}
+	root, err := repoRoot()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks pre-commit:", err)
+		return 1
+	}
+	if err := hooks.PreCommit(root); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks pre-commit:", err)
 		return 1
 	}
 	return 0

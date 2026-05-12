@@ -38,7 +38,7 @@ func TestReconcileSpawnsAndReaps(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	writeTask(t, dirs.tasks, "alpha", "active")
 	writeTask(t, dirs.tasks, "beta", "active")
@@ -119,7 +119,7 @@ func TestReconcileRespectsMaxWorkers(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	for _, slug := range []string{"a", "b", "c", "d", "e"} {
 		writeTask(t, dirs.tasks, slug, "active")
@@ -148,7 +148,7 @@ func TestReconcileSpawnsByMatterSortOrder(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	// Slug order is alpha < bravo < charlie < delta. matter_sort_order
 	// inverts it: charlie sits at the top of the kanban column. With
@@ -183,7 +183,7 @@ func TestReconcileSortsStampedBeforeUnstamped(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	// "zulu" carries a stamp, "alpha" does not. Stamped tasks sort
 	// before unstamped so a matter-managed ticket beats an ad-hoc
@@ -247,7 +247,7 @@ func TestReconcileAssignsAgentFromMix(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	if err := os.WriteFile(filepath.Join(dirs.project, "spore.toml"), []byte(`
 [fleet.workers]
@@ -441,6 +441,11 @@ func requireToolchain(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skipf("tmux not available: %v", err)
 	}
+}
+
+func setTestAgentBinary(t *testing.T) {
+	t.Helper()
+	t.Setenv("SPORE_AGENT_BINARY", "sh -c 'sleep 30'")
 }
 
 func killSporeSessions(projectRoot string) {

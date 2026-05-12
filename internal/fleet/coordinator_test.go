@@ -13,7 +13,7 @@ func TestReconcileSpawnsCoordinatorSingleton(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	t.Cleanup(func() { killSporeSessions(dirs.project) })
 
@@ -58,7 +58,7 @@ func TestReconcileReapsCoordinatorOnDisable(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	t.Cleanup(func() { killSporeSessions(dirs.project) })
 
@@ -97,7 +97,7 @@ func TestReconcileCoordinatorDoesNotCountTowardCap(t *testing.T) {
 	dirs := newTestDirs(t)
 	gitInit(t, dirs.project)
 	mustEnable(t)
-	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	setTestAgentBinary(t)
 
 	for _, slug := range []string{"a", "b"} {
 		writeTask(t, dirs.tasks, slug, "active")

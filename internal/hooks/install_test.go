@@ -29,20 +29,22 @@ func TestInstall_WritesHooksAndConfigsCoreHooksPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
-	hookPath := filepath.Join(dir, "commit-msg")
-	st, err := os.Stat(hookPath)
-	if err != nil {
-		t.Fatalf("stat hook: %v", err)
-	}
-	if st.Mode().Perm()&0o111 == 0 {
-		t.Fatalf("hook not executable: %s", st.Mode())
-	}
-	body, err := os.ReadFile(hookPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(string(body), "#!") {
-		t.Fatalf("hook body missing shebang: %q", string(body))
+	for _, name := range []string{"commit-msg", "pre-commit"} {
+		hookPath := filepath.Join(dir, name)
+		st, err := os.Stat(hookPath)
+		if err != nil {
+			t.Fatalf("stat hook %s: %v", name, err)
+		}
+		if st.Mode().Perm()&0o111 == 0 {
+			t.Fatalf("hook %s not executable: %s", name, st.Mode())
+		}
+		body, err := os.ReadFile(hookPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(string(body), "#!") {
+			t.Fatalf("hook %s body missing shebang: %q", name, string(body))
+		}
 	}
 
 	out, err := exec.Command("git", "-C", root, "config", "core.hooksPath").Output()
@@ -93,5 +95,43 @@ func TestCommitMsg_BlocksEmDash(t *testing.T) {
 	}
 	if err := CommitMsg(dirty); err == nil {
 		t.Fatalf("dirty: expected error, got nil")
+	}
+}
+
+func TestPreCommitChecksStagedGoFiles(t *testing.T) {
+	if _, err := exec.LookPath("gofmt"); err != nil {
+		t.Skip("gofmt not on PATH")
+	}
+	root := newGitRepo(t)
+	path := filepath.Join(root, "main.go")
+	if err := os.WriteFile(path, []byte("package main\nfunc main(){println(\"x\")}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", root, "add", "main.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	err := PreCommit(root)
+	if err == nil {
+		t.Fatal("PreCommit should reject unformatted staged Go")
+	}
+	if !strings.Contains(err.Error(), "gofmt needed") {
+		t.Fatalf("PreCommit error = %q, want gofmt needed", err)
+	}
+}
+
+func TestPreCommitAllowsFormattedStagedGoFiles(t *testing.T) {
+	if _, err := exec.LookPath("gofmt"); err != nil {
+		t.Skip("gofmt not on PATH")
+	}
+	root := newGitRepo(t)
+	path := filepath.Join(root, "main.go")
+	if err := os.WriteFile(path, []byte("package main\n\nfunc main() {\n\tprintln(\"x\")\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", root, "add", "main.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	if err := PreCommit(root); err != nil {
+		t.Fatalf("PreCommit: %v", err)
 	}
 }

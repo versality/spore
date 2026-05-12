@@ -796,4 +796,3 @@ func hasSession(name string) bool {
 func branchExists(projectRoot, branch string) bool {
 	return gitCmd(projectRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run() == nil
 }
-

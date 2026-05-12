@@ -28,6 +28,10 @@ func DefaultGitHooks() []GitHook {
 			Name: "commit-msg",
 			Body: "#!/usr/bin/env bash\nset -euo pipefail\nexec spore hooks commit-msg \"$1\"\n",
 		},
+		{
+			Name: "pre-commit",
+			Body: "#!/usr/bin/env bash\nset -euo pipefail\nexec spore hooks pre-commit\n",
+		},
 	}
 }
 
@@ -107,6 +111,28 @@ func CommitMsg(msgPath string) error {
 	}
 	if bytes.ContainsAny(body, "\u2014\u2013") {
 		return fmt.Errorf("commit message contains em-dash or en-dash; replace with a hyphen, colon, parentheses, or a new sentence")
+	}
+	return nil
+}
+
+func PreCommit(repoRoot string) error {
+	out, err := exec.Command("git", "-C", repoRoot, "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z", "--", "*.go").Output()
+	if err != nil {
+		return fmt.Errorf("git diff --cached: %w", err)
+	}
+	names := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
+	if len(names) == 1 && names[0] == "" {
+		return nil
+	}
+	args := append([]string{"-d", "-l", "--"}, names...)
+	cmd := exec.Command("gofmt", args...)
+	cmd.Dir = repoRoot
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("gofmt -d -l: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		return fmt.Errorf("gofmt needed:\n%s", strings.TrimSpace(string(out)))
 	}
 	return nil
 }

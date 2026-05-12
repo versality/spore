@@ -463,6 +463,37 @@ func TestMergeJustCheckRedRefuses(t *testing.T) {
 	}
 }
 
+func TestMergeJustCheckRedRefusesWithoutExistingWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("just"); err != nil {
+		t.Skipf("just not available: %v", err)
+	}
+	repo, _ := setupGateRepo(t, "demo", "@exit 1")
+	runGit(t, repo, "worktree", "remove", "--force", filepath.Join(repo, ".worktrees", "demo"))
+
+	preMain, err := exec.Command("git", "-C", repo, "rev-parse", "main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergeErr := Merge(filepath.Join(repo, "tasks"), "demo")
+	if mergeErr == nil {
+		t.Fatal("Merge should refuse on red just check")
+	}
+	var gateErr *MergeGateError
+	if !errors.As(mergeErr, &gateErr) {
+		t.Fatalf("error %v should be a *MergeGateError", mergeErr)
+	}
+	postMain, err := exec.Command("git", "-C", repo, "rev-parse", "main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(preMain) != string(postMain) {
+		t.Errorf("main moved despite red gate: pre=%q post=%q", preMain, postMain)
+	}
+}
+
 func TestMergeJustCheckGreenLands(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)

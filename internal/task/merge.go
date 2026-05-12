@@ -183,14 +183,13 @@ func closeMergedTask(tasksDir, slug string) error {
 	return nil
 }
 
-// runJustCheckGate runs `just check` from the wt/<slug> worktree
-// before the fast-forward. Skips silently when there is no worktree,
-// no justfile, no `just` on PATH, or no `check` recipe; otherwise
-// refuses with a typed *MergeGateError on red. forceReason bypasses
-// the gate after appending an override row to merge-override.jsonl.
-// Hard-coded `check` recipe mirrors nix/packages/wt/wt's
-// _run_just_check_gate; per-project configuration is documented as
-// out-of-scope in docs/worker-dispatch.md.
+// runJustCheckGate runs `just check` from wt/<slug>'s files before
+// the fast-forward. If the normal worktree is gone, it creates a
+// temporary detached worktree from the branch so the gate still runs.
+// Skips silently when there is no justfile, no `just` on PATH, or no
+// `check` recipe; otherwise refuses with a typed *MergeGateError on
+// red. forceReason bypasses the gate after appending an override row
+// to merge-override.jsonl.
 func runJustCheckGate(projectRoot, slug, branch, forceReason string) error {
 	if forceReason != "" {
 		if err := logMergeOverride(projectRoot, slug, branch, forceReason); err != nil {
@@ -199,10 +198,11 @@ func runJustCheckGate(projectRoot, slug, branch, forceReason string) error {
 		fmt.Fprintf(os.Stderr, "spore task merge: --force-merge-red set (reason: %s); skipping just check gate\n", forceReason)
 		return nil
 	}
-	worktree := filepath.Join(projectRoot, ".worktrees", slug)
-	if _, err := os.Stat(worktree); err != nil {
-		return nil
+	worktree, cleanup, err := mergeGateWorktree(projectRoot, slug, branch)
+	if err != nil {
+		return err
 	}
+	defer cleanup()
 	if _, err := os.Stat(filepath.Join(worktree, "justfile")); err != nil {
 		return nil
 	}
@@ -227,6 +227,30 @@ func runJustCheckGate(projectRoot, slug, branch, forceReason string) error {
 		}
 	}
 	return nil
+}
+
+func mergeGateWorktree(projectRoot, slug, branch string) (string, func(), error) {
+	worktree := filepath.Join(projectRoot, ".worktrees", slug)
+	if _, err := os.Stat(worktree); err == nil {
+		return worktree, func() {}, nil
+	} else if !os.IsNotExist(err) {
+		return "", nil, err
+	}
+
+	tmp, err := os.MkdirTemp("", "spore-merge-gate-*")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() {
+		_ = gitCmd(projectRoot, "worktree", "remove", "--force", tmp).Run()
+		_ = os.RemoveAll(tmp)
+	}
+	out, err := gitCmd(projectRoot, "worktree", "add", "-q", "--detach", tmp, branch).CombinedOutput()
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("git worktree add merge gate: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return tmp, cleanup, nil
 }
 
 // logMergeOverride appends a JSONL row to
