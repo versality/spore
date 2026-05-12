@@ -1,5 +1,5 @@
-// Package rowerwatch is the coordinator Stop-hook helper that
-// surfaces rower-state transitions between turns. It walks the
+// Package workerwatch is the coordinator Stop-hook helper that
+// surfaces worker-state transitions between turns. It walks the
 // active-task set (frontmatter under each project's tasks/), diffs
 // against a persisted NDJSON snapshot, and emits one line per
 // transition (APPEARED, DISAPPEARED, STUCK, UNSTUCK, HEAD-MOVED).
@@ -7,10 +7,10 @@
 // coordinator/verify verdict so the next turn sees the verdict
 // without having to ask.
 //
-// Ported from harness/skyhelm-rower-watch (bash). The output banner
-// "SKYHELM ROWER WATCH:" is preserved verbatim so the downstream
+// Ported from harness/skyhelm-worker-watch (bash). The output banner
+// "SPORE WORKER WATCH:" is preserved verbatim so the downstream
 // Stop-hook reminder grep stays unchanged across the consumer swap.
-package rowerwatch
+package workerwatch
 
 import (
 	"fmt"
@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const Banner = "SKYHELM ROWER WATCH:"
+const Banner = "SPORE WORKER WATCH:"
 
 // Config carries the tunables. Defaults match the bash watcher so a
 // drop-in replacement preserves classifier behaviour.
@@ -84,7 +84,7 @@ type FinalStatus struct {
 // production; Run does not nil-check.
 type Env struct {
 	Now func() time.Time
-	// Active returns every status=active rower across every project,
+	// Active returns every status=active worker across every project,
 	// already prefixed with the project name when more than one
 	// project is registered.
 	Active func() []TaskRef
@@ -93,7 +93,7 @@ type Env struct {
 	// rev-parse fails.
 	HeadSHA func(projectRoot, baseSlug string) string
 	// Idle returns the idle seconds and whether the measurement
-	// succeeded. Failure (ok=false) keeps the rower out of stuck
+	// succeeded. Failure (ok=false) keeps the worker out of stuck
 	// classification regardless of threshold.
 	Idle func(projectRoot, baseSlug, agent string) (secs int, ok bool)
 	// Resolve produces the post-disappearance status + verdict for a
@@ -117,7 +117,7 @@ type Result struct {
 }
 
 // Run computes the transition set for the current turn. It loads the
-// prior snapshot, classifies every active rower, and emits one
+// prior snapshot, classifies every active worker, and emits one
 // transition per state delta. Side effects: SaveState is called once
 // before return; its error is swallowed (transitions stay valid for
 // this turn regardless of disk failure).

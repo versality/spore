@@ -1,4 +1,4 @@
-package rowerwatch
+package workerwatch
 
 import (
 	"os"
@@ -55,7 +55,7 @@ func ClaudeIdleSecs(homeDir, wtDir string, now time.Time) (int, bool) {
 // session whose `directory` matches wtDir. ok=false when the binary
 // is missing, the query fails, or the row is unparseable. A zero
 // asst_ms (no assistant messages ever) maps to "idle = forever"
-// rather than ok=false so the rower can still be flagged STUCK; this
+// rather than ok=false so the worker can still be flagged STUCK; this
 // matches the bash watcher's `((asst_ms == 0)) -> printf now_s`
 // branch which yields idle=now_s.
 func OpencodeIdleSecs(bin, wtDir string, now time.Time) (int, bool) {

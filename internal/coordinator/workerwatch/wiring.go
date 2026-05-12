@@ -1,4 +1,4 @@
-package rowerwatch
+package workerwatch
 
 import (
 	"bufio"
@@ -13,17 +13,17 @@ import (
 )
 
 // DefaultStateFile returns the spore-namespaced snapshot path:
-// $SPORE_ROWER_WATCH_FILE, else $SPORE_ROWER_WATCH_DIR/state.ndjson,
-// else $HOME/.local/state/spore/rower-watch/state.ndjson. Caller is
+// $SPORE_WORKER_WATCH_FILE, else $SPORE_WORKER_WATCH_DIR/state.ndjson,
+// else $HOME/.local/state/spore/worker-watch/state.ndjson. Caller is
 // responsible for the dir mkdir; SaveStateFile handles that on write.
 func DefaultStateFile() string {
-	if p := os.Getenv("SPORE_ROWER_WATCH_FILE"); p != "" {
+	if p := os.Getenv("SPORE_WORKER_WATCH_FILE"); p != "" {
 		return p
 	}
-	dir := os.Getenv("SPORE_ROWER_WATCH_DIR")
+	dir := os.Getenv("SPORE_WORKER_WATCH_DIR")
 	if dir == "" {
 		home, _ := os.UserHomeDir()
-		dir = filepath.Join(home, ".local", "state", "spore", "rower-watch")
+		dir = filepath.Join(home, ".local", "state", "spore", "worker-watch")
 	}
 	return filepath.Join(dir, "state.ndjson")
 }
@@ -72,7 +72,7 @@ func ReadProjects(path string) ([]string, error) {
 }
 
 // ScanActive walks every projectRoot, lists tasks/*.md, filters to
-// status=active, and returns one TaskRef per rower. Slug is
+// status=active, and returns one TaskRef per worker. Slug is
 // "<project>/<base>" when len(projectRoots) > 1, else the bare base
 // slug. project names that fail ProjectName resolution fall back to
 // filepath.Base(projectRoot). Errors per project are returned

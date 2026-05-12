@@ -1,4 +1,4 @@
-package rowerwatch
+package workerwatch
 
 import "os"
 

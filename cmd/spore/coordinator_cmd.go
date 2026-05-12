@@ -11,10 +11,10 @@ import (
 
 	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/coordinator/loopguard"
-	"github.com/versality/spore/internal/coordinator/rowerwatch"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
+	"github.com/versality/spore/internal/coordinator/workerwatch"
 	"github.com/versality/spore/internal/fleet"
 )
 
@@ -45,7 +45,7 @@ Subcommands:
   loop-guard      Check the respawn circuit breaker.
   token-monitor   Stop-hook: check coordinator context budget.
   monitor         Boot-time verdict over the token-monitor ledger.
-  rower-watch     Diff active-rower set against snapshot; emit transitions.
+  worker-watch     Diff active-worker set against snapshot; emit transitions.
 `
 
 func runCoordinator(args []string) int {
@@ -78,8 +78,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorTokenMonitor(rest)
 	case "monitor":
 		return runCoordinatorMonitor(rest)
-	case "rower-watch":
-		return runCoordinatorRowerWatch(rest)
+	case "worker-watch":
+		return runCoordinatorWorkerWatch(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -494,32 +494,32 @@ func runCoordinatorLoopGuard(args []string) int {
 	return 0
 }
 
-func runCoordinatorRowerWatch(args []string) int {
-	fs := flag.NewFlagSet("coordinator rower-watch", flag.ContinueOnError)
+func runCoordinatorWorkerWatch(args []string) int {
+	fs := flag.NewFlagSet("coordinator worker-watch", flag.ContinueOnError)
 	hook := fs.Bool("hook", false, "Stop-hook mode: drain stdin, gate on SPORE_COORDINATOR_INBOX, emit stderr block + exit 2 on transitions")
-	stateFile := fs.String("state-file", "", "snapshot path (default: $SPORE_ROWER_WATCH_FILE or $SPORE_ROWER_WATCH_DIR/state.ndjson)")
+	stateFile := fs.String("state-file", "", "snapshot path (default: $SPORE_WORKER_WATCH_FILE or $SPORE_WORKER_WATCH_DIR/state.ndjson)")
 	projectsFile := fs.String("projects-file", "", "projects-list path (default: $WT_CFG/projects)")
 	help := fs.Bool("h", false, "show help")
 	helpLong := fs.Bool("help", false, "show help")
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator rower-watch:", err)
+		fmt.Fprintln(os.Stderr, "spore coordinator worker-watch:", err)
 		return 2
 	}
 	if *help || *helpLong {
-		fmt.Println("spore coordinator rower-watch - diff active rowers against snapshot")
+		fmt.Println("spore coordinator worker-watch - diff active workers against snapshot")
 		fmt.Println("  --hook              Stop-hook mode (gate on SPORE_COORDINATOR_INBOX, exit 2 on transitions)")
 		fmt.Println("  --state-file PATH   snapshot path override")
 		fmt.Println("  --projects-file P   projects-list path override")
 		fmt.Println("")
 		fmt.Println("env:")
 		fmt.Println("  SPORE_COORDINATOR_INBOX             gate (must sit under SPORE_COORDINATOR_STATE_DIR)")
-		fmt.Println("  SPORE_ROWER_WATCH_FILE              snapshot path (overrides --state-file default)")
-		fmt.Println("  SPORE_ROWER_WATCH_DIR               snapshot dir (state.ndjson inside)")
-		fmt.Println("  SPORE_ROWER_WATCH_STUCK_OPENCODE_SECS  default 600")
-		fmt.Println("  SPORE_ROWER_WATCH_STUCK_CLAUDE_SECS    default 900")
-		fmt.Println("  SPORE_ROWER_WATCH_DEBOUNCE             default 2")
-		fmt.Println("  SPORE_ROWER_WATCH_HEAD_MOVED           1 enables HEAD-MOVED lines")
+		fmt.Println("  SPORE_WORKER_WATCH_FILE              snapshot path (overrides --state-file default)")
+		fmt.Println("  SPORE_WORKER_WATCH_DIR               snapshot dir (state.ndjson inside)")
+		fmt.Println("  SPORE_WORKER_WATCH_STUCK_OPENCODE_SECS  default 600")
+		fmt.Println("  SPORE_WORKER_WATCH_STUCK_CLAUDE_SECS    default 900")
+		fmt.Println("  SPORE_WORKER_WATCH_DEBOUNCE             default 2")
+		fmt.Println("  SPORE_WORKER_WATCH_HEAD_MOVED           1 enables HEAD-MOVED lines")
 		return 0
 	}
 
@@ -532,30 +532,30 @@ func runCoordinatorRowerWatch(args []string) int {
 		}
 	}
 
-	cfg := rowerwatch.Config{
-		StuckOpencodeSecs: envInt("SPORE_ROWER_WATCH_STUCK_OPENCODE_SECS"),
-		StuckClaudeSecs:   envInt("SPORE_ROWER_WATCH_STUCK_CLAUDE_SECS"),
-		Debounce:          envInt("SPORE_ROWER_WATCH_DEBOUNCE"),
-		HeadMovedOn:       os.Getenv("SPORE_ROWER_WATCH_HEAD_MOVED") == "1",
+	cfg := workerwatch.Config{
+		StuckOpencodeSecs: envInt("SPORE_WORKER_WATCH_STUCK_OPENCODE_SECS"),
+		StuckClaudeSecs:   envInt("SPORE_WORKER_WATCH_STUCK_CLAUDE_SECS"),
+		Debounce:          envInt("SPORE_WORKER_WATCH_DEBOUNCE"),
+		HeadMovedOn:       os.Getenv("SPORE_WORKER_WATCH_HEAD_MOVED") == "1",
 	}
 	if *stateFile == "" {
-		*stateFile = rowerwatch.DefaultStateFile()
+		*stateFile = workerwatch.DefaultStateFile()
 	}
 	if *projectsFile == "" {
-		*projectsFile = rowerwatch.DefaultProjectsFile()
+		*projectsFile = workerwatch.DefaultProjectsFile()
 	}
 
-	env := rowerwatch.ProductionEnv(time.Now(), *projectsFile, *stateFile)
-	result := rowerwatch.Run(cfg, env)
+	env := workerwatch.ProductionEnv(time.Now(), *projectsFile, *stateFile)
+	result := workerwatch.Run(cfg, env)
 
 	if len(result.Transitions) == 0 {
 		return 0
 	}
 	if *hook {
-		fmt.Fprint(os.Stderr, rowerwatch.FormatBlock(result.Transitions))
+		fmt.Fprint(os.Stderr, workerwatch.FormatBlock(result.Transitions))
 		return 2
 	}
-	fmt.Print(rowerwatch.FormatBlock(result.Transitions))
+	fmt.Print(workerwatch.FormatBlock(result.Transitions))
 	return 0
 }
 

@@ -1,4 +1,4 @@
-package rowerwatch
+package workerwatch
 
 import (
 	"bufio"
@@ -9,7 +9,7 @@ import (
 
 // LoadStateFile reads an NDJSON snapshot. Missing file is empty, not
 // an error. Per-line parse errors drop the offending row silently:
-// the recovery shape is "every active rower flashes APPEARED once on
+// the recovery shape is "every active worker flashes APPEARED once on
 // the next turn", same as the bash watcher when the file is
 // truncated.
 func LoadStateFile(path string) ([]Snapshot, error) {

@@ -1,4 +1,4 @@
-package rowerwatch
+package workerwatch
 
 import (
 	"path/filepath"
@@ -255,7 +255,7 @@ func TestNoOpWhenStuckMatchesPrior(t *testing.T) {
 
 func TestFormatBlock(t *testing.T) {
 	got := FormatBlock([]string{"APPEARED foo (active, claude)", "STUCK bar (claude, idle=15m)"})
-	want := "SKYHELM ROWER WATCH:\n  APPEARED foo (active, claude)\n  STUCK bar (claude, idle=15m)\n"
+	want := "SPORE WORKER WATCH:\n  APPEARED foo (active, claude)\n  STUCK bar (claude, idle=15m)\n"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
