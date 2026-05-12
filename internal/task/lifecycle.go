@@ -470,6 +470,9 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	// this the claude TUI opens empty and the rower idles waiting
 	// for the operator to type. The conditional cat keeps the path
 	// no-op when the file is absent.
+	if strings.HasPrefix(strings.TrimSpace(agent), "claude") && !strings.Contains(agent, "--dangerously-skip-permissions") {
+		agent = "claude --dangerously-skip-permissions" + strings.TrimPrefix(strings.TrimSpace(agent), "claude")
+	}
 	shellCmd := agent + ` ${SPORE_BRIEF_FILE:+-- "$(cat "$SPORE_BRIEF_FILE")"}`
 	args := []string{
 		"new-session", "-d",
