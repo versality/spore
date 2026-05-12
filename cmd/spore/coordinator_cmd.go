@@ -13,6 +13,7 @@ import (
 	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
+	"github.com/versality/spore/internal/coordinator/spawn"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
 	"github.com/versality/spore/internal/coordinator/verify"
@@ -31,6 +32,7 @@ Usage:
 
 Subcommands:
   start           Spawn the coordinator tmux session (idempotent).
+  spawn           systemd-ExecStart entry: tier-gate, ensure, block until death.
   stop            Kill the coordinator tmux session.
   restart         Stop then start.
   status          Print whether the coordinator session is alive.
@@ -57,6 +59,8 @@ func runCoordinator(args []string) int {
 		return 0
 	case "start":
 		return runCoordinatorStart(rest)
+	case "spawn":
+		return runCoordinatorSpawn(rest)
 	case "stop":
 		return runCoordinatorStop(rest)
 	case "restart":
@@ -604,6 +608,44 @@ func runCoordinatorFailureSummary(args []string) int {
 	fmt.Print(summary.Format(*quiet))
 	if len(summary.Actions) > 0 {
 		return 2
+	}
+	return 0
+}
+
+func runCoordinatorSpawn(args []string) int {
+	fs := flag.NewFlagSet("coordinator spawn", flag.ContinueOnError)
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator spawn:", err)
+		return 2
+	}
+	if *help || *helpLong {
+		fmt.Println("spore coordinator spawn - systemd-ExecStart entry point")
+		fmt.Println()
+		fmt.Println("Tier-gates (claude requires max), ensures the coordinator")
+		fmt.Println("tmux session is alive (spawn or adopt), then blocks until")
+		fmt.Println("the session dies via an event-driven tmux session-closed")
+		fmt.Println("hook. SIGTERM/SIGINT kill the session and return 0 so a")
+		fmt.Println("Restart=on-success unit cycles cleanly; preflight failures")
+		fmt.Println("(tier mismatch, agent exec failure) exit non-zero so the")
+		fmt.Println("unit stays down until the operator clears state.")
+		return 0
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: spore coordinator spawn")
+		return 2
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator spawn:", err)
+		return 1
+	}
+	if err := spawn.Run(spawn.Options{ProjectRoot: root}); err != nil {
+		fmt.Fprintln(os.Stderr, "spore coordinator spawn:", err)
+		return 1
 	}
 	return 0
 }
