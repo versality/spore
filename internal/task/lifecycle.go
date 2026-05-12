@@ -436,6 +436,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	agentName := workerAgentName(meta)
 	project, err := ProjectName(projectRoot)
 	if err != nil {
 		return "", err
@@ -448,9 +449,23 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Refresh the initial-prompt stage file on every respawn so a
+	// re-mint into an existing worktree (the wedge-recovery path)
+	// still gets a fresh brief, not just first-time worktree creation.
+	if err := stageInitialPrompt(tasksDir, worktree, slug); err != nil {
+		return "", fmt.Errorf("stage initial-prompt: %w", err)
+	}
+	// Wrap the agent command through sh -c so we can append the
+	// initial-prompt brief on launch (mirrors the old wt-task
+	// `agent_cmd -- "$(cat .wt/initial-prompt)"` pattern). Without
+	// this the claude TUI opens empty and the rower idles waiting
+	// for the operator to type. The conditional cat keeps the path
+	// no-op when the file is absent.
+	shellCmd := agent + ` ${SPORE_BRIEF_FILE:+-- "$(cat "$SPORE_BRIEF_FILE")"}`
 	args := []string{
 		"new-session", "-d",
 		"-s", session,
+		"-n", agentName,
 		"-c", worktree,
 		"-e", "SPORE_TASK_SLUG=" + slug,
 		"-e", "SPORE_PROJECT_ROOT=" + projectRoot,
@@ -458,18 +473,40 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		"-e", "SPORE_TASK_INBOX=" + inbox,
 		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
 	}
+	briefPath := filepath.Join(worktree, ".wt", "initial-prompt")
+	if _, err := os.Stat(briefPath); err == nil {
+		args = append(args, "-e", "SPORE_BRIEF_FILE="+briefPath)
+	}
 	for _, kv := range extraEnv {
 		if kv == "" {
 			continue
 		}
 		args = append(args, "-e", kv)
 	}
-	args = append(args, agent)
+	args = append(args, "sh", "-c", shellCmd)
 	out, err := exec.Command("tmux", args...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return session, nil
+}
+
+// workerAgentName returns the window name to use for the spawned
+// tmux agent window. Mirrors workerAgentCommand's agent-resolution
+// but yields just the agent label ("claude" / "codex") so the fleet
+// liveness check (which expects window name == agent) sees the
+// window as healthy regardless of the binary's wrapper basename.
+func workerAgentName(m frontmatter.Meta) string {
+	switch m.Agent {
+	case "codex":
+		return "codex"
+	case "":
+		return "claude"
+	case "claude", "claude-code":
+		return "claude"
+	default:
+		return m.Agent
+	}
 }
 
 func readTaskMeta(tasksDir, slug string) (frontmatter.Meta, error) {
@@ -576,6 +613,29 @@ func copyBriefToWorktree(tasksDir, worktree, slug string) error {
 		return err
 	}
 	return os.WriteFile(dst, body, 0o644)
+}
+
+// stageInitialPrompt writes the task brief to <worktree>/.wt/initial-prompt
+// so ensureSession's sh-wrapped agent launch can `cat` it into the first
+// user message. Called on every ensureSession (not just first-time worktree
+// creation) so that a re-mint into an existing worktree (the wedge-recovery
+// path) still gets a fresh prompt. Safe to overwrite: .wt/initial-prompt
+// is a transient stage file, never the operator's source-of-truth brief.
+// Soft-fails on a missing source brief.
+func stageInitialPrompt(tasksDir, worktree, slug string) error {
+	src := filepath.Join(tasksDir, slug+".md")
+	body, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	promptDir := filepath.Join(worktree, ".wt")
+	if err := os.MkdirAll(promptDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(promptDir, "initial-prompt"), body, 0o644)
 }
 
 func tmuxSessionName(projectRoot, slug string) string {
