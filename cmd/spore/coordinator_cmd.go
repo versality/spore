@@ -39,7 +39,8 @@ Subcommands:
   loop-guard      Check the respawn circuit breaker.
   token-monitor   Stop-hook: check coordinator context budget.
   monitor         Boot-time verdict over the token-monitor ledger.
-  worker-watch     Diff active-worker set against snapshot; emit transitions.
+  worker-watch    Diff active-worker set against snapshot; emit transitions.
+  sla-scan        Flag stale / done / orphan state.md entries.
 `
 
 func runCoordinator(args []string) int {
@@ -74,6 +75,8 @@ func runCoordinator(args []string) int {
 		return runCoordinatorMonitor(rest)
 	case "worker-watch":
 		return runCoordinatorWorkerWatch(rest)
+	case "sla-scan":
+		return runCoordinatorSlaScan(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
