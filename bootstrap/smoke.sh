@@ -110,7 +110,7 @@ project_root="$work/proj"
 #   3. Run reconcile again: the session is kept (no new spawn).
 #   4. Mark the task done, run reconcile: the session is reaped.
 #   5. Disable the flag, confirm reconcile short-circuits again.
-export SPORE_AGENT_BINARY="sleep 600"
+export SPORE_AGENT_BINARY="sh -c 'sleep 600'"
 
 reconcile_disabled_out="$("$spore_bin" fleet disable >/dev/null && "$spore_bin" fleet reconcile)"
 echo "$reconcile_disabled_out"
@@ -146,7 +146,6 @@ fi
 echo "smoke: coordinator singleton ok"
 
 slug="$("$spore_bin" task new "fleet smoke")"
-fleet_session="spore/$(basename "$project_root")/$slug"
 
 # Flip status=active without going through `task start` so we
 # observe the reconciler doing the worktree+session work itself.
@@ -158,6 +157,7 @@ if ! echo "$reconcile_out" | grep -q "spawned: $slug"; then
   echo "smoke: reconcile pass 1 did not spawn $slug" >&2
   exit 1
 fi
+fleet_session="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -F " $(basename "$project_root")/$slug" | head -1 || true)"
 if ! tmux has-session -t "$fleet_session" 2>/dev/null; then
   echo "smoke: tmux session $fleet_session missing after reconcile" >&2
   exit 1
@@ -202,7 +202,7 @@ fi
 echo "smoke: fleet reconciler ok"
 
 echo "smoke: task lifecycle"
-export SPORE_AGENT_BINARY="sleep 600"
+export SPORE_AGENT_BINARY="sh -c 'sleep 600'"
 life_slug="$("$spore_bin" task new "lifecycle smoke")"
 life_path="$project_root/tasks/$life_slug.md"
 life_worktree="$project_root/.worktrees/$life_slug"

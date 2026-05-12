@@ -33,9 +33,9 @@ const CodexModelEnv = "SPORE_CODEX_MODEL"
 
 // Start flips status to active and (when starting from backlog) creates
 // the worktree and wt/<slug> branch under <projectRoot>/.worktrees/.
-// In every case it spawns a detached tmux session named
-// "spore/<project>/<slug>" running ${SPORE_AGENT_BINARY:-claude} in the
-// worktree, with SPORE_TASK_SLUG=<slug> in the session env. extraEnv
+// In every case it spawns a detached wt-style tmux session running
+// ${SPORE_AGENT_BINARY:-claude} in the worktree, with
+// SPORE_TASK_SLUG=<slug> in the session env. extraEnv
 // adds KEY=VAL pairs to the tmux session env (mirrors `-e KEY=VAL`
 // repeats on tmux new-session). Returns the tmux session name on
 // success.
@@ -107,8 +107,8 @@ func Reap(tasksDir, projectRoot, slug string) error {
 }
 
 // SpawnedSlugs lists slugs of every tmux session that matches the
-// "spore/<project>/<slug>" pattern. Returns an empty slice (and a
-// nil error) when no tmux server is running.
+// current wt-style pattern plus older spore-prefixed names. Returns an
+// empty slice (and a nil error) when no tmux server is running.
 func SpawnedSlugs(projectRoot string) ([]string, error) {
 	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil {
@@ -116,14 +116,17 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 		// sessions; treat both as empty.
 		return nil, nil
 	}
-	prefix := tmuxSessionPrefix(projectRoot)
+	project := projectNameOrBase(projectRoot)
 	var slugs []string
+	seen := map[string]bool{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || !strings.HasPrefix(line, prefix) {
+		slug, ok := slugFromSessionName(line, project)
+		if !ok || seen[slug] {
 			continue
 		}
-		slugs = append(slugs, strings.TrimPrefix(line, prefix))
+		seen[slug] = true
+		slugs = append(slugs, slug)
 	}
 	sort.Strings(slugs)
 	return slugs, nil
@@ -381,8 +384,8 @@ func metaToAny(m frontmatter.Meta) map[string]any {
 // the tmux session when not already alive. The session name comes
 // from frontmatter `session:` when set (so external spawners like
 // wt-go keep their name across respawns); otherwise the kernel's
-// "spore/<project>/<slug>" form. extraEnv lands on tmux new-session
-// as `-e KEY=VAL` repeats.
+// wt-style form. extraEnv lands on tmux new-session as `-e KEY=VAL`
+// repeats.
 func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	projectRoot, err := projectRootFromTasksDir(tasksDir)
 	if err != nil {
@@ -428,7 +431,10 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", worktreeConflictError(state, worktree, branch, projectRoot)
 	}
 
-	session := tmuxSessionName(projectRoot, slug)
+	session, err := tmuxSessionName(projectRoot, slug, meta)
+	if err != nil {
+		return "", err
+	}
 	if meta.Session != "" {
 		session = meta.Session
 	}
@@ -593,28 +599,6 @@ func stageInitialPrompt(tasksDir, worktree, slug string) error {
 	return os.WriteFile(filepath.Join(promptDir, "initial-prompt"), body, 0o644)
 }
 
-func tmuxSessionName(projectRoot, slug string) string {
-	return tmuxSessionPrefix(projectRoot) + slug
-}
-
-// taskTmuxSession returns the tmux session name to target for slug
-// when killing or probing the rower's session. The frontmatter
-// `session:` field wins when set (the spawner registers the real
-// session name there, e.g. "🐈 acme/my-task [opus]"); otherwise
-// the kernel's computed "spore/<project>/<slug>" name is used. A
-// task file that fails to read or parse falls back to the computed
-// name so a corrupt brief never blocks cleanup.
-func taskTmuxSession(tasksDir, projectRoot, slug string) string {
-	if m, err := readTaskMeta(tasksDir, slug); err == nil && m.Session != "" {
-		return m.Session
-	}
-	return tmuxSessionName(projectRoot, slug)
-}
-
-func tmuxSessionPrefix(projectRoot string) string {
-	return fmt.Sprintf("spore/%s/", filepath.Base(projectRoot))
-}
-
 // IdleReapThreshold is how long a tmux session must sit without
 // activity before pause/block reaps it. Sessions younger than this
 // are kept alive: a mid-tool-call rower or a pane the operator just
@@ -640,7 +624,7 @@ func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
 	if err != nil {
 		return nil
 	}
-	project := filepath.Base(projectRoot)
+	project := projectNameOrBase(projectRoot)
 	needle := project + "/" + slug
 	recorded := ""
 	if m, err := readTaskMeta(tasksDir, slug); err == nil {
