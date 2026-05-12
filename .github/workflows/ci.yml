@@ -28,9 +28,6 @@ jobs:
       - name: Check
         run: nix develop --command just check
 
-      - name: Build
-        run: nix develop --command just build
-
       - name: Coverage
         run: nix develop --command just coverage
 
