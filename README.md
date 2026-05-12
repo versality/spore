@@ -260,12 +260,14 @@ Use the flake dev shell for the toolchain used by CI:
 ```sh
 nix develop
 just check
-just build
 ```
 
 `just check` runs formatting checks, Go vet, golangci-lint, Spore's
-own lint suite, Go tests, govulncheck, and `nix flake check`.
-`just build` builds the Go binary and the flake package.
+own lint suite, Go tests, govulncheck, `nix flake check`, and the Go
++ flake build. It is a strict superset of what CI verifies, so a
+green `just check` locally means a green CI Check step. `just build`
+is still available standalone for a quick binary rebuild without the
+lint suite.
 `just coverage` writes local coverage reports under `coverage/` and is
 required in CI before the advisory Codecov upload step runs.
 
