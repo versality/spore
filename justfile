@@ -3,7 +3,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 default:
     @just --list
 
-check: fmt-check lint test vuln nix-check
+check: fmt-check lint test vuln nix-check build
 
 fmt:
     gofmt -w $(find . -name '*.go' -not -path './.git/*' -not -path './.worktrees/*' | sort)
