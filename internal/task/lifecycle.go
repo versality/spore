@@ -24,10 +24,8 @@ import (
 const EvidenceWarnOnlyEnv = "SPORE_EVIDENCE_WARN_ONLY"
 
 // AgentBinaryEnv is the env var used to override the binary spawned in
-// the per-task tmux session. Defaults to defaultAgentBinary when unset.
+// the per-task tmux session. Defaults to claude when unset.
 const AgentBinaryEnv = "SPORE_AGENT_BINARY"
-
-const defaultAgentBinary = "claude"
 
 // CodexModelEnv optionally pins the model for `agent: codex` task
 // launches. Empty lets the codex CLI use its own default.
