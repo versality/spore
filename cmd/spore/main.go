@@ -73,6 +73,7 @@ Usage:
 Subcommands:
   install                Wire core.hooksPath to a generated dir under .git/.
   commit-msg <file>      Run the em-dash check on a commit message file.
+  pre-commit             Run staged Go gofmt checks.
   pretooluse             Read a claude-code PreToolUse JSON request from
                          stdin, write the response JSON to stdout.
   stop                   Read a claude-code Stop JSON request from stdin,
