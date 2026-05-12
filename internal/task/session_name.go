@@ -17,6 +17,13 @@ func tmuxSessionName(projectRoot, slug string, m frontmatter.Meta) (string, erro
 	return wtSessionName(project, slug, tag), nil
 }
 
+// TaskTmuxSession returns the canonical tmux session name for slug
+// in the given project: m.Session when the task file records one,
+// else the computed wt-style name.
+func TaskTmuxSession(tasksDir, projectRoot, slug string) string {
+	return taskTmuxSession(tasksDir, projectRoot, slug)
+}
+
 func taskTmuxSession(tasksDir, projectRoot, slug string) string {
 	if m, err := readTaskMeta(tasksDir, slug); err == nil {
 		if m.Session != "" {

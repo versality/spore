@@ -10,7 +10,6 @@ import (
 
 	"github.com/versality/spore/internal/budget"
 	"github.com/versality/spore/internal/fleet"
-	"github.com/versality/spore/internal/task"
 
 	// Linear is the first matter adapter; the side-effect import
 	// fires its init() so [matter.linear] in spore.toml (or
@@ -175,22 +174,12 @@ func runFleetStatus(args []string) error {
 	} else {
 		fmt.Println("fleet: disabled")
 	}
-
-	root, err := os.Getwd()
+	rc, err := fleet.RunStatus(os.Stdout, os.Stderr)
 	if err != nil {
 		return err
 	}
-	slugs, err := task.SpawnedSlugs(root)
-	if err != nil {
-		return err
-	}
-	if len(slugs) == 0 {
-		fmt.Println("sessions: none")
-		return nil
-	}
-	fmt.Println("sessions:")
-	for _, s := range slugs {
-		fmt.Printf("  %s\n", s)
+	if rc == 2 {
+		os.Exit(2)
 	}
 	return nil
 }
