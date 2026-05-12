@@ -386,8 +386,13 @@ func TestProjectEmoji(t *testing.T) {
 	if got := projectEmoji("nix-config"); got != "\U0001F994" {
 		t.Errorf("nix-config emoji = %q, want hedgehog", got)
 	}
-	if projectEmoji("alpha") != projectEmoji("alpha") {
-		t.Errorf("projectEmoji must be deterministic")
+	first := projectEmoji("alpha")
+	second := projectEmoji("alpha")
+	if first != second {
+		t.Errorf("projectEmoji must be deterministic: %q vs %q", first, second)
+	}
+	if projectEmoji("alpha") == projectEmoji("beta") {
+		t.Errorf("projectEmoji fallback collapsed to a single icon for distinct names")
 	}
 }
 
