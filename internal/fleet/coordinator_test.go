@@ -158,6 +158,13 @@ func TestCoordinatorSessionNameUsesMainRepoFromWorktree(t *testing.T) {
 	}
 }
 
+func TestCoordinatorSessionNameDedupsSporeProject(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "spore")
+	if got := CoordinatorSessionName(dir); got != "spore/coordinator" {
+		t.Errorf("CoordinatorSessionName(spore) = %q, want spore/coordinator", got)
+	}
+}
+
 func TestCoordinatorAgentPrecedence(t *testing.T) {
 	cases := []struct {
 		name      string

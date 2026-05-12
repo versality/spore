@@ -49,12 +49,9 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
-	wantSuffix := "/" + slug
-	if !strings.HasSuffix(session, wantSuffix) {
-		t.Errorf("session %q missing suffix %q", session, wantSuffix)
-	}
-	if !strings.HasPrefix(session, "spore/") {
-		t.Errorf("session %q missing prefix \"spore/\"", session)
+	wantSession := projectEmoji(filepath.Base(repo)) + " " + filepath.Base(repo) + "/" + slug + " [opus]"
+	if session != wantSession {
+		t.Errorf("session = %q, want %q", session, wantSession)
 	}
 
 	if status := readStatus(t, taskPath); status != "active" {
@@ -174,6 +171,55 @@ func TestStartResumesPaused(t *testing.T) {
 
 	if err := Done(tasksDir, slug, false); err != nil {
 		t.Fatalf("Done: %v", err)
+	}
+}
+
+func TestStartSpawnsWtStyleSessionForKnownProject(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	parent := t.TempDir()
+	repo := filepath.Join(parent, "spore")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slug := "known"
+	body := "---\nstatus: draft\nslug: known\ntitle: Known\nagent: codex\neffort: high\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	session, err := Start(tasksDir, slug, nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
+	})
+
+	want := "\U0001F41D spore/known [codex-high]"
+	if session != want {
+		t.Fatalf("session = %q, want %q", session, want)
+	}
+	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", want).Run(); err != nil {
+		t.Fatalf("expected tmux session %q: %v", want, err)
 	}
 }
 
@@ -327,6 +373,66 @@ func TestWorkerAgentCommandOverrideWins(t *testing.T) {
 	}
 	if got != "sleep 30" {
 		t.Errorf("command = %q want override", got)
+	}
+}
+
+func TestProjectEmoji(t *testing.T) {
+	if got := projectEmoji("spore"); got != "\U0001F41D" {
+		t.Errorf("spore emoji = %q, want bee", got)
+	}
+	if got := projectEmoji("marketer"); got != "\U0001F41D" {
+		t.Errorf("marketer emoji = %q, want bee", got)
+	}
+	if got := projectEmoji("nix-config"); got != "\U0001F994" {
+		t.Errorf("nix-config emoji = %q, want hedgehog", got)
+	}
+	if projectEmoji("alpha") != projectEmoji("alpha") {
+		t.Errorf("projectEmoji must be deterministic")
+	}
+}
+
+func TestSessionPathDedupsWrapProject(t *testing.T) {
+	if got := sessionPath("spore", "spore", "demo"); got != "spore/demo" {
+		t.Errorf("dedup path = %q, want spore/demo", got)
+	}
+	if got := sessionPath("spore", "nix-config", "demo"); got != "spore/nix-config/demo" {
+		t.Errorf("kept path = %q, want spore/nix-config/demo", got)
+	}
+}
+
+func TestWtSessionNameTagOptional(t *testing.T) {
+	if got := wtSessionName("spore", "demo", ""); got != "\U0001F41D spore/demo" {
+		t.Errorf("without tag = %q", got)
+	}
+	if got := wtSessionName("spore", "demo", "opus_high"); got != "\U0001F41D spore/demo [opus_high]" {
+		t.Errorf("with tag = %q", got)
+	}
+}
+
+func TestTmuxSessionNameUsesTierTag(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "spore")
+	m := frontmatter.Meta{Agent: "codex", Extra: map[string]string{"effort": "high"}}
+	got, err := tmuxSessionName(dir, "demo", m)
+	if err != nil {
+		t.Fatalf("tmuxSessionName: %v", err)
+	}
+	want := "\U0001F41D spore/demo [codex-high]"
+	if got != want {
+		t.Errorf("session = %q, want %q", got, want)
+	}
+}
+
+func TestSlugFromSessionNameAcceptsCurrentAndLegacyShapes(t *testing.T) {
+	cases := map[string]string{
+		"\U0001F41D spore/demo [opus_high]": "demo",
+		"spore/demo":                        "demo",
+		"spore/spore/demo":                  "demo",
+	}
+	for name, want := range cases {
+		got, ok := slugFromSessionName(name, "spore")
+		if !ok || got != want {
+			t.Errorf("slugFromSessionName(%q) = %q, %v; want %q, true", name, got, ok, want)
+		}
 	}
 }
 

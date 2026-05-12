@@ -33,7 +33,7 @@ Subcommands:
                   set in spore.toml, poll Linear for ready/done updates
                   first; then list status=active tasks; for each one
                   without a live tmux session, ensure the worktree and
-                  spawn a session; for each spore-prefix tmux session
+                  spawn a session; for each managed tmux session
                   whose task is no longer active, kill it. Idempotent;
                   exits 0 when there is nothing to do. Short-circuits when
                   the kill-switch flag is missing.

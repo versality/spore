@@ -68,8 +68,8 @@ type MatterResult struct {
 	Err     error
 }
 
-// Reconcile runs a single pass: list active tasks, list spore-prefix
-// tmux sessions, reap stale sessions, then spawn missing ones up to
+// Reconcile runs a single pass: list active tasks, list managed tmux
+// sessions, reap stale sessions, then spawn missing ones up to
 // the MaxWorkers cap. Honours the kill-switch flag at FlagPath. The
 // singleton coordinator session is ensured alongside the worker fleet
 // when the flag is on, and reaped when the flag goes off.
@@ -120,9 +120,9 @@ func Reconcile(cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	// The coordinator shares the spore-session prefix but is not a
-	// worker; filter it out before the reap loop and the cap math so
-	// EnsureCoordinator above stays the sole owner of its lifecycle.
+	// The coordinator is not a worker; filter it out before the reap
+	// loop and the cap math so EnsureCoordinator above stays the sole
+	// owner of its lifecycle.
 	var workerSlugs []string
 	runningSet := map[string]bool{}
 	for _, s := range running {

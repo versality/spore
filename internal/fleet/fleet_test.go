@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/versality/spore/internal/matter"
+	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -449,15 +450,14 @@ func setTestAgentBinary(t *testing.T) {
 }
 
 func killSporeSessions(projectRoot string) {
-	out, err := exec.Command("tmux", "-L", testTmuxSocket, "list-sessions", "-F", "#{session_name}").Output()
-	if err != nil {
-		return
-	}
-	prefix := "spore/" + filepath.Base(projectRoot) + "/"
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.HasPrefix(line, prefix) {
-			_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", line).Run()
+	tasksDir := filepath.Join(projectRoot, "tasks")
+	if slugs, err := task.SpawnedSlugs(projectRoot); err == nil {
+		for _, slug := range slugs {
+			_ = task.Reap(tasksDir, projectRoot, slug)
 		}
+	}
+	if session := CoordinatorSessionName(projectRoot); session != "" {
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	}
 }
 
