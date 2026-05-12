@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tmux list-sessions *)",
+      "Bash(tmux list-windows *)",
+      "Bash(spore --help)",
+      "Bash(spore task *)",
+      "Bash(go build *)",
+      "Bash(command -v go)",
+      "Read(//nix/store/**)",
+      "Bash(nix-shell -p go --run \"go version\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(wt task *)"
+    ]
+  }
+}

@@ -80,11 +80,9 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 }
 
 // Ensure makes sure the wt/<slug> branch, worktree, and tmux session
-// for slug exist. Idempotent: missing pieces get created, present
-// ones are left alone. Status is preserved (never flipped). Refuses
-// when the task file is absent or its status is done. Used by the
-// fleet reconciler to revive an active+no-tmux task without changing
-// its frontmatter. extraEnv mirrors Start.
+// exist. Idempotent and status-preserving. Refuses when the task is
+// done. Used by the fleet reconciler to revive an active+no-tmux
+// rower without flipping its frontmatter. extraEnv mirrors Start.
 func Ensure(tasksDir, slug string, extraEnv []string) (string, error) {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
@@ -382,14 +380,12 @@ func metaToAny(m frontmatter.Meta) map[string]any {
 }
 
 // ensureSession is the shared idempotent path for Start and Ensure.
-// It creates the worktree + branch when missing (re-attaching to an
-// existing branch when the worktree was removed) and (re)spawns the
-// tmux session when not already alive. The session name comes from
-// frontmatter `session:` when set (so external spawners that recorded
-// their own naming convention - e.g. wt-go's "<icon> <project>/<slug>
-// [<tag>]" - keep their name across respawns); otherwise the kernel's
+// Creates / reuses the worktree per classifyWorktree and (re)spawns
+// the tmux session when not already alive. The session name comes
+// from frontmatter `session:` when set (so external spawners like
+// wt-go keep their name across respawns); otherwise the kernel's
 // "spore/<project>/<slug>" form. extraEnv lands on tmux new-session
-// as additional `-e KEY=VAL` repeats.
+// as `-e KEY=VAL` repeats.
 func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	projectRoot, err := projectRootFromTasksDir(tasksDir)
 	if err != nil {
@@ -402,7 +398,20 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
 	branch := "wt/" + slug
 
-	if _, err := os.Stat(worktree); os.IsNotExist(err) {
+	state, err := classifyWorktree(projectRoot, worktree, branch)
+	if err != nil {
+		return "", err
+	}
+	switch state {
+	case worktreeOK:
+	case worktreeAbsent, worktreeStaleReg:
+		// prune is repo-wide; harmless because it only drops entries
+		// whose dir is already gone.
+		if state == worktreeStaleReg {
+			if out, err := gitCmd(projectRoot, "worktree", "prune").CombinedOutput(); err != nil {
+				return "", fmt.Errorf("git worktree prune: %v: %s", err, strings.TrimSpace(string(out)))
+			}
+		}
 		args := []string{"worktree", "add", worktree}
 		if branchExists(projectRoot, branch) {
 			args = append(args, branch)
@@ -413,16 +422,13 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("git worktree add: %v: %s", err, strings.TrimSpace(string(out)))
 		}
-		// Copy the brief into the new worktree so headless workers
-		// can read it. The worktree forks from the source branch's
-		// HEAD which often does not yet include this brief: Start
-		// rewrites it just before this call (status flip), and the
-		// operator may not have committed it on the source branch
-		// either. Soft-fails on a missing source brief; the worker
-		// falls back to interactive mode there.
+		// Source HEAD often has no committed brief; soft-fails so the
+		// worker falls back to interactive mode there.
 		if err := copyBriefToWorktree(tasksDir, worktree, slug); err != nil {
 			return "", fmt.Errorf("copy brief: %w", err)
 		}
+	default:
+		return "", worktreeConflictError(state, worktree, branch, projectRoot)
 	}
 
 	session := tmuxSessionName(projectRoot, slug)
@@ -790,3 +796,4 @@ func hasSession(name string) bool {
 func branchExists(projectRoot, branch string) bool {
 	return gitCmd(projectRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run() == nil
 }
+
