@@ -301,6 +301,24 @@ func TestWorkerAgentCommandCodexUsesEffortPolicy(t *testing.T) {
 	}
 }
 
+func TestWorkerAgentCommandClaudeUsesEffortPolicy(t *testing.T) {
+	t.Setenv("SPORE_AGENT_BINARY", "")
+	m := frontmatter.Meta{
+		Agent: "claude",
+		Extra: map[string]string{
+			"effort": "high",
+		},
+	}
+	got, err := workerAgentCommand(m)
+	if err != nil {
+		t.Fatalf("workerAgentCommand: %v", err)
+	}
+	want := "claude --dangerously-skip-permissions --effort high"
+	if got != want {
+		t.Errorf("command = %q want %q", got, want)
+	}
+}
+
 func TestWorkerAgentCommandOverrideWins(t *testing.T) {
 	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
 	got, err := workerAgentCommand(frontmatter.Meta{Agent: "codex"})
