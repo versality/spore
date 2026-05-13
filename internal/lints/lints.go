@@ -90,6 +90,8 @@ func Named() map[string]Lint {
 		TaskDoneZeroCommits{},
 		UserSkillsParity{Hosts: []string{"skypad", "skytower", "skywing"}},
 		CaptureSignalCoverage{},
+		ClaudeSize{},
+		ClaudeSubdir{},
 	} {
 		out[l.Name()] = l
 	}
