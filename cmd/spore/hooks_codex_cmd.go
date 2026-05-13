@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/hooks/codex"
 )
 
@@ -312,11 +313,7 @@ func wtStateDirEnv() string {
 }
 
 func defaultCoordinatorStateDirEnv() string {
-	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
-		return d
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "spore", "coordinator")
+	return coordinator.StateDir()
 }
 
 func defaultCoordinatorBriefEnv() string {
