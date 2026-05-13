@@ -93,6 +93,7 @@ func Named() map[string]Lint {
 		CaptureSignalCoverage{},
 		ClaudeSize{},
 		ClaudeSubdir{},
+		TaskPriority{},
 	} {
 		out[l.Name()] = l
 	}

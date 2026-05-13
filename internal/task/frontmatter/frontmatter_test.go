@@ -136,6 +136,21 @@ func TestSessionFieldRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPriorityFieldRoundTrip(t *testing.T) {
+	in := []byte("---\nstatus: active\nslug: x\nagent: claude\npriority: high\n---\nbody\n")
+	m, body, err := Parse(in)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if m.Priority != "high" {
+		t.Errorf("Priority = %q, want high", m.Priority)
+	}
+	out := Write(m, body)
+	if string(out) != string(in) {
+		t.Errorf("round-trip mismatch\nwant:\n%s\ngot:\n%s", in, out)
+	}
+}
+
 func TestParseUnknownFieldRoundTrip(t *testing.T) {
 	in := []byte("---\nstatus: draft\nslug: x\ncustom_key: hello\n---\nbody\n")
 	m, body, err := Parse(in)

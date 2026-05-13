@@ -85,6 +85,7 @@ func runLint(args []string) int {
 
 	bad := false
 	taskEvidenceWarnOnly := lints.EvidenceWarnOnly()
+	taskPriorityWarnOnly := lints.PriorityWarnOnly()
 	var firstErr error
 	for _, l := range toRun {
 		issues, err := l.Run(*root)
@@ -96,7 +97,8 @@ func runLint(args []string) int {
 			bad = true
 			continue
 		}
-		warnOnly := l.Name() == "task-evidence" && taskEvidenceWarnOnly
+		warnOnly := (l.Name() == "task-evidence" && taskEvidenceWarnOnly) ||
+			(l.Name() == "task-priority" && taskPriorityWarnOnly)
 		for _, i := range issues {
 			line := prefix(l.Name(), i.String())
 			if warnOnly {
