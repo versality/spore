@@ -33,6 +33,11 @@
             "type": "command"
           },
           {
+            "command": "spore hooks push-pending",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
             "asyncRewake": true,
             "command": "spore hooks watch-inbox",
             "timeout": 604800,

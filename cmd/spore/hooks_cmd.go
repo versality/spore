@@ -11,6 +11,7 @@ import (
 
 	"github.com/versality/spore/internal/hooks"
 	"github.com/versality/spore/internal/hooks/contexttee"
+	"github.com/versality/spore/internal/hooks/pushpending"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
 
@@ -36,6 +37,8 @@ func runHooks(args []string) int {
 		return runHooksStop()
 	case "wtmerge-mechanical":
 		return runHooksWtMergeMechanical()
+	case "push-pending":
+		return runHooksPushPending()
 	case "settings":
 		return runHooksSettings()
 	case "watch-inbox":
@@ -135,6 +138,24 @@ func runHooksWtMergeMechanical() int {
 		return 1
 	}
 	res := wtmergemechanical.Run(req, wtmergemechanical.Deps{})
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
+}
+
+// runHooksPushPending is the M-finish-B Stop-hook entry point: when a
+// rower idles after `wt merge` has fast-forwarded local main but
+// origin/main is still behind, exit 2 with a deterministic nudge to
+// run `git push` (or `wt ship` once it lands). Otherwise exit 0
+// silently. See tasks/spore-rower-finish-contract.md section 5.
+func runHooksPushPending() int {
+	req, err := readHookRequest()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks push-pending:", err)
+		return 1
+	}
+	res := pushpending.Run(req, pushpending.Deps{})
 	if res.Stderr != "" {
 		fmt.Fprint(os.Stderr, res.Stderr)
 	}

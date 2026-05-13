@@ -86,6 +86,9 @@ Subcommands:
   wtmerge-mechanical     Stop-hook (M1): exit 2 with a wt-merge nudge
                          when a rower idles on wt/<slug> with shipped-
                          but-unmerged commits and a clean tree.
+  push-pending           Stop-hook (M-finish-B / I8): exit 2 with a
+                         push nudge when local main is ahead of
+                         origin/main and the rower is idle.
   settings               Read a hook binding JSON from stdin, emit a
                          deterministic settings.json to stdout.
   watch-inbox [slug]          Stop-hook: block on inbox, exit 2 on message.
