@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/cutover"
 	"github.com/versality/spore/internal/task/frontmatter"
+	inboxpkg "github.com/versality/spore/internal/task/inbox"
 	"github.com/versality/spore/internal/task/ship"
 )
 
@@ -47,6 +49,12 @@ Subcommands:
                                --source-repo, --source-slug, --source-pr,
                                --claim, --reason. Idempotent on the derived slug.
   tell <slug> <message>        Append a message to the slug's inbox dir.
+  inbox-dispatch --token <regex> --handler <bin> [--inbox <dir>]
+                               Drain inbox envelopes whose body matches <regex>,
+                               exec <bin> with the envelope path as $1, and move
+                               handled envelopes to inbox/read/ on rc=0. Defaults
+                               to the coordinator inbox for the current project
+                               (override with --inbox or $SPORE_TASK_INBOX).
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.
   drift                        Auto-commit task file changes.
@@ -102,6 +110,8 @@ func runTask(args []string) error {
 		return runTaskCutover(rest)
 	case "tell":
 		return runTaskTell(rest)
+	case "inbox-dispatch":
+		return runTaskInboxDispatch(rest)
 	case "verify":
 		return runTaskVerify(rest)
 	case "waybar":
@@ -376,6 +386,50 @@ func runTaskDone(args []string) error {
 		}
 	}
 	return task.Done("tasks", slug, force)
+}
+
+func runTaskInboxDispatch(args []string) error {
+	fs := flag.NewFlagSet("task inbox-dispatch", flag.ContinueOnError)
+	tokenRe := fs.String("token", "", "regex matched against envelope body (required)")
+	handler := fs.String("handler", "", "executable invoked per matched envelope (required)")
+	inboxDir := fs.String("inbox", "", "inbox dir (default: $SPORE_TASK_INBOX or coordinator inbox)")
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("spore task inbox-dispatch: unexpected positional args: %v", fs.Args())
+	}
+	if *tokenRe == "" || *handler == "" {
+		return fmt.Errorf("spore task inbox-dispatch: --token and --handler are required")
+	}
+	re, err := regexp.Compile(*tokenRe)
+	if err != nil {
+		return fmt.Errorf("spore task inbox-dispatch: --token %q: %w", *tokenRe, err)
+	}
+	dir := *inboxDir
+	if dir == "" {
+		dir = os.Getenv("SPORE_TASK_INBOX")
+	}
+	if dir == "" {
+		dir, err = task.CoordinatorInboxDirForProject("")
+		if err != nil {
+			return err
+		}
+	}
+	res, err := inboxpkg.Dispatch(inboxpkg.DispatchOptions{
+		Dir:     dir,
+		Token:   re,
+		Handler: *handler,
+		Log:     os.Stderr,
+	})
+	if err != nil {
+		return err
+	}
+	if res.Handled > 0 || res.Failed > 0 {
+		fmt.Fprintf(os.Stderr, "inbox-dispatch: scanned=%d matched=%d handled=%d failed=%d\n",
+			res.Scanned, res.Matched, res.Handled, res.Failed)
+	}
+	return nil
 }
 
 func runTaskTell(args []string) error {
