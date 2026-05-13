@@ -101,6 +101,61 @@ func TestRunWorkerTokenMonitorOk(t *testing.T) {
 	}
 }
 
+// TestRunWorkerExitKindTellEnvelope is the acceptance "a clean wrap
+// shows one tell envelope reaching skyhelm inbox" check. The CLI
+// shells out to `wt task tell skyhelm <body>`; we stub `wt` with a
+// script that captures argv to a file so the assertion runs without
+// touching the real operator inbox.
+func TestRunWorkerExitKindTellEnvelope(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "clean-exit")
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	capture := filepath.Join(dir, "wt-args")
+	stub := filepath.Join(dir, "wt")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + capture + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	origOut := os.Stdout
+	t.Cleanup(func() { os.Stdout = origOut })
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devnull.Close()
+	os.Stdout = devnull
+
+	// Clean wrap: marker present, rc=129 (lifecycle SIGHUP shape).
+	args := []string{
+		"--rc=129",
+		"--marker=" + marker,
+		"--slug=spore-rower-exit-kind",
+		"--tell-skyhelm",
+	}
+	if rc := runWorkerExitKind(args); rc != 0 {
+		t.Fatalf("runWorkerExitKind rc=%d, want 0", rc)
+	}
+
+	body, err := os.ReadFile(capture)
+	if err != nil {
+		t.Fatalf("read capture: %v", err)
+	}
+	got := strings.Split(strings.TrimRight(string(body), "\n"), "\n")
+	want := []string{"task", "tell", "skyhelm", "spore-rower-exit-kind exit kind=lifecycle rc=129"}
+	if len(got) != len(want) {
+		t.Fatalf("argv = %q, want %q", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("argv[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
 func TestRunWorkerDispatch(t *testing.T) {
 	if code := runWorker(nil); code != 2 {
 		t.Errorf("runWorker(nil) = %d, want 2", code)
