@@ -42,6 +42,8 @@ func runHooks(args []string) int {
 		return runHooksWatchInbox(rest)
 	case "notify-coordinator":
 		return runHooksNotifyCoordinator(rest)
+	case "plan-ready-mechanical":
+		return runHooksPlanReadyMechanical(rest)
 	case "codex":
 		return runHooksCodex(rest)
 	case "context-tee":
@@ -254,6 +256,18 @@ func runHooksNotifyCoordinator(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: spore hooks notify-coordinator [project]")
 		return 2
 	}
+}
+
+func runHooksPlanReadyMechanical(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks plan-ready-mechanical: takes no args")
+		return 2
+	}
+	if err := hooks.PlanReadyMechanicalEnv(); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks plan-ready-mechanical:", err)
+		return 1
+	}
+	return 0
 }
 
 func runHooksContextTee(args []string) int {

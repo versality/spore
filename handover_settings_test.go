@@ -39,6 +39,9 @@ func TestHandoverSettingsWireCommunicationHooks(t *testing.T) {
 	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore fleet replenish-hook") {
 		t.Fatal("handover settings missing fleet replenish-hook Stop hook")
 	}
+	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore hooks plan-ready-mechanical") {
+		t.Fatal("handover settings missing plan-ready-mechanical Stop hook")
+	}
 }
 
 type handoverHookGroup struct {

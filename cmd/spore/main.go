@@ -93,6 +93,12 @@ Subcommands:
   notify-coordinator [project]
                               Write a poke to the coordinator's project inbox.
                               With no project, reads $WT_PROJECT.
+  plan-ready-mechanical       Stop-hook: if tasks/<slug>.md has a ## Plan
+                              section, task status is active, and the
+                              coordinator inbox has no "plan ready: <slug>"
+                              envelope yet, emit one. Reads $SPORE_TASK_SLUG,
+                              $WT_PROJECT, $SPORE_COORDINATOR_STATE_DIR;
+                              always exits 0 (no-op outside rower context).
   codex <event>          Codex hook adapters. Events: session-start.
   context-tee            Stop-hook: write a per-session token JSON
                          snapshot for status displays. Reads
