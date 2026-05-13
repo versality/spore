@@ -11,6 +11,7 @@ import (
 
 	"github.com/versality/spore/internal/hooks"
 	"github.com/versality/spore/internal/hooks/contexttee"
+	"github.com/versality/spore/internal/hooks/prfinish"
 	"github.com/versality/spore/internal/hooks/pushpending"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
@@ -39,6 +40,8 @@ func runHooks(args []string) int {
 		return runHooksWtMergeMechanical()
 	case "push-pending":
 		return runHooksPushPending()
+	case "pr-finish":
+		return runHooksPRFinish()
 	case "settings":
 		return runHooksSettings()
 	case "watch-inbox":
@@ -156,6 +159,24 @@ func runHooksPushPending() int {
 		return 1
 	}
 	res := pushpending.Run(req, pushpending.Deps{})
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
+}
+
+// runHooksPRFinish is the M-finish-C Stop-hook entry point: when a
+// rower idles on wt/<slug>, inspect the matching PR via `gh pr view`
+// and exit 2 with a deterministic next-step prompt (merge / rebase /
+// fix CI) when the PR needs one. Otherwise exit 0 silently. See
+// tasks/spore-rower-finish-contract.md section 5.
+func runHooksPRFinish() int {
+	req, err := readHookRequest()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks pr-finish:", err)
+		return 1
+	}
+	res := prfinish.Run(req, prfinish.Deps{})
 	if res.Stderr != "" {
 		fmt.Fprint(os.Stderr, res.Stderr)
 	}

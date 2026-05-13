@@ -38,6 +38,11 @@
             "type": "command"
           },
           {
+            "command": "spore hooks pr-finish",
+            "timeout": 20,
+            "type": "command"
+          },
+          {
             "asyncRewake": true,
             "command": "spore hooks watch-inbox",
             "timeout": 604800,

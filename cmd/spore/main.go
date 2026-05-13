@@ -89,6 +89,9 @@ Subcommands:
   push-pending           Stop-hook (M-finish-B / I8): exit 2 with a
                          push nudge when local main is ahead of
                          origin/main and the rower is idle.
+  pr-finish              Stop-hook (M-finish-C / I9 + I10): exit 2
+                         with a merge / rebase / CI-fix prompt based
+                         on the open PR for wt/<slug>.
   settings               Read a hook binding JSON from stdin, emit a
                          deterministic settings.json to stdout.
   watch-inbox [slug]          Stop-hook: block on inbox, exit 2 on message.
