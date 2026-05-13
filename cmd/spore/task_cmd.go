@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/task/cutover"
 	"github.com/versality/spore/internal/task/frontmatter"
 	"github.com/versality/spore/internal/task/ship"
 )
@@ -40,6 +41,11 @@ Subcommands:
                                gh pr create, wait for checks, gh pr merge (squash
                                by default), ff local main, task.Done. One verb;
                                idempotent per-step.
+  cutover --consumer <repo> --feature <name> [...]
+                               Mint a draft task brief in a consumer repo asking
+                               it to catch up to a spore lift. Flags:
+                               --source-repo, --source-slug, --source-pr,
+                               --claim, --reason. Idempotent on the derived slug.
   tell <slug> <message>        Append a message to the slug's inbox dir.
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.
@@ -92,6 +98,8 @@ func runTask(args []string) error {
 		return runTaskMerge(rest)
 	case "ship":
 		return runTaskShip(rest)
+	case "cutover":
+		return runTaskCutover(rest)
 	case "tell":
 		return runTaskTell(rest)
 	case "verify":
@@ -205,6 +213,45 @@ func runTaskShip(args []string) error {
 		Strategy: strategy,
 		Base:     base,
 	}, ship.Deps{})
+}
+
+func runTaskCutover(args []string) error {
+	fs := flag.NewFlagSet("task cutover", flag.ContinueOnError)
+	consumer := fs.String("consumer", "", "consumer repo name (required)")
+	feature := fs.String("feature", "", "feature name (required)")
+	sourceRepo := fs.String("source-repo", "", "origin repo name")
+	sourceSlug := fs.String("source-slug", "", "origin task slug")
+	sourcePR := fs.Int("source-pr", 0, "origin PR number")
+	claim := fs.String("claim", "", "raw claim expression")
+	reason := fs.String("reason", "", "one-line justification")
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("spore task cutover: unexpected positional args: %v", fs.Args())
+	}
+	if *consumer == "" || *feature == "" {
+		return fmt.Errorf("spore task cutover: --consumer and --feature are required")
+	}
+	r, err := cutover.Mint(cutover.Options{
+		Consumer:   *consumer,
+		Feature:    *feature,
+		SourceRepo: *sourceRepo,
+		SourceSlug: *sourceSlug,
+		SourcePR:   *sourcePR,
+		Claim:      *claim,
+		Reason:     *reason,
+	}, cutover.Deps{})
+	if err != nil {
+		return err
+	}
+	if r.Skipped {
+		fmt.Fprintf(os.Stderr, "cutover: %s already exists at %s\n", r.Slug, r.Path)
+	} else {
+		fmt.Fprintf(os.Stderr, "cutover: minted %s at %s\n", r.Slug, r.Path)
+	}
+	fmt.Println(r.Slug)
+	return nil
 }
 
 func runTaskWaybar(_ []string) error {

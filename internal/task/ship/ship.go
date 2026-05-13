@@ -25,6 +25,9 @@ import (
 
 	"github.com/versality/spore/internal/gh"
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/task/consumerclaim"
+	"github.com/versality/spore/internal/task/cutover"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 const (
@@ -48,6 +51,17 @@ type Deps struct {
 	RunJustCheck func(worktree string) error
 	Sleep        func(time.Duration)
 	Done         func(tasksDir, slug string) error
+
+	// ReadTaskMeta loads tasks/<slug>.md frontmatter; default reads
+	// from <projectRoot>/tasks/<slug>.md.
+	ReadTaskMeta func(projectRoot, slug string) (frontmatter.Meta, error)
+	// ConsumerScan defaults to consumerclaim.Scan with real deps.
+	ConsumerScan func([]consumerclaim.Claim) []consumerclaim.Result
+	// MintCutover defaults to cutover.Mint with real deps.
+	MintCutover func(cutover.Options) (cutover.Result, error)
+	// ProjectName resolves the source repo name for cutover origin
+	// metadata; defaults to task.ProjectName(projectRoot).
+	ProjectName func(projectRoot string) (string, error)
 
 	PollInterval time.Duration
 	MaxPolls     int
@@ -139,6 +153,10 @@ func Run(opts Options, deps Deps) error {
 		_ = out
 	}
 
+	if err := scanAndMintCutovers(deps, projectRoot, opts.Slug, n); err != nil {
+		return err
+	}
+
 	fmt.Fprintln(deps.Out, "ship: flipping task done")
 	if err := deps.Done(opts.TasksDir, opts.Slug); err != nil {
 		return fmt.Errorf("ship: task done: %w", err)
@@ -218,6 +236,22 @@ func (d Deps) withDefaults() Deps {
 	if d.Done == nil {
 		d.Done = func(tasksDir, slug string) error { return task.Done(tasksDir, slug, false) }
 	}
+	if d.ReadTaskMeta == nil {
+		d.ReadTaskMeta = readTaskMetaFromDisk
+	}
+	if d.ConsumerScan == nil {
+		d.ConsumerScan = func(claims []consumerclaim.Claim) []consumerclaim.Result {
+			return consumerclaim.Scan(claims, consumerclaim.Deps{})
+		}
+	}
+	if d.MintCutover == nil {
+		d.MintCutover = func(opts cutover.Options) (cutover.Result, error) {
+			return cutover.Mint(opts, cutover.Deps{})
+		}
+	}
+	if d.ProjectName == nil {
+		d.ProjectName = task.ProjectName
+	}
 	if d.PollInterval <= 0 {
 		d.PollInterval = DefaultPollInterval
 	}
@@ -231,6 +265,78 @@ func (d Deps) withDefaults() Deps {
 		d.ErrOut = os.Stderr
 	}
 	return d
+}
+
+// scanAndMintCutovers reads the task's consumer-claims, scans each,
+// and mints one cutover task per unresolved or skipped claim. Returns
+// nil on success, even when claims remain unresolved: the I11 gate in
+// task.Done is the source of truth for refusal, and surfaces the
+// per-claim list. Only mint failures surface here.
+func scanAndMintCutovers(deps Deps, projectRoot, slug string, prNumber int) error {
+	m, err := deps.ReadTaskMeta(projectRoot, slug)
+	if err != nil {
+		// No task file or unreadable; nothing to scan. task.Done will
+		// fail later if the file is genuinely needed.
+		return nil
+	}
+	if len(m.ConsumerClaims) == 0 {
+		return nil
+	}
+	var claims []consumerclaim.Claim
+	for _, raw := range m.ConsumerClaims {
+		c, perr := consumerclaim.ParseClaim(raw)
+		if perr != nil {
+			// Malformed claim: surface as a parse error; the I11 gate
+			// will also catch it but ship's stderr makes the source
+			// obvious.
+			fmt.Fprintf(deps.ErrOut, "ship: skipping malformed claim %q: %v\n", raw, perr)
+			continue
+		}
+		claims = append(claims, c)
+	}
+	if len(claims) == 0 {
+		return nil
+	}
+	results := deps.ConsumerScan(claims)
+	if !consumerclaim.AnyUnresolved(results) {
+		fmt.Fprintln(deps.Out, "ship: consumer-claims all resolved")
+		return nil
+	}
+	srcRepo, _ := deps.ProjectName(projectRoot)
+	for _, r := range results {
+		if r.Status == consumerclaim.StatusResolved {
+			continue
+		}
+		raw := fmt.Sprintf("%s:%s:%s", r.Claim.Repo, r.Claim.Kind, r.Claim.Value)
+		out, err := deps.MintCutover(cutover.Options{
+			Consumer:   r.Claim.Repo,
+			Feature:    slug,
+			SourceRepo: srcRepo,
+			SourceSlug: slug,
+			SourcePR:   prNumber,
+			Claim:      raw,
+		})
+		if err != nil {
+			fmt.Fprintf(deps.ErrOut, "ship: cutover mint %s: %v\n", raw, err)
+			continue
+		}
+		if out.Skipped {
+			fmt.Fprintf(deps.Out, "ship: cutover %s (existing) for %s\n", out.Slug, raw)
+		} else {
+			fmt.Fprintf(deps.Out, "ship: minted cutover %s for %s -> %s\n", out.Slug, raw, out.Path)
+		}
+	}
+	return nil
+}
+
+func readTaskMetaFromDisk(projectRoot, slug string) (frontmatter.Meta, error) {
+	path := filepath.Join(projectRoot, "tasks", slug+".md")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return frontmatter.Meta{}, err
+	}
+	m, _, err := frontmatter.Parse(b)
+	return m, err
 }
 
 func realGit(projectRoot string, args ...string) ([]byte, error) {

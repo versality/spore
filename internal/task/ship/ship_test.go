@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/versality/spore/internal/gh"
+	"github.com/versality/spore/internal/task/consumerclaim"
+	"github.com/versality/spore/internal/task/cutover"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 type fakeGH struct {
@@ -311,6 +314,136 @@ func TestRunMissingTasksDir(t *testing.T) {
 	deps := Deps{}
 	if err := Run(Options{Slug: "feat"}, deps); err == nil || !strings.Contains(err.Error(), "tasksDir required") {
 		t.Fatalf("err = %v, want tasksDir required", err)
+	}
+}
+
+func TestRunMintsCutoverForUnresolvedClaims(t *testing.T) {
+	g := &fakeGH{prs: []gh.PRState{mergeableGreen(7)}, viewFound: true, createNumber: 7}
+	gi := &fakeGit{}
+	deps, dones, _, out := newDeps(g, gi, nil, nil)
+
+	deps.ReadTaskMeta = func(string, string) (frontmatter.Meta, error) {
+		return frontmatter.Meta{
+			ConsumerClaims: []string{
+				"nix-config:path:modules/foo.sh",
+				"nix-config:grep:legacyFn",
+				"already-clean:path:gone.sh",
+			},
+		}, nil
+	}
+	deps.ConsumerScan = func(claims []consumerclaim.Claim) []consumerclaim.Result {
+		out := make([]consumerclaim.Result, len(claims))
+		for i, c := range claims {
+			if c.Repo == "already-clean" {
+				out[i] = consumerclaim.Result{Claim: c, Status: consumerclaim.StatusResolved}
+			} else {
+				out[i] = consumerclaim.Result{Claim: c, Status: consumerclaim.StatusUnresolved, Detail: "found"}
+			}
+		}
+		return out
+	}
+	var minted []cutover.Options
+	deps.MintCutover = func(opts cutover.Options) (cutover.Result, error) {
+		minted = append(minted, opts)
+		return cutover.Result{Slug: "consume-spore-" + opts.Feature, Path: "/cons/tasks/x.md"}, nil
+	}
+	deps.ProjectName = func(string) (string, error) { return "spore", nil }
+
+	if err := Run(Options{TasksDir: "/proj/tasks", Slug: "feat"}, deps); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(minted) != 2 {
+		t.Fatalf("minted %d, want 2", len(minted))
+	}
+	for _, m := range minted {
+		if m.SourceRepo != "spore" || m.SourceSlug != "feat" || m.SourcePR != 7 {
+			t.Errorf("mint opts %+v: want source-repo=spore, source-slug=feat, pr=7", m)
+		}
+		if m.Consumer != "nix-config" {
+			t.Errorf("mint Consumer = %q, want nix-config", m.Consumer)
+		}
+	}
+	if !strings.Contains(out.String(), "minted cutover") {
+		t.Errorf("missing minted-cutover line:\n%s", out.String())
+	}
+	if len(*dones) != 1 {
+		t.Error("Done not called after mint")
+	}
+}
+
+func TestRunSkipsMintWhenClaimsResolved(t *testing.T) {
+	g := &fakeGH{prs: []gh.PRState{mergeableGreen(7)}, viewFound: true, createNumber: 7}
+	gi := &fakeGit{}
+	deps, _, _, out := newDeps(g, gi, nil, nil)
+	deps.ReadTaskMeta = func(string, string) (frontmatter.Meta, error) {
+		return frontmatter.Meta{ConsumerClaims: []string{"nix-config:path:foo.sh"}}, nil
+	}
+	deps.ConsumerScan = func(claims []consumerclaim.Claim) []consumerclaim.Result {
+		return []consumerclaim.Result{{Claim: claims[0], Status: consumerclaim.StatusResolved}}
+	}
+	called := false
+	deps.MintCutover = func(cutover.Options) (cutover.Result, error) {
+		called = true
+		return cutover.Result{}, nil
+	}
+	if err := Run(Options{TasksDir: "/proj/tasks", Slug: "feat"}, deps); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("MintCutover called despite all-resolved claims")
+	}
+	if !strings.Contains(out.String(), "all resolved") {
+		t.Errorf("missing all-resolved line:\n%s", out.String())
+	}
+}
+
+func TestRunContinuesOnMintFailure(t *testing.T) {
+	g := &fakeGH{prs: []gh.PRState{mergeableGreen(7)}, viewFound: true, createNumber: 7}
+	gi := &fakeGit{}
+	deps, dones, _, out := newDeps(g, gi, nil, nil)
+	deps.ReadTaskMeta = func(string, string) (frontmatter.Meta, error) {
+		return frontmatter.Meta{ConsumerClaims: []string{"nix-config:path:foo.sh"}}, nil
+	}
+	deps.ConsumerScan = func(claims []consumerclaim.Claim) []consumerclaim.Result {
+		return []consumerclaim.Result{{Claim: claims[0], Status: consumerclaim.StatusUnresolved}}
+	}
+	deps.MintCutover = func(cutover.Options) (cutover.Result, error) {
+		return cutover.Result{}, fmt.Errorf("disk full")
+	}
+	if err := Run(Options{TasksDir: "/proj/tasks", Slug: "feat"}, deps); err != nil {
+		t.Fatalf("Run: %v, want continuation past mint error", err)
+	}
+	if !strings.Contains(out.String(), "cutover mint") {
+		t.Errorf("missing mint-error line:\n%s", out.String())
+	}
+	if len(*dones) != 1 {
+		t.Error("Done not called after mint failure")
+	}
+}
+
+func TestRunSkipsMalformedClaim(t *testing.T) {
+	g := &fakeGH{prs: []gh.PRState{mergeableGreen(7)}, viewFound: true, createNumber: 7}
+	gi := &fakeGit{}
+	deps, _, _, out := newDeps(g, gi, nil, nil)
+	deps.ReadTaskMeta = func(string, string) (frontmatter.Meta, error) {
+		return frontmatter.Meta{ConsumerClaims: []string{"malformed-no-colons", "nix-config:path:ok.sh"}}, nil
+	}
+	deps.ConsumerScan = func(claims []consumerclaim.Claim) []consumerclaim.Result {
+		return []consumerclaim.Result{{Claim: claims[0], Status: consumerclaim.StatusResolved}}
+	}
+	minted := 0
+	deps.MintCutover = func(cutover.Options) (cutover.Result, error) {
+		minted++
+		return cutover.Result{}, nil
+	}
+	if err := Run(Options{TasksDir: "/proj/tasks", Slug: "feat"}, deps); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "skipping malformed claim") {
+		t.Errorf("missing malformed-skip line:\n%s", out.String())
+	}
+	if minted != 0 {
+		t.Errorf("minted %d, want 0 (sole valid claim was resolved)", minted)
 	}
 }
 
