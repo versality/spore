@@ -38,6 +38,7 @@ Subcommands:
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.
   drift                        Auto-commit task file changes.
+  migrate-priority [--dry-run] Backfill 'priority:' on tasks missing it.
 
 Flags for 'new':
   --draft                      Set status=draft (default).
@@ -45,6 +46,7 @@ Flags for 'new':
   --body <text>                Inline body text (skips editor).
   --body-stdin                 Read body from stdin (skips editor).
   --needs <slug>               Add a dependency (repeatable).
+  --priority <v>               critical|high|medium|low (default: medium).
   --edit                       Force editor open.
   --no-edit                    Suppress editor.
 `
@@ -90,6 +92,8 @@ func runTask(args []string) error {
 		return runTaskWaybar(rest)
 	case "drift":
 		return runTaskDrift(rest)
+	case "migrate-priority":
+		return runTaskMigratePriority(rest)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\n%s", sub, taskUsage)
 	}
@@ -315,6 +319,7 @@ func runTaskNew(args []string) error {
 	_ = fs.Bool("draft", true, "set status=draft (default)")
 	editFlag := fs.Bool("edit", false, "force editor open")
 	noEdit := fs.Bool("no-edit", false, "suppress editor")
+	priority := fs.String("priority", task.DefaultPriority, "critical|high|medium|low")
 	var needs needsFlag
 	fs.Var(&needs, "needs", "add dependency slug (repeatable)")
 	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
@@ -326,6 +331,9 @@ func runTaskNew(args []string) error {
 	title := fs.Arg(0)
 	if strings.TrimSpace(title) == "" {
 		return fmt.Errorf("title must not be empty")
+	}
+	if !task.IsValidPriority(*priority) {
+		return fmt.Errorf("--priority %q: want one of critical|high|medium|low", *priority)
 	}
 
 	tasksDir := "tasks"
@@ -353,12 +361,13 @@ func runTaskNew(args []string) error {
 
 	project, _ := task.ProjectName("")
 	m := frontmatter.Meta{
-		Status:  "draft",
-		Slug:    slug,
-		Title:   title,
-		Created: time.Now().UTC().Format(time.RFC3339),
-		Project: project,
-		Needs:   []string(needs),
+		Status:   "draft",
+		Slug:     slug,
+		Title:    title,
+		Created:  time.Now().UTC().Format(time.RFC3339),
+		Project:  project,
+		Priority: *priority,
+		Needs:    []string(needs),
 	}
 	out := frontmatter.Write(m, body)
 	path := filepath.Join(tasksDir, slug+".md")
@@ -407,7 +416,10 @@ func runTaskLs(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("SLUG\tSTATUS\tTITLE")
+	if !*doneOnly && !*all {
+		task.SortByPromoteOrder(metas)
+	}
+	fmt.Println("SLUG\tSTATUS\tPRIORITY\tTITLE")
 	for _, m := range metas {
 		if *doneOnly && !task.IsDone(m.Status) {
 			continue
@@ -415,7 +427,7 @@ func runTaskLs(args []string) error {
 		if !*all && !*doneOnly && task.IsDone(m.Status) {
 			continue
 		}
-		fmt.Printf("%s\t%s\t%s\n", m.Slug, m.Status, m.Title)
+		fmt.Printf("%s\t%s\t%s\t%s\n", m.Slug, m.Status, m.Priority, m.Title)
 	}
 	return nil
 }

@@ -93,6 +93,51 @@ func TestRunTaskStatusCommandsWarnAndFlip(t *testing.T) {
 	}
 }
 
+func TestRunTaskNewPriorityFlag(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+
+	if err := runTaskNew([]string{"--no-edit", "--priority", "high", "Demo Task"}); err != nil {
+		t.Fatalf("runTaskNew: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join("tasks", "demo-task.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "priority: high\n") {
+		t.Errorf("priority line missing:\n%s", raw)
+	}
+}
+
+func TestRunTaskNewPriorityDefault(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+
+	if err := runTaskNew([]string{"--no-edit", "Demo Task"}); err != nil {
+		t.Fatalf("runTaskNew: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join("tasks", "demo-task.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "priority: medium\n") {
+		t.Errorf("default priority not medium:\n%s", raw)
+	}
+}
+
+func TestRunTaskNewPriorityRejectsBogus(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+
+	err := runTaskNew([]string{"--no-edit", "--priority", "urgent", "Demo"})
+	if err == nil {
+		t.Fatal("expected error for bogus priority, got nil")
+	}
+	if !strings.Contains(err.Error(), "critical|high|medium|low") {
+		t.Errorf("error %q should list valid values", err)
+	}
+}
+
 func captureTaskStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	orig := os.Stderr

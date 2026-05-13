@@ -27,17 +27,18 @@ import (
 // the real name here so reap/done/merge can target the live session
 // instead of a stale computed one.
 type Meta struct {
-	Status  string
-	Slug    string
-	Title   string
-	Created string
-	Project string
-	Host    string
-	Agent   string
-	Session string
-	Gate    string
-	Needs   []string
-	Extra   map[string]string
+	Status   string
+	Slug     string
+	Title    string
+	Created  string
+	Project  string
+	Host     string
+	Agent    string
+	Priority string
+	Session  string
+	Gate     string
+	Needs    []string
+	Extra    map[string]string
 
 	gateSet bool
 }
@@ -91,6 +92,8 @@ func Parse(content []byte) (Meta, []byte, error) {
 			m.Host = val
 		case "agent":
 			m.Agent = val
+		case "priority":
+			m.Priority = val
 		case "session":
 			m.Session = val
 		case "gate":
@@ -136,6 +139,7 @@ func Write(m Meta, body []byte) []byte {
 	writeScalar(&buf, "project", m.Project)
 	writeScalar(&buf, "host", m.Host)
 	writeScalar(&buf, "agent", m.Agent)
+	writeScalar(&buf, "priority", m.Priority)
 	writeScalar(&buf, "session", m.Session)
 	if m.Gate != "" && (m.gateSet || m.Extra == nil || m.Extra["scheduler"] != m.Gate) {
 		writeScalar(&buf, "gate", m.Gate)
