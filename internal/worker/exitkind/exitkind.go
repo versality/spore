@@ -36,10 +36,10 @@ func Classify(rc int, markerPath string) string {
 			return "lifecycle"
 		}
 	}
-	switch {
-	case rc == 0:
+	switch rc {
+	case 0:
 		return "early-exit"
-	case rc == 129:
+	case 129:
 		return "sighup-external"
 	default:
 		return fmt.Sprintf("crash-rc%d", rc)
