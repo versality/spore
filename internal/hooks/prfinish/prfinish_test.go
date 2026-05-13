@@ -315,26 +315,4 @@ func TestRunGHError(t *testing.T) {
 	}
 }
 
-func TestParseGHJSON(t *testing.T) {
-	in := []byte(`{"mergeable":"MERGEABLE","number":9,"state":"OPEN","statusCheckRollup":[{"name":"Validate","conclusion":"FAILURE","status":"COMPLETED","detailsUrl":"https://example/run/1","workflowName":"CI"}]}`)
-	pr, found, err := parseGHJSON(in)
-	if err != nil {
-		t.Fatalf("parseGHJSON: %v", err)
-	}
-	if !found {
-		t.Fatal("found = false; want true")
-	}
-	if pr.Number != 9 || pr.State != "OPEN" || pr.Mergeable != "MERGEABLE" {
-		t.Errorf("pr fields wrong: %+v", pr)
-	}
-	if len(pr.Checks) != 1 {
-		t.Fatalf("len(Checks) = %d, want 1", len(pr.Checks))
-	}
-	c := pr.Checks[0]
-	if c.Name != "CI / Validate" {
-		t.Errorf("Name = %q, want CI / Validate", c.Name)
-	}
-	if c.Conclusion != "FAILURE" || c.Status != "COMPLETED" {
-		t.Errorf("conclusion/status wrong: %+v", c)
-	}
-}
+// Parse-shape tests for the wire format live in internal/gh now.

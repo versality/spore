@@ -23,7 +23,6 @@
 package prfinish
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/versality/spore/internal/agentpane"
+	"github.com/versality/spore/internal/gh"
 	"github.com/versality/spore/internal/hooks"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/consumerclaim"
@@ -43,26 +43,17 @@ type Result struct {
 	Stderr   string
 }
 
-// PRState is the subset of `gh pr view --json ...` the hook needs.
-type PRState struct {
-	Number    int
-	State     string // OPEN, CLOSED, MERGED
-	Mergeable string // MERGEABLE, CONFLICTING, UNKNOWN
-	Checks    []CheckRun
-}
+// PRState and CheckRun aliases keep test fixtures and decision-logic
+// signatures stable now that the wire shape lives in internal/gh.
+type (
+	PRState  = gh.PRState
+	CheckRun = gh.CheckRun
+)
 
-// CheckRun is one entry from statusCheckRollup.
-type CheckRun struct {
-	Name       string
-	Conclusion string // SUCCESS, FAILURE, CANCELLED, SKIPPED, NEUTRAL, or "" when pending
-	Status     string // COMPLETED, IN_PROGRESS, QUEUED
-	URL        string
-}
-
-// GHClient is the test seam over the gh CLI.
+// GHClient is the test seam this hook needs. The shared internal/gh
+// package's Real satisfies it; ship's wider interface is a superset
+// and lives there.
 type GHClient interface {
-	// ViewPR returns the PR for the given branch under projectRoot.
-	// found=false means no PR is open for the branch.
 	ViewPR(projectRoot, branch string) (state PRState, found bool, err error)
 }
 
@@ -250,7 +241,7 @@ func (d Deps) withDefaults() Deps {
 		}
 	}
 	if d.GH == nil {
-		d.GH = realGH{}
+		d.GH = gh.Real{}
 	}
 	if d.ReadTaskMeta == nil {
 		d.ReadTaskMeta = readTaskMetaFromDisk
@@ -266,72 +257,6 @@ func readTaskMetaFromDisk(projectRoot, slug string) (frontmatter.Meta, error) {
 	}
 	m, _, err := frontmatter.Parse(b)
 	return m, err
-}
-
-// realGH shells out to `gh pr view <branch> --json ...`.
-type realGH struct{}
-
-func (realGH) ViewPR(projectRoot, branch string) (PRState, bool, error) {
-	cmd := exec.Command("gh", "pr", "view", branch,
-		"--json", "number,state,mergeable,statusCheckRollup")
-	cmd.Dir = projectRoot
-	out, err := cmd.Output()
-	if err != nil {
-		var ee *exec.ExitError
-		if asExitError(err, &ee) {
-			stderr := string(ee.Stderr)
-			if strings.Contains(stderr, "no pull requests found") ||
-				strings.Contains(stderr, "no open pull requests found") {
-				return PRState{}, false, nil
-			}
-		}
-		return PRState{}, false, err
-	}
-	return parseGHJSON(out)
-}
-
-func parseGHJSON(b []byte) (PRState, bool, error) {
-	var raw struct {
-		Number            int    `json:"number"`
-		State             string `json:"state"`
-		Mergeable         string `json:"mergeable"`
-		StatusCheckRollup []struct {
-			Name         string `json:"name"`
-			Conclusion   string `json:"conclusion"`
-			Status       string `json:"status"`
-			DetailsURL   string `json:"detailsUrl"`
-			WorkflowName string `json:"workflowName"`
-		} `json:"statusCheckRollup"`
-	}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return PRState{}, false, fmt.Errorf("unmarshal gh json: %w", err)
-	}
-	pr := PRState{
-		Number:    raw.Number,
-		State:     raw.State,
-		Mergeable: raw.Mergeable,
-	}
-	for _, c := range raw.StatusCheckRollup {
-		name := c.Name
-		if c.WorkflowName != "" && c.WorkflowName != name {
-			name = c.WorkflowName + " / " + name
-		}
-		pr.Checks = append(pr.Checks, CheckRun{
-			Name:       name,
-			Conclusion: c.Conclusion,
-			Status:     c.Status,
-			URL:        c.DetailsURL,
-		})
-	}
-	return pr, true, nil
-}
-
-func asExitError(err error, dst **exec.ExitError) bool {
-	if e, ok := err.(*exec.ExitError); ok {
-		*dst = e
-		return true
-	}
-	return false
 }
 
 func workingTreeClean(worktree string) bool {
