@@ -9,6 +9,8 @@ import (
 
 	"github.com/versality/spore/internal/agentpane"
 	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/task/consumerclaim"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 type repoFixture struct {
@@ -201,6 +203,99 @@ func TestRun(t *testing.T) {
 				t.Errorf("Stderr = %q on exit 0, want empty", got.Stderr)
 			}
 		})
+	}
+}
+
+func TestRunMergedWithStaleClaim(t *testing.T) {
+	fix := newRepoFixture(t, "demo")
+	consumerDir := t.TempDir()
+	// Create the obsoleted file in the consumer so the claim is unresolved.
+	if err := os.WriteFile(filepath.Join(consumerDir, "old.sh"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := Deps{
+		LookupEnv: func(k string) (string, bool) {
+			return map[string]string{"SPORE_TASK_SLUG": "demo", "SPORE_PROJECT_ROOT": fix.projectRoot}[k], true
+		},
+		Capture:     claudeIdleCapture,
+		SessionName: func(string, string) string { return "test-session" },
+		GH:          fakeGH{found: true, pr: PRState{Number: 7, State: "MERGED"}},
+		Consumer: consumerclaim.Deps{
+			LookupEnv: func(k string) (string, bool) {
+				if strings.HasPrefix(k, "SPORE_CONSUMER_") {
+					return consumerDir, true
+				}
+				return "", false
+			},
+			HomeDir: func() (string, error) { return "/no/home", nil },
+			Stat:    os.Stat,
+		},
+		ReadTaskMeta: func(string, string) (frontmatter.Meta, error) {
+			return frontmatter.Meta{
+				ConsumerClaims: []string{"nix-config:path:old.sh"},
+			}, nil
+		},
+	}
+	got := Run(hooks.Request{CWD: fix.worktree}, deps)
+	if got.ExitCode != 2 {
+		t.Fatalf("want exit 2, got %d (stderr=%q)", got.ExitCode, got.Stderr)
+	}
+	if !strings.Contains(got.Stderr, "PR #7 is merged") {
+		t.Errorf("Stderr = %q, want mention of PR #7 merged", got.Stderr)
+	}
+	if !strings.Contains(got.Stderr, "nix-config:path:old.sh") {
+		t.Errorf("Stderr = %q, want claim spec", got.Stderr)
+	}
+}
+
+func TestRunMergedAllResolved(t *testing.T) {
+	fix := newRepoFixture(t, "demo")
+	consumerDir := t.TempDir() // empty: claim is resolved.
+
+	deps := Deps{
+		LookupEnv: func(k string) (string, bool) {
+			return map[string]string{"SPORE_TASK_SLUG": "demo", "SPORE_PROJECT_ROOT": fix.projectRoot}[k], true
+		},
+		Capture:     claudeIdleCapture,
+		SessionName: func(string, string) string { return "test-session" },
+		GH:          fakeGH{found: true, pr: PRState{Number: 7, State: "MERGED"}},
+		Consumer: consumerclaim.Deps{
+			LookupEnv: func(k string) (string, bool) {
+				if strings.HasPrefix(k, "SPORE_CONSUMER_") {
+					return consumerDir, true
+				}
+				return "", false
+			},
+			HomeDir: func() (string, error) { return "/no/home", nil },
+			Stat:    os.Stat,
+		},
+		ReadTaskMeta: func(string, string) (frontmatter.Meta, error) {
+			return frontmatter.Meta{
+				ConsumerClaims: []string{"nix-config:path:nope.sh"},
+			}, nil
+		},
+	}
+	got := Run(hooks.Request{CWD: fix.worktree}, deps)
+	if got.ExitCode != 0 {
+		t.Fatalf("want exit 0 (all claims resolved), got %d (stderr=%q)", got.ExitCode, got.Stderr)
+	}
+}
+
+func TestRunMergedNoClaims(t *testing.T) {
+	fix := newRepoFixture(t, "demo")
+	deps := Deps{
+		LookupEnv: func(k string) (string, bool) {
+			return map[string]string{"SPORE_TASK_SLUG": "demo", "SPORE_PROJECT_ROOT": fix.projectRoot}[k], true
+		},
+		Capture:      claudeIdleCapture,
+		SessionName:  func(string, string) string { return "test-session" },
+		GH:           fakeGH{found: true, pr: PRState{Number: 7, State: "MERGED"}},
+		ReadTaskMeta: func(string, string) (frontmatter.Meta, error) { return frontmatter.Meta{}, nil },
+	}
+	got := Run(hooks.Request{CWD: fix.worktree}, deps)
+	if got.ExitCode != 0 {
+		t.Fatalf("want exit 0, got %d (stderr=%q)", got.ExitCode, got.Stderr)
 	}
 }
 

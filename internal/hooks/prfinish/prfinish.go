@@ -33,6 +33,8 @@ import (
 	"github.com/versality/spore/internal/agentpane"
 	"github.com/versality/spore/internal/hooks"
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/task/consumerclaim"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 // Result is the hook's verdict.
@@ -70,6 +72,12 @@ type Deps struct {
 	Capture     agentpane.CaptureFunc
 	SessionName func(projectRoot, slug string) string
 	GH          GHClient
+	// Consumer carries the consumerclaim scanner seams. Zero value uses
+	// real implementations.
+	Consumer consumerclaim.Deps
+	// ReadTaskMeta loads tasks/<slug>.md frontmatter. Defaults to a
+	// real read from projectRoot/tasks/<slug>.md.
+	ReadTaskMeta func(projectRoot, slug string) (frontmatter.Meta, error)
 }
 
 // Run evaluates the decision boundary and returns the Result.
@@ -125,14 +133,56 @@ func Run(req hooks.Request, deps Deps) Result {
 
 	switch pr.State {
 	case "MERGED":
-		// Defer to M-finish-D (consumer-claim scan).
-		return Result{}
+		return decideMerged(projectRoot, slug, pr, deps)
 	case "CLOSED":
 		return Result{}
 	case "OPEN":
 		return decideOpen(pr, branch)
 	}
 	return Result{}
+}
+
+func decideMerged(projectRoot, slug string, pr PRState, deps Deps) Result {
+	m, err := deps.ReadTaskMeta(projectRoot, slug)
+	if err != nil {
+		// No task file or unreadable: nothing to scrub; let the rower flip done.
+		return Result{}
+	}
+	if len(m.ConsumerClaims) == 0 {
+		return Result{}
+	}
+	var claims []consumerclaim.Claim
+	for _, raw := range m.ConsumerClaims {
+		c, err := consumerclaim.ParseClaim(raw)
+		if err != nil {
+			// Malformed claim; the I11 gate at done time will surface it.
+			// Skip here so the hook does not double-prompt on parse errors.
+			continue
+		}
+		claims = append(claims, c)
+	}
+	if len(claims) == 0 {
+		return Result{}
+	}
+	results := consumerclaim.Scan(claims, deps.Consumer)
+	if !consumerclaim.AnyUnresolved(results) {
+		return Result{}
+	}
+	var b strings.Builder
+	stale := 0
+	for _, r := range results {
+		if r.Status != consumerclaim.StatusResolved {
+			stale++
+		}
+	}
+	fmt.Fprintf(&b, "PR #%d is merged but %d consumer-claim(s) still unresolved and you have stopped. Scrub the consumer or mint `spore task cutover` per claim:\n", pr.Number, stale)
+	for _, r := range results {
+		if r.Status == consumerclaim.StatusResolved {
+			continue
+		}
+		fmt.Fprintf(&b, "  - %s:%s:%s [%s] %s\n", r.Claim.Repo, r.Claim.Kind, r.Claim.Value, r.Status, r.Detail)
+	}
+	return Result{ExitCode: 2, Stderr: b.String()}
 }
 
 func decideOpen(pr PRState, branch string) Result {
@@ -202,7 +252,20 @@ func (d Deps) withDefaults() Deps {
 	if d.GH == nil {
 		d.GH = realGH{}
 	}
+	if d.ReadTaskMeta == nil {
+		d.ReadTaskMeta = readTaskMetaFromDisk
+	}
 	return d
+}
+
+func readTaskMetaFromDisk(projectRoot, slug string) (frontmatter.Meta, error) {
+	path := filepath.Join(projectRoot, "tasks", slug+".md")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return frontmatter.Meta{}, err
+	}
+	m, _, err := frontmatter.Parse(b)
+	return m, err
 }
 
 // realGH shells out to `gh pr view <branch> --json ...`.
