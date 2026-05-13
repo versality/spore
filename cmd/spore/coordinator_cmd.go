@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	spore "github.com/versality/spore"
+	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
@@ -18,15 +18,8 @@ import (
 	"github.com/versality/spore/internal/fleet"
 )
 
-// defaultCoordinatorStateDir resolves the coordinator state dir from
-// the SPORE_COORDINATOR_STATE_DIR env var, falling back to
-// $HOME/.local/state/spore/coordinator.
 func defaultCoordinatorStateDir() string {
-	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
-		return d
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "spore", "coordinator")
+	return coordinator.StateDir()
 }
 
 const coordinatorUsage = `spore coordinator - coordinator support commands
