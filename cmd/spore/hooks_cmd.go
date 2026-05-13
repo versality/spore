@@ -11,6 +11,7 @@ import (
 
 	"github.com/versality/spore/internal/hooks"
 	"github.com/versality/spore/internal/hooks/contexttee"
+	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
 
 func runHooks(args []string) int {
@@ -33,6 +34,8 @@ func runHooks(args []string) int {
 		return runHooksPreToolUse()
 	case "stop":
 		return runHooksStop()
+	case "wtmerge-mechanical":
+		return runHooksWtMergeMechanical()
 	case "settings":
 		return runHooksSettings()
 	case "watch-inbox":
@@ -115,6 +118,25 @@ func runHooksStop() int {
 	}
 	resp := hooks.Stop(req)
 	return writeHookResponse(resp)
+}
+
+// runHooksWtMergeMechanical is the M1 Stop-hook entry point: when a
+// claude rower stops idle on its wt/<slug> branch with shipped-but-
+// unmerged commits and a clean tree, exit 2 with a deterministic
+// nudge to run `wt merge` (or write the next step and continue).
+// Otherwise exit 0 silently. See docs/todo/rower-lifecycle-fsm.md
+// section 9.
+func runHooksWtMergeMechanical() int {
+	req, err := readHookRequest()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks wtmerge-mechanical:", err)
+		return 1
+	}
+	res := wtmergemechanical.Run(req, wtmergemechanical.Deps{})
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
 }
 
 func readHookRequest() (hooks.Request, error) {
