@@ -177,20 +177,31 @@ func normalizeTier(subscriptionType string) string {
 // normalized tier (max, pro, team, free) on a single line. Callers
 // (orchestrator spawn paths, token monitors) gate on this output.
 func ActiveTier() error {
-	path := oauthCredsPath()
-	if path == "" {
-		return errors.New("oauth credentials path unresolved")
-	}
-	cf, err := loadCredentials(path)
+	tier, err := ActiveTierString()
 	if err != nil {
 		return err
 	}
-	tier := normalizeTier(cf.oauth.SubscriptionType)
-	if tier == "" {
-		return errors.New("subscriptionType missing from credentials")
-	}
 	fmt.Println(tier)
 	return nil
+}
+
+// ActiveTierString returns the normalized tier of the live OAuth
+// credentials. In-process callers (coordinator spawn tier-gate) use
+// this instead of shelling out to ActiveTier.
+func ActiveTierString() (string, error) {
+	path := oauthCredsPath()
+	if path == "" {
+		return "", errors.New("oauth credentials path unresolved")
+	}
+	cf, err := loadCredentials(path)
+	if err != nil {
+		return "", err
+	}
+	tier := normalizeTier(cf.oauth.SubscriptionType)
+	if tier == "" {
+		return "", errors.New("subscriptionType missing from credentials")
+	}
+	return tier, nil
 }
 
 // fetchUsage hits /usage, refreshing the access token once on a 401 if
