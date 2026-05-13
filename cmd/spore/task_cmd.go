@@ -13,6 +13,7 @@ import (
 
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
+	"github.com/versality/spore/internal/task/ship"
 )
 
 const taskUsage = `spore task - manage tasks
@@ -34,6 +35,11 @@ Subcommands:
                                Merge wt/<slug> into main; push origin main:main only.
                                Refuses on red 'just check' (exit 2);
                                --force-merge-red bypasses with a logged reason.
+  ship <slug> [--strategy <s>] [--base <b>]
+                               Streamlined PR-flow ship: just check, push branch,
+                               gh pr create, wait for checks, gh pr merge (squash
+                               by default), ff local main, task.Done. One verb;
+                               idempotent per-step.
   tell <slug> <message>        Append a message to the slug's inbox dir.
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.
@@ -84,6 +90,8 @@ func runTask(args []string) error {
 		return runTaskDone(rest)
 	case "merge":
 		return runTaskMerge(rest)
+	case "ship":
+		return runTaskShip(rest)
 	case "tell":
 		return runTaskTell(rest)
 	case "verify":
@@ -154,6 +162,49 @@ func runTaskMerge(args []string) error {
 		return err
 	}
 	return nil
+}
+
+func runTaskShip(args []string) error {
+	slug := ""
+	strategy := ""
+	base := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--strategy":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--strategy requires an argument")
+			}
+			strategy = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--strategy="):
+			strategy = strings.TrimPrefix(a, "--strategy=")
+		case a == "--base":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--base requires an argument")
+			}
+			base = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--base="):
+			base = strings.TrimPrefix(a, "--base=")
+		case strings.HasPrefix(a, "-"):
+			return fmt.Errorf("spore task ship: unknown flag: %s", a)
+		default:
+			if slug != "" {
+				return fmt.Errorf("usage: spore task ship <slug> [--strategy <s>] [--base <b>]")
+			}
+			slug = a
+		}
+	}
+	if slug == "" {
+		return fmt.Errorf("usage: spore task ship <slug> [--strategy <s>] [--base <b>]")
+	}
+	return ship.Run(ship.Options{
+		TasksDir: resolveTasksDir(),
+		Slug:     slug,
+		Strategy: strategy,
+		Base:     base,
+	}, ship.Deps{})
 }
 
 func runTaskWaybar(_ []string) error {
