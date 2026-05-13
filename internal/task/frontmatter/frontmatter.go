@@ -27,18 +27,19 @@ import (
 // the real name here so reap/done/merge can target the live session
 // instead of a stale computed one.
 type Meta struct {
-	Status   string
-	Slug     string
-	Title    string
-	Created  string
-	Project  string
-	Host     string
-	Agent    string
-	Priority string
-	Session  string
-	Gate     string
-	Needs    []string
-	Extra    map[string]string
+	Status         string
+	Slug           string
+	Title          string
+	Created        string
+	Project        string
+	Host           string
+	Agent          string
+	Priority       string
+	Session        string
+	Gate           string
+	Needs          []string
+	ConsumerClaims []string
+	Extra          map[string]string
 
 	gateSet bool
 }
@@ -101,6 +102,8 @@ func Parse(content []byte) (Meta, []byte, error) {
 			m.gateSet = true
 		case "needs":
 			listTarget = &m.Needs
+		case "consumer-claims":
+			listTarget = &m.ConsumerClaims
 		default:
 			if m.Extra == nil {
 				m.Extra = make(map[string]string)
@@ -145,6 +148,7 @@ func Write(m Meta, body []byte) []byte {
 		writeScalar(&buf, "gate", m.Gate)
 	}
 	writeBlockList(&buf, "needs", m.Needs)
+	writeBlockList(&buf, "consumer-claims", m.ConsumerClaims)
 
 	keys := make([]string, 0, len(m.Extra))
 	for k := range m.Extra {
