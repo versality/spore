@@ -14,6 +14,7 @@ import (
 
 	"github.com/versality/spore/evidence"
 	"github.com/versality/spore/internal/matter"
+	"github.com/versality/spore/internal/task/consumerclaim"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -239,6 +240,10 @@ func Done(tasksDir, slug string, force bool) error {
 		}
 	}
 
+	if err := consumerClaimsGate(slug, m, force, os.Stderr); err != nil {
+		return err
+	}
+
 	if err := evidenceGate(slug, m, body, os.Stderr); err != nil {
 		return err
 	}
@@ -311,6 +316,64 @@ func copyExtra(in map[string]string) map[string]string {
 // tasks (no evidence_required declared) are skipped silently. During
 // the soak window or when SPORE_EVIDENCE_WARN_ONLY=1 is set, blocking
 // verdicts are reduced to a stderr warning.
+// consumerClaimsGate enforces I11
+// (tasks/spore-rower-finish-contract.md section 3): a task with
+// `consumer-claims:` frontmatter cannot flip `done` until every claim
+// resolves clean (consumer no longer references the obsoleted thing)
+// or the operator passes --force. Skipped claims (consumer checkout
+// absent locally) count as unresolved; an operator cannot prove the
+// consumer caught up if they cannot scan.
+func consumerClaimsGate(slug string, m frontmatter.Meta, force bool, warnOut io.Writer) error {
+	if len(m.ConsumerClaims) == 0 {
+		return nil
+	}
+	claims := make([]consumerclaim.Claim, 0, len(m.ConsumerClaims))
+	for _, raw := range m.ConsumerClaims {
+		c, err := consumerclaim.ParseClaim(raw)
+		if err != nil {
+			if force {
+				fmt.Fprintf(warnOut, "spore task done %s: --force: ignoring malformed claim %q: %v\n", slug, raw, err)
+				continue
+			}
+			return fmt.Errorf("done refused for %s: %w", slug, err)
+		}
+		claims = append(claims, c)
+	}
+	results := consumerclaim.Scan(claims, consumerclaim.Deps{})
+	if !consumerclaim.AnyUnresolved(results) {
+		return nil
+	}
+	if force {
+		fmt.Fprintf(warnOut, "spore task done %s: --force: %d consumer-claim(s) still unresolved\n", slug, countUnresolved(results))
+		for _, r := range results {
+			if r.Status == consumerclaim.StatusResolved {
+				continue
+			}
+			fmt.Fprintf(warnOut, "  - %s:%s:%s [%s] %s\n", r.Claim.Repo, r.Claim.Kind, r.Claim.Value, r.Status, r.Detail)
+		}
+		return nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "done refused for %s: %d consumer-claim(s) still unresolved (use --force to override):\n", slug, countUnresolved(results))
+	for _, r := range results {
+		if r.Status == consumerclaim.StatusResolved {
+			continue
+		}
+		fmt.Fprintf(&b, "  - %s:%s:%s [%s] %s\n", r.Claim.Repo, r.Claim.Kind, r.Claim.Value, r.Status, r.Detail)
+	}
+	return fmt.Errorf("%s", b.String())
+}
+
+func countUnresolved(results []consumerclaim.Result) int {
+	n := 0
+	for _, r := range results {
+		if r.Status != consumerclaim.StatusResolved {
+			n++
+		}
+	}
+	return n
+}
+
 func evidenceGate(slug string, m frontmatter.Meta, body []byte, warnOut *os.File) error {
 	meta := metaToAny(m)
 	if len(evidence.Required(meta)) == 0 {
