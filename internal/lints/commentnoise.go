@@ -20,21 +20,24 @@ import (
 //  3. Dated event refs (an event verb like Tested or Fixed followed
 //     by an ISO date) inside comments. The fact belongs in the
 //     invariant, the date in the commit log.
-//
-// Safe-port note: this lint ships with no per-project allowlists. If a
-// downstream needs to opt a file out, they suppress at the source.
-type CommentNoise struct{}
+type CommentNoise struct {
+	Ext      []string
+	SkipPath []string
+}
 
 func (CommentNoise) Name() string { return "comment-noise" }
 
-func (CommentNoise) Run(root string) ([]Issue, error) {
-	files, err := listFiles(root, sourceExts)
+func (l CommentNoise) Run(root string) ([]Issue, error) {
+	files, err := listFiles(root, extSet(l.Ext, sourceExts))
 	if err != nil {
 		return nil, err
 	}
 	var issues []Issue
 	for _, rel := range files {
 		if isGenerated(rel) {
+			continue
+		}
+		if skipPath(rel, l.SkipPath) {
 			continue
 		}
 		path := filepath.Join(root, rel)

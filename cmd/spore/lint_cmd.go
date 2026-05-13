@@ -19,7 +19,20 @@ func runLint(args []string) int {
 	list := fs.Bool("list", false, "list every named lint and exit")
 	help := fs.Bool("h", false, "show help")
 	helpLong := fs.Bool("help", false, "show help")
-	if err := fs.Parse(args); err != nil {
+	allowlist := stringListFlag{}
+	ext := stringListFlag{}
+	skipPath := stringListFlag{}
+	consumersDir := fs.String("consumers-dir", "", "override claude-drift consumers dir")
+	rulesDir := fs.String("rules-dir", "", "override claude-drift rules dir")
+	renderCmd := fs.String("render-cmd", "", "override claude-drift renderer command")
+	limit := fs.Int("limit", 0, "override filesize line limit")
+	rootLineLimit := fs.Int("root-line-limit", 0, "override claude-totalsize root line limit")
+	rootCharLimit := fs.Int("root-char-limit", 0, "override claude-totalsize root char limit")
+	subdirLineLimit := fs.Int("subdir-line-limit", 0, "override claude-totalsize subdir line limit")
+	fs.Var(&allowlist, "allowlist", "comma-separated extra emdash allowlist paths")
+	fs.Var(&ext, "ext", "comma-separated extension or basename list")
+	fs.Var(&skipPath, "skip-path", "comma-separated paths, prefixes, or globs to skip")
+	if err := fs.Parse(reorderLintArgs(args)); err != nil {
 		fmt.Fprintln(os.Stderr, "spore lint:", err)
 		fmt.Fprint(os.Stderr, lintUsage)
 		return 2
@@ -50,6 +63,25 @@ func runLint(args []string) int {
 		fmt.Fprintln(os.Stderr, "spore lint: expected at most one positional <name>:", fs.Args())
 		return 2
 	}
+
+	cfg, err := lints.LoadProjectConfig(*root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore lint:", err)
+		return 2
+	}
+	cfg = lints.MergeConfig(cfg, flagLintConfig(toRun, lintFlagValues{
+		allowlist:       allowlist.values,
+		consumersDir:    *consumersDir,
+		rulesDir:        *rulesDir,
+		renderCmd:       *renderCmd,
+		limit:           *limit,
+		ext:             ext.values,
+		skipPath:        skipPath.values,
+		rootLineLimit:   *rootLineLimit,
+		rootCharLimit:   *rootCharLimit,
+		subdirLineLimit: *subdirLineLimit,
+	}))
+	toRun = lints.ApplyConfig(toRun, cfg)
 
 	bad := false
 	taskEvidenceWarnOnly := lints.EvidenceWarnOnly()
@@ -103,4 +135,89 @@ func printLintList(w *os.File) {
 
 func prefix(name, msg string) string {
 	return "[" + name + "] " + strings.TrimRight(msg, "\n")
+}
+
+type stringListFlag struct {
+	values []string
+}
+
+func (f *stringListFlag) String() string {
+	return strings.Join(f.values, ",")
+}
+
+func (f *stringListFlag) Set(v string) error {
+	for _, part := range strings.Split(v, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			f.values = append(f.values, part)
+		}
+	}
+	return nil
+}
+
+type lintFlagValues struct {
+	allowlist       []string
+	consumersDir    string
+	rulesDir        string
+	renderCmd       string
+	limit           int
+	ext             []string
+	skipPath        []string
+	rootLineLimit   int
+	rootCharLimit   int
+	subdirLineLimit int
+}
+
+func flagLintConfig(toRun []lints.Lint, v lintFlagValues) lints.Config {
+	out := lints.Config{ByName: map[string]lints.LintConfig{}}
+	for _, lint := range toRun {
+		out.ByName[lint.Name()] = lints.LintConfig{
+			Allowlist:       v.allowlist,
+			ConsumersDir:    v.consumersDir,
+			RulesDir:        v.rulesDir,
+			RenderCmd:       v.renderCmd,
+			Limit:           v.limit,
+			Ext:             v.ext,
+			SkipPath:        v.skipPath,
+			RootLineLimit:   v.rootLineLimit,
+			RootCharLimit:   v.rootCharLimit,
+			SubdirLineLimit: v.subdirLineLimit,
+		}
+	}
+	return out
+}
+
+func reorderLintArgs(args []string) []string {
+	var flags []string
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			flags = append(flags, arg)
+			if lintFlagNeedsValue(arg) && !strings.Contains(arg, "=") && i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
+			continue
+		}
+		positional = append(positional, arg)
+	}
+	return append(flags, positional...)
+}
+
+func lintFlagNeedsValue(arg string) bool {
+	name := strings.TrimLeft(arg, "-")
+	if eq := strings.IndexByte(name, '='); eq >= 0 {
+		name = name[:eq]
+	}
+	switch name {
+	case "h", "help", "list":
+		return false
+	default:
+		return true
+	}
 }

@@ -84,6 +84,37 @@ codex = 33
 `,
 		},
 		{
+			Name:    "lint",
+			Headers: []string{"[lint.emdash]", "[lint.claude-drift]", "[lint.filesize]", "[lint.claude-totalsize]", "[lint.comment-noise]", "[lint.decoration]"},
+			Content: `# [lint.<name>] - project overrides for portable lints.
+# Paths are repo-relative. ext entries may be extensions or basenames.
+# [lint.emdash]
+# allowlist = ["CLAUDE.md", "AGENTS.md"]
+#
+# [lint.claude-drift]
+# consumers_dir = "rules/consumers"
+# rules_dir = "rules"
+# render_cmd = ""
+#
+# [lint.filesize]
+# limit = 800
+# ext = [".go", ".sh", ".nix"]
+#
+# [lint.claude-totalsize]
+# root_line_limit = 400
+# root_char_limit = 40000
+# subdir_line_limit = 150
+#
+# [lint.comment-noise]
+# ext = [".go", ".sh", ".nix"]
+# skip_path = ["templates/"]
+#
+# [lint.decoration]
+# ext = [".go", ".sh", ".nix"]
+# skip_path = ["templates/"]
+`,
+		},
+		{
 			Name:    "matter.linear",
 			Headers: []string{"[matter.linear]"},
 			Content: `# [matter.linear] - Linear adapter for upstream tickets.

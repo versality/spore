@@ -19,7 +19,7 @@ const emDashEnDash = "\u2014\u2013"
 // the prohibition: it has to name the characters in backticks for the
 // agent to recognize them. New entries are a design smell; flag in
 // review.
-var emDashAllowlist = map[string]bool{
+var defaultEmDashAllowlist = map[string]bool{
 	"rules/core/no-emdash.md": true,
 }
 
@@ -27,18 +27,27 @@ var emDashAllowlist = map[string]bool{
 // tracked text files. Replace with a regular hyphen, colon,
 // parentheses, or a new sentence. Binary files and obvious data
 // extensions are skipped.
-type EmDash struct{}
+type EmDash struct {
+	Allowlist []string
+}
 
 func (EmDash) Name() string { return "emdash" }
 
-func (EmDash) Run(root string) ([]Issue, error) {
+func (l EmDash) Run(root string) ([]Issue, error) {
 	files, err := listFiles(root, nil)
 	if err != nil {
 		return nil, err
 	}
+	allowlist := map[string]bool{}
+	for rel := range defaultEmDashAllowlist {
+		allowlist[rel] = true
+	}
+	for _, rel := range l.Allowlist {
+		allowlist[filepath.ToSlash(strings.TrimSpace(rel))] = true
+	}
 	var issues []Issue
 	for _, rel := range files {
-		if emDashAllowlist[rel] {
+		if allowlist[rel] {
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(rel))

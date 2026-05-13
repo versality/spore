@@ -2,8 +2,10 @@ package lints
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +23,7 @@ import (
 type ClaudeDrift struct {
 	ConsumersDir string
 	RulesDir     string
+	RenderCmd    string
 }
 
 func (ClaudeDrift) Name() string { return "claude-drift" }
@@ -64,7 +67,7 @@ func (l ClaudeDrift) Run(root string) ([]Issue, error) {
 		if len(targets) == 0 {
 			continue
 		}
-		rendered, err := composer.Compose(absRules, consumerPath, opts)
+		rendered, err := l.render(root, name, consumerPath, absRules, opts)
 		if err != nil {
 			return nil, fmt.Errorf("compose %s: %w", name, err)
 		}
@@ -90,6 +93,31 @@ func (l ClaudeDrift) Run(root string) ([]Issue, error) {
 		}
 	}
 	return issues, nil
+}
+
+func (l ClaudeDrift) render(root, name, consumerPath, rulesDir string, opts composer.Options) (string, error) {
+	if strings.TrimSpace(l.RenderCmd) == "" {
+		return composer.Compose(rulesDir, consumerPath, opts)
+	}
+	cmd := exec.Command("sh", "-c", l.RenderCmd)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"SPORE_LINT_ROOT="+root,
+		"SPORE_LINT_CONSUMER="+name,
+		"SPORE_LINT_CONSUMER_FILE="+consumerPath,
+		"SPORE_LINT_RULES_DIR="+rulesDir,
+	)
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errBuf.String())
+		if msg == "" {
+			return "", err
+		}
+		return "", fmt.Errorf("%w: %s", err, msg)
+	}
+	return out.String(), nil
 }
 
 func readTargetDirectives(path string) ([]string, error) {

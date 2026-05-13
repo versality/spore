@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -193,6 +194,45 @@ func isGenerated(rel string) bool {
 	}
 	for _, dir := range generatedDirs {
 		if strings.HasPrefix(rel, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func extSet(exts []string, defaults map[string]bool) map[string]bool {
+	if len(exts) == 0 {
+		return defaults
+	}
+	out := map[string]bool{}
+	for _, ext := range exts {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+		if strings.Contains(ext, ".") && !strings.HasPrefix(ext, ".") {
+			out[filepath.ToSlash(ext)] = true
+			continue
+		}
+		out[ext] = true
+	}
+	return out
+}
+
+func skipPath(rel string, skips []string) bool {
+	rel = filepath.ToSlash(rel)
+	for _, skip := range skips {
+		skip = filepath.ToSlash(strings.TrimSpace(skip))
+		if skip == "" {
+			continue
+		}
+		if strings.HasSuffix(skip, "/") && strings.HasPrefix(rel, skip) {
+			return true
+		}
+		if rel == skip {
+			return true
+		}
+		if ok, _ := path.Match(skip, rel); ok {
 			return true
 		}
 	}
