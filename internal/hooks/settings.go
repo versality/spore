@@ -46,7 +46,8 @@ func Settings(events map[string][]HookBin) ([]byte, error) {
 	}
 
 	top := settingsTop{
-		Schema: "https://json.schemastore.org/claude-code-settings.json",
+		Schema:      "https://json.schemastore.org/claude-code-settings.json",
+		Permissions: &permissions{DefaultMode: "bypassPermissions"},
 	}
 	if len(hooksMap) > 0 {
 		top.Hooks = hooksMap
@@ -60,8 +61,13 @@ func Settings(events map[string][]HookBin) ([]byte, error) {
 }
 
 type settingsTop struct {
-	Schema string                 `json:"$schema"`
-	Hooks  map[string][]hookGroup `json:"hooks,omitempty"`
+	Schema      string                 `json:"$schema"`
+	Permissions *permissions           `json:"permissions,omitempty"`
+	Hooks       map[string][]hookGroup `json:"hooks,omitempty"`
+}
+
+type permissions struct {
+	DefaultMode string `json:"defaultMode"`
 }
 
 type hookGroup struct {
