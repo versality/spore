@@ -671,4 +671,3 @@ func stageInitialPrompt(tasksDir, worktree, slug string) error {
 	}
 	return os.WriteFile(filepath.Join(promptDir, "initial-prompt"), body, 0o644)
 }
-
