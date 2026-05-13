@@ -11,7 +11,10 @@ import (
 // body opens with 3+ divider characters (- = * _ ~). Unicode
 // box-drawing (──, ══) is allowed. Covers `# ---`, `// ===`,
 // `;; ---`, `/* ===`, and variants.
-type Decoration struct{}
+type Decoration struct {
+	Ext      []string
+	SkipPath []string
+}
 
 func (Decoration) Name() string { return "decoration" }
 
@@ -40,14 +43,17 @@ var decorationExts = map[string]bool{
 
 var reDecoration = regexp.MustCompile(`^[[:space:]]*(?:#+|;+|//|/\*)[[:space:]]*[-=*_~]{3,}`)
 
-func (Decoration) Run(root string) ([]Issue, error) {
-	files, err := listFiles(root, decorationExts)
+func (l Decoration) Run(root string) ([]Issue, error) {
+	files, err := listFiles(root, extSet(l.Ext, decorationExts))
 	if err != nil {
 		return nil, err
 	}
 	var issues []Issue
 	for _, rel := range files {
 		if isGenerated(rel) {
+			continue
+		}
+		if skipPath(rel, l.SkipPath) {
 			continue
 		}
 		path := filepath.Join(root, rel)

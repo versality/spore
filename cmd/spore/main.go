@@ -59,6 +59,11 @@ Usage:
 Flags:
   --root   Repo root to lint. Defaults to the current directory.
   --list   Print every named lint with a marker for default-set membership.
+  --allowlist, --consumers-dir, --rules-dir, --render-cmd, --limit, --ext,
+           --skip-path, --root-line-limit, --root-char-limit,
+           --subdir-line-limit
+
+Per-lint config can also live in spore.toml as [lint.<name>].
 
 With no positional, runs the default set. With a name, runs that single
 named lint (default-set or not). Exits non-zero when any lint reports

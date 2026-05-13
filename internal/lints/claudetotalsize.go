@@ -25,6 +25,7 @@ const (
 	defaultRootCharLimit   = 40000
 	defaultSubdirLineLimit = 150
 	claudeTotalSizeMarker  = "<!-- lint: totalsize-ok -->"
+	legacyFileSizeMarker   = "<!-- lint: file-size-ok -->"
 )
 
 func (ClaudeTotalSize) Name() string { return "claude-totalsize" }
@@ -61,7 +62,7 @@ func (l ClaudeTotalSize) Run(root string) ([]Issue, error) {
 			}
 			return nil, err
 		}
-		if bytes.Contains(data, []byte(claudeTotalSizeMarker)) {
+		if bytes.Contains(data, []byte(claudeTotalSizeMarker)) || bytes.Contains(data, []byte(legacyFileSizeMarker)) {
 			continue
 		}
 		lines := countTotalLines(data)

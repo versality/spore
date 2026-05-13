@@ -12,6 +12,7 @@ import (
 // unboundedly once past a threshold; split into focused modules.
 type FileSize struct {
 	Limit int
+	Ext   []string
 }
 
 const defaultFileSizeLimit = 800
@@ -23,7 +24,7 @@ func (l FileSize) Run(root string) ([]Issue, error) {
 	if limit <= 0 {
 		limit = defaultFileSizeLimit
 	}
-	files, err := listFiles(root, sourceExts)
+	files, err := listFiles(root, extSet(l.Ext, sourceExts))
 	if err != nil {
 		return nil, err
 	}
