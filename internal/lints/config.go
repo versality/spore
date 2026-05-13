@@ -18,6 +18,7 @@ type LintConfig struct {
 	ConsumersDir    string
 	RulesDir        string
 	RenderCmd       string
+	ConsumersCmd    string
 	Limit           int
 	Ext             []string
 	SkipPath        []string
@@ -119,6 +120,9 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 		if cfg.RenderCmd != "" {
 			v.RenderCmd = cfg.RenderCmd
 		}
+		if cfg.ConsumersCmd != "" {
+			v.ConsumersCmd = cfg.ConsumersCmd
+		}
 		return v
 	case FileSize:
 		if cfg.Limit > 0 {
@@ -169,6 +173,9 @@ func mergeLintConfig(base, over LintConfig) LintConfig {
 	if over.RenderCmd != "" {
 		base.RenderCmd = over.RenderCmd
 	}
+	if over.ConsumersCmd != "" {
+		base.ConsumersCmd = over.ConsumersCmd
+	}
 	if over.Limit > 0 {
 		base.Limit = over.Limit
 	}
@@ -202,6 +209,8 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 		cfg.RulesDir = stripQuotes(raw)
 	case "render_cmd":
 		cfg.RenderCmd = stripQuotes(raw)
+	case "consumers_cmd":
+		cfg.ConsumersCmd = stripQuotes(raw)
 	case "limit":
 		v, err := strconv.Atoi(stripQuotes(raw))
 		if err != nil {

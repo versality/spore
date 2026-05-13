@@ -25,6 +25,7 @@ func runLint(args []string) int {
 	consumersDir := fs.String("consumers-dir", "", "override claude-drift consumers dir")
 	rulesDir := fs.String("rules-dir", "", "override claude-drift rules dir")
 	renderCmd := fs.String("render-cmd", "", "override claude-drift renderer command")
+	consumersCmd := fs.String("consumers-cmd", "", "claude-drift composer-driven adapter: command emitting JSON [{name,target_path,rendered_text}]")
 	limit := fs.Int("limit", 0, "override filesize line limit")
 	rootLineLimit := fs.Int("root-line-limit", 0, "override claude-totalsize root line limit")
 	rootCharLimit := fs.Int("root-char-limit", 0, "override claude-totalsize root char limit")
@@ -74,6 +75,7 @@ func runLint(args []string) int {
 		consumersDir:    *consumersDir,
 		rulesDir:        *rulesDir,
 		renderCmd:       *renderCmd,
+		consumersCmd:    *consumersCmd,
 		limit:           *limit,
 		ext:             ext.values,
 		skipPath:        skipPath.values,
@@ -162,6 +164,7 @@ type lintFlagValues struct {
 	consumersDir    string
 	rulesDir        string
 	renderCmd       string
+	consumersCmd    string
 	limit           int
 	ext             []string
 	skipPath        []string
@@ -178,6 +181,7 @@ func flagLintConfig(toRun []lints.Lint, v lintFlagValues) lints.Config {
 			ConsumersDir:    v.consumersDir,
 			RulesDir:        v.rulesDir,
 			RenderCmd:       v.renderCmd,
+			ConsumersCmd:    v.consumersCmd,
 			Limit:           v.limit,
 			Ext:             v.ext,
 			SkipPath:        v.skipPath,

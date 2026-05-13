@@ -59,11 +59,26 @@ Usage:
 Flags:
   --root   Repo root to lint. Defaults to the current directory.
   --list   Print every named lint with a marker for default-set membership.
-  --allowlist, --consumers-dir, --rules-dir, --render-cmd, --limit, --ext,
-           --skip-path, --root-line-limit, --root-char-limit,
+  --allowlist, --consumers-dir, --rules-dir, --render-cmd, --consumers-cmd,
+           --limit, --ext, --skip-path, --root-line-limit, --root-char-limit,
            --subdir-line-limit
 
 Per-lint config can also live in spore.toml as [lint.<name>].
+
+claude-drift adapters:
+  Default (file-based):  one consumer per <consumers_dir>/<name>.txt with
+                         "# target: <repo-relative-path>" directives.
+                         render_cmd swaps the built-in composer; reads
+                         SPORE_LINT_ROOT, SPORE_LINT_CONSUMER,
+                         SPORE_LINT_CONSUMER_FILE, SPORE_LINT_RULES_DIR.
+  Composer-driven:       consumers_cmd shells out once; stdout must be
+                         JSON of the form
+                           [{"name": "<id>",
+                             "target_path": "<repo-relative>",
+                             "rendered_text": "<expected content>"}, ...]
+                         Spore reads target_path off disk and diffs
+                         against rendered_text. When set, consumers_dir,
+                         rules_dir, and render_cmd are ignored.
 
 With no positional, runs the default set. With a name, runs that single
 named lint (default-set or not). Exits non-zero when any lint reports

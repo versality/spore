@@ -50,6 +50,27 @@ render_cmd = "printf '%s\n' '# rendered'"
 	}
 }
 
+func TestLintConfig_ClaudeDriftConsumersCmd(t *testing.T) {
+	root := newTestRepo(t, map[string]string{
+		"spore.toml": `[lint.claude-drift]
+consumers_cmd = "sh consumers.sh"
+`,
+		"consumers.sh": `#!/bin/sh
+cat <<'JSON'
+[{"name":"host","target_path":"HOST.md","rendered_text":"fresh\n"}]
+JSON
+`,
+		"HOST.md": "stale\n",
+	})
+	issues, err := configuredLint(t, root, ClaudeDrift{}).Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(issues) != 1 || issues[0].Path != "HOST.md" || !strings.Contains(issues[0].Message, "drift") {
+		t.Fatalf("expected one HOST.md drift issue, got %v", issues)
+	}
+}
+
 func TestLintConfig_FileSizeLimitAndExt(t *testing.T) {
 	long := strings.Repeat("x\n", 6)
 	root := newTestRepo(t, map[string]string{

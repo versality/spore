@@ -95,6 +95,10 @@ codex = 33
 # consumers_dir = "rules/consumers"
 # rules_dir = "rules"
 # render_cmd = ""
+# # Composer-driven adapter (Nix-eval, etc.): when set, the cmd must emit
+# # JSON [{"name","target_path","rendered_text"}, ...] and consumers_dir /
+# # rules_dir / render_cmd are ignored.
+# consumers_cmd = ""
 #
 # [lint.filesize]
 # limit = 800
