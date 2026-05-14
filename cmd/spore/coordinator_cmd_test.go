@@ -153,6 +153,72 @@ func TestRoleBriefMissingConsumer(t *testing.T) {
 	}
 }
 
+// captureBoot mirrors captureRoleBrief: redirect stdout/stderr, run
+// runCoordinatorBoot, and return code + captured streams. Used to
+// exercise the CLI dispatch (help, bad flags, bad positional).
+func captureBoot(t *testing.T, args []string) (code int, stdout, stderr string) {
+	t.Helper()
+	origOut, origErr := os.Stdout, os.Stderr
+	t.Cleanup(func() { os.Stdout, os.Stderr = origOut, origErr })
+
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+	os.Stdout, os.Stderr = outW, errW
+
+	done := make(chan [2]string, 1)
+	go func() {
+		var ob, eb bytes.Buffer
+		_, _ = io.Copy(&ob, outR)
+		_, _ = io.Copy(&eb, errR)
+		done <- [2]string{ob.String(), eb.String()}
+	}()
+
+	code = runCoordinatorBoot(args)
+	outW.Close()
+	errW.Close()
+	got := <-done
+	return code, got[0], got[1]
+}
+
+func TestCoordinatorBootHelp(t *testing.T) {
+	code, out, _ := captureBoot(t, []string{"--help"})
+	if code != 0 {
+		t.Fatalf("exit=%d", code)
+	}
+	if !strings.Contains(out, "spore coordinator boot") {
+		t.Errorf("help missing header: %q", out)
+	}
+	if !strings.Contains(out, "--state-dir") {
+		t.Errorf("help missing --state-dir: %q", out)
+	}
+}
+
+func TestCoordinatorBootRejectsPositional(t *testing.T) {
+	code, _, errOut := captureBoot(t, []string{"unexpected-arg"})
+	if code != 2 {
+		t.Fatalf("exit=%d want 2; stderr=%q", code, errOut)
+	}
+	if !strings.Contains(errOut, "usage: spore coordinator boot") {
+		t.Errorf("stderr missing usage: %q", errOut)
+	}
+}
+
+func TestCoordinatorBootRejectsUnknownFlag(t *testing.T) {
+	code, _, errOut := captureBoot(t, []string{"--no-such-flag"})
+	if code != 2 {
+		t.Fatalf("exit=%d want 2; stderr=%q", code, errOut)
+	}
+	if !strings.Contains(errOut, "spore coordinator boot:") {
+		t.Errorf("stderr missing context: %q", errOut)
+	}
+}
+
 func head(s string, n int) string {
 	if len(s) <= n {
 		return s
