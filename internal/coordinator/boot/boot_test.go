@@ -51,15 +51,15 @@ func TestRunHealthyAllOK(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\tSTATUS\tTITLE\nfoo\tactive\tA foo\n"},
-		"wt task fleet status":    {0, "live=2 parked=0\n"},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, "tokens 1000/1M\n"},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok\n"},
+		"wt task ls":             {0, "SLUG\tSTATUS\tTITLE\nfoo\tactive\tA foo\n"},
+		"wt task fleet status":   {0, "live=2 parked=0\n"},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, "tokens 1000/1M\n"},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok\n"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok\n"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok\n"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 
 	r := Run(cfg)
@@ -98,15 +98,15 @@ func TestRunOversizedStateMdTripsExit2(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\tSTATUS\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\tSTATUS\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 
 	r := Run(cfg)
@@ -124,15 +124,15 @@ func TestRunOversizedStateMdTripsExit2(t *testing.T) {
 func TestRunMissingStateMd(t *testing.T) {
 	cfg := baseCfg(t)
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 0 {
@@ -157,15 +157,15 @@ func TestRunTaskLSDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\tSTATUS\nalpha\tdone\ngamma\tactive\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "off\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\tSTATUS\nalpha\tdone\ngamma\tactive\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "off\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 0 {
@@ -189,15 +189,15 @@ func TestRunSLAOverCapEmitsFooterAndSidecar(t *testing.T) {
 	}
 	slaOut := "stale: a\nstale: b\nstale: c\nstale: d\n"
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {2, slaOut},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {2, slaOut},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -226,15 +226,15 @@ func TestRunCommFeedbackPresentEmitsSection(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if !strings.Contains(r.Body, "## comm-feedback.ready") {
@@ -262,15 +262,15 @@ func TestRunRowerStopErrorsTailEmits(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -292,15 +292,15 @@ func TestRunWorstExitCapped(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {99, "boom\n"}, // unusually high rc
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "on\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {99, "boom\n"}, // unusually high rc
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -314,15 +314,15 @@ func TestRunAgentsStateFailureSurfacedAsSection(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Exec = fakeExec(map[string][2]any{
-		"wt task ls":              {0, "SLUG\n"},
-		"wt task fleet status":    {0, ""},
-		"wt task agents status":   {0, "weird\n"},
-		"skyhelm-budget summary":  {0, ""},
-		"skyhelm-sla-scanner":     {0, ""},
-		"skyhelm-idle-watchdog":   {0, "ok"},
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "weird\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
 		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":    {0, "ok"},
-		"spore coordinator state-debt": {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
