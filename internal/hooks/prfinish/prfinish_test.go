@@ -74,13 +74,19 @@ func claudeRunningCapture(string) (string, error) {
 }
 
 type fakeGH struct {
-	pr    PRState
-	found bool
-	err   error
+	pr      PRState
+	found   bool
+	err     error
+	runs    []RunSummary
+	runsErr error
 }
 
 func (f fakeGH) ViewPR(string, string) (PRState, bool, error) {
 	return f.pr, f.found, f.err
+}
+
+func (f fakeGH) ListRunsForCommit(string, string, string) ([]RunSummary, error) {
+	return f.runs, f.runsErr
 }
 
 func TestRun(t *testing.T) {
@@ -190,6 +196,12 @@ func TestRun(t *testing.T) {
 				Capture:     tc.capture,
 				SessionName: func(string, string) string { return "test-session" },
 				GH:          tc.gh,
+				// Direct-push sub-tree must not fire for the PR-flow
+				// cases; force IsAncestor=false so a no-PR row stays
+				// no-op here. Dedicated TestRunDirectPush below covers
+				// the in-main branch.
+				HeadSHA:    func(string) (string, error) { return "deadbeef", nil },
+				IsAncestor: func(string, string, string) (bool, error) { return false, nil },
 			}
 			req := hooks.Request{HookEventName: "Stop", CWD: fix.worktree}
 			got := Run(req, deps)
@@ -200,6 +212,94 @@ func TestRun(t *testing.T) {
 				t.Errorf("Stderr = %q, want substring %q", got.Stderr, tc.wantInMsg)
 			}
 			if tc.wantExit == 0 && got.Stderr != "" {
+				t.Errorf("Stderr = %q on exit 0, want empty", got.Stderr)
+			}
+		})
+	}
+}
+
+func TestRunDirectPush(t *testing.T) {
+	const sha = "abcdef1234567890abcdef1234567890abcdef12"
+
+	runsSuccess := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "COMPLETED", Conclusion: "SUCCESS", URL: "https://example/run/1", HeadSHA: sha},
+	}
+	runsPending := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "IN_PROGRESS", HeadSHA: sha},
+	}
+	runsQueued := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "QUEUED", HeadSHA: sha},
+	}
+	runsFailure := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "COMPLETED", Conclusion: "FAILURE", URL: "https://example/run/1", HeadSHA: sha},
+	}
+	runsCancelled := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "COMPLETED", Conclusion: "CANCELLED", URL: "https://example/run/1", HeadSHA: sha},
+	}
+	runsTimedOut := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "COMPLETED", Conclusion: "TIMED_OUT", URL: "https://example/run/1", HeadSHA: sha},
+	}
+	runsMixed := []RunSummary{
+		{DatabaseID: 1, Name: "Cover", Status: "COMPLETED", Conclusion: "SUCCESS", HeadSHA: sha},
+		{DatabaseID: 2, Name: "CI", Status: "COMPLETED", Conclusion: "FAILURE", URL: "https://example/run/2", HeadSHA: sha},
+	}
+	runsSkipped := []RunSummary{
+		{DatabaseID: 1, Name: "CI", Status: "COMPLETED", Conclusion: "SKIPPED", HeadSHA: sha},
+	}
+
+	type tc struct {
+		name       string
+		runs       []RunSummary
+		runsErr    error
+		inMain     bool
+		headSHAErr error
+		wantExit   int
+		wantInMsg  string
+	}
+	cases := []tc{
+		{name: "no PR + sha not in origin/main is no-op", inMain: false, runs: runsFailure, wantExit: 0},
+		{name: "no PR + sha in main, no runs scheduled yet", inMain: true, runs: nil, wantExit: 0},
+		{name: "no PR + sha in main, run in_progress", inMain: true, runs: runsPending, wantExit: 0},
+		{name: "no PR + sha in main, run queued", inMain: true, runs: runsQueued, wantExit: 0},
+		{name: "no PR + sha in main, all success", inMain: true, runs: runsSuccess, wantExit: 0},
+		{name: "no PR + sha in main, skipped counts as fine", inMain: true, runs: runsSkipped, wantExit: 0},
+		{name: "no PR + sha in main, failure fires fix prompt", inMain: true, runs: runsFailure, wantExit: 2, wantInMsg: "CI failed for abcdef1"},
+		{name: "no PR + sha in main, failure URL is in stderr", inMain: true, runs: runsFailure, wantExit: 2, wantInMsg: "https://example/run/1"},
+		{name: "no PR + sha in main, cancelled fires prompt", inMain: true, runs: runsCancelled, wantExit: 2, wantInMsg: "cancelled"},
+		{name: "no PR + sha in main, timed_out fires prompt", inMain: true, runs: runsTimedOut, wantExit: 2, wantInMsg: "timed_out"},
+		{name: "no PR + sha in main, mixed has any failure -> exit 2", inMain: true, runs: runsMixed, wantExit: 2, wantInMsg: "CI (failure)"},
+		{name: "no PR + sha in main, runsErr degrades silent", inMain: true, runsErr: os.ErrNotExist, wantExit: 0},
+		{name: "no PR + HeadSHA error degrades silent", inMain: true, runs: runsFailure, headSHAErr: os.ErrNotExist, wantExit: 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fix := newRepoFixture(t, "demo")
+			env := map[string]string{
+				"SPORE_TASK_SLUG":    fix.slug,
+				"SPORE_PROJECT_ROOT": fix.projectRoot,
+			}
+			deps := Deps{
+				LookupEnv:   func(k string) (string, bool) { v, ok := env[k]; return v, ok },
+				Capture:     claudeIdleCapture,
+				SessionName: func(string, string) string { return "test-session" },
+				GH:          fakeGH{found: false, runs: c.runs, runsErr: c.runsErr},
+				HeadSHA: func(string) (string, error) {
+					if c.headSHAErr != nil {
+						return "", c.headSHAErr
+					}
+					return sha, nil
+				},
+				IsAncestor: func(string, string, string) (bool, error) { return c.inMain, nil },
+			}
+			got := Run(hooks.Request{HookEventName: "Stop", CWD: fix.worktree}, deps)
+			if got.ExitCode != c.wantExit {
+				t.Fatalf("ExitCode = %d, want %d (stderr=%q)", got.ExitCode, c.wantExit, got.Stderr)
+			}
+			if c.wantInMsg != "" && !strings.Contains(got.Stderr, c.wantInMsg) {
+				t.Errorf("Stderr = %q, want substring %q", got.Stderr, c.wantInMsg)
+			}
+			if c.wantExit == 0 && got.Stderr != "" {
 				t.Errorf("Stderr = %q on exit 0, want empty", got.Stderr)
 			}
 		})

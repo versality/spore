@@ -18,8 +18,8 @@ import (
 //     read at eval time).
 //  2. `age.secrets.*.path` interpolated into a store-bound string
 //     body: writeText / writeShellScript / writeScriptBin /
-//     writeScript builders, or `text = ''...''` / `script = ''...''`
-//     attribute heredocs.
+//     writeScript builders, or a two-apostrophe Nix heredoc bound to
+//     a `text` or `script` attribute.
 //
 // Sanctioned runtime contexts (`passwordCommand = "cat ${...path}"`,
 // `preStart = "...${...path}..."`, plain attribute references like
@@ -38,7 +38,7 @@ type Agenix struct {
 func (Agenix) Name() string { return "agenix" }
 
 var (
-	agenixReadFile = regexp.MustCompile(`(builtins\.|lib\.|[\s(])readFile\s+[^;]*(\.age\b|age\.secrets\.)`)
+	agenixReadFile     = regexp.MustCompile(`(builtins\.|lib\.|[\s(])readFile\s+[^;]*(\.age\b|age\.secrets\.)`)
 	agenixWriteBuilder = regexp.MustCompile(`(?s)\b(writeText|writeShellScript|writeScriptBin|writeScript)\b[^;]{0,400}?\$\{[^}]*age\.secrets\.`)
 	agenixHeredocAttr  = regexp.MustCompile(`(?ms)^[\t ]*(text|script)[\t ]*=[\t ]*''[^']{0,400}?\$\{[^}]*age\.secrets\.`)
 )

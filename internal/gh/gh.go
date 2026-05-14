@@ -31,6 +31,23 @@ type CheckRun struct {
 	URL        string
 }
 
+// RunSummary is one entry from `gh run list --json ...`. Used by the
+// prfinish direct-push branch to gate stop on CI green for a sha that
+// was pushed straight to main (no PR).
+//
+// Note vs CheckRun: the `gh run list` JSON returns Status / Conclusion
+// in lower case ("completed", "success"), where the PR rollup uses
+// upper case. ListRunsForCommit normalises to upper case so downstream
+// switches can use the same constants for both shapes.
+type RunSummary struct {
+	DatabaseID int64
+	Name       string // workflow name, e.g. "CI"
+	Status     string // COMPLETED, IN_PROGRESS, QUEUED
+	Conclusion string // SUCCESS, FAILURE, CANCELLED, TIMED_OUT, NEUTRAL, ACTION_REQUIRED, SKIPPED, or "" when pending
+	URL        string
+	HeadSHA    string
+}
+
 // Real shells out to the gh CLI. Each method shells out once; tests
 // inject their own implementation of the narrow interface they need.
 type Real struct{}
@@ -135,6 +152,63 @@ func (r Real) MergePR(projectRoot string, number int, strategy string, deleteBra
 		return fmt.Errorf("gh pr merge: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// ListRunsForCommit returns the latest GH Actions runs for the given
+// sha on the given branch. Empty slice (no error) means GH has not
+// scheduled any runs yet; the caller should treat that as "wait" not
+// "green". Filtered to runs whose headSha matches `sha` exactly:
+// `gh run list --commit` is best-effort filter on GH side, so we
+// re-check headSha here to avoid stray runs for sibling commits.
+func (Real) ListRunsForCommit(projectRoot, branch, sha string) ([]RunSummary, error) {
+	cmd := exec.Command("gh", "run", "list",
+		"--branch", branch,
+		"--commit", sha,
+		"--json", "databaseId,name,status,conclusion,url,headSha",
+		"--limit", "10")
+	cmd.Dir = projectRoot
+	out, err := cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return nil, fmt.Errorf("gh run list: %w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+		}
+		return nil, fmt.Errorf("gh run list: %w", err)
+	}
+	return ParseRunListJSON(out, sha)
+}
+
+// ParseRunListJSON parses the JSON output of `gh run list --json
+// databaseId,name,status,conclusion,url,headSha`, filters to entries
+// whose headSha matches `sha`, and normalises Status / Conclusion to
+// upper case so callers can share decision logic with the PR rollup.
+func ParseRunListJSON(b []byte, sha string) ([]RunSummary, error) {
+	var raw []struct {
+		DatabaseID int64  `json:"databaseId"`
+		Name       string `json:"name"`
+		Status     string `json:"status"`
+		Conclusion string `json:"conclusion"`
+		URL        string `json:"url"`
+		HeadSHA    string `json:"headSha"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal gh run list json: %w", err)
+	}
+	out := make([]RunSummary, 0, len(raw))
+	for _, r := range raw {
+		if sha != "" && r.HeadSHA != sha {
+			continue
+		}
+		out = append(out, RunSummary{
+			DatabaseID: r.DatabaseID,
+			Name:       r.Name,
+			Status:     strings.ToUpper(r.Status),
+			Conclusion: strings.ToUpper(r.Conclusion),
+			URL:        r.URL,
+			HeadSHA:    r.HeadSHA,
+		})
+	}
+	return out, nil
 }
 
 // ParseViewJSON parses the JSON output of `gh pr view --json

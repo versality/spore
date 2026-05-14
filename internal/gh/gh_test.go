@@ -47,6 +47,57 @@ func TestParseViewJSONMalformed(t *testing.T) {
 	}
 }
 
+func TestParseRunListJSON(t *testing.T) {
+	in := []byte(`[
+{"databaseId":25844655339,"name":"CI","status":"completed","conclusion":"failure","url":"https://example/run/1","headSha":"abcdef"},
+{"databaseId":25844655340,"name":"Cover","status":"in_progress","conclusion":"","url":"https://example/run/2","headSha":"abcdef"},
+{"databaseId":25844655341,"name":"Stray","status":"completed","conclusion":"success","url":"https://example/run/3","headSha":"ffffff"}
+]`)
+	runs, err := ParseRunListJSON(in, "abcdef")
+	if err != nil {
+		t.Fatalf("ParseRunListJSON: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("len(runs) = %d, want 2 (stray sha filtered)", len(runs))
+	}
+	if runs[0].Status != "COMPLETED" || runs[0].Conclusion != "FAILURE" {
+		t.Errorf("runs[0] not normalised: %+v", runs[0])
+	}
+	if runs[1].Status != "IN_PROGRESS" || runs[1].Conclusion != "" {
+		t.Errorf("runs[1] not normalised: %+v", runs[1])
+	}
+	if runs[0].DatabaseID != 25844655339 || runs[0].URL != "https://example/run/1" {
+		t.Errorf("runs[0] fields wrong: %+v", runs[0])
+	}
+}
+
+func TestParseRunListJSONEmpty(t *testing.T) {
+	runs, err := ParseRunListJSON([]byte("[]"), "abcdef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("len(runs) = %d, want 0", len(runs))
+	}
+}
+
+func TestParseRunListJSONNoShaFilter(t *testing.T) {
+	in := []byte(`[{"databaseId":1,"name":"CI","status":"completed","conclusion":"success","headSha":"x"}]`)
+	runs, err := ParseRunListJSON(in, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("len(runs) = %d, want 1 (empty sha = no filter)", len(runs))
+	}
+}
+
+func TestParseRunListJSONMalformed(t *testing.T) {
+	if _, err := ParseRunListJSON([]byte("not json"), ""); err == nil {
+		t.Fatal("want error on malformed json")
+	}
+}
+
 func TestParseCreateOutput(t *testing.T) {
 	cases := []struct {
 		name string

@@ -1,12 +1,12 @@
 // Package prfinish implements M-finish-C of the rower ship-cycle
 // contract (tasks/spore-rower-finish-contract.md section 5): a Stop
 // hook that fires exit 2 when a rower idles on a wt/<slug> branch
-// whose pushed PR needs a deterministic next action.
+// whose pushed PR (or pushed-direct-to-main commit) needs a
+// deterministic next action.
 //
 // Decision boundary, evaluated only after the universal idle / clean /
 // no-mid-merge gates pass:
 //
-//   - no PR for wt/<slug>:                exit 0 (rower has not pushed yet).
 //   - state=OPEN, mergeable=CONFLICTING:  exit 2 with a rebase prompt.
 //   - state=OPEN, any check FAILURE:      exit 2 with the failing job names.
 //   - state=OPEN, any check IN_PROGRESS:  exit 0 (CI still running; wait).
@@ -18,11 +18,19 @@
 //   - state=CLOSED (not merged):          exit 0 (rower closed the PR; no
 //     further automatic action).
 //
+// When `gh pr view wt/<slug>` finds no PR, the direct-push branch
+// kicks in instead (see decideDirectPush): if the worktree's HEAD sha
+// is reachable from origin/main, the rower has already merged + pushed
+// without opening a PR, so the hook gates exit on GH Actions runs for
+// that sha. Pre-push (sha not in origin/main) stays a silent exit 0
+// because pushpending / wtmerge-mechanical already cover those states.
+//
 // I9 covers the mergeable + green case; I10 covers the CI-red case.
 // Both share the same gh dependency behind the GHClient seam.
 package prfinish
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,11 +51,13 @@ type Result struct {
 	Stderr   string
 }
 
-// PRState and CheckRun aliases keep test fixtures and decision-logic
-// signatures stable now that the wire shape lives in internal/gh.
+// PRState, CheckRun, and RunSummary aliases keep test fixtures and
+// decision-logic signatures stable now that the wire shape lives in
+// internal/gh.
 type (
-	PRState  = gh.PRState
-	CheckRun = gh.CheckRun
+	PRState    = gh.PRState
+	CheckRun   = gh.CheckRun
+	RunSummary = gh.RunSummary
 )
 
 // GHClient is the test seam this hook needs. The shared internal/gh
@@ -55,6 +65,7 @@ type (
 // and lives there.
 type GHClient interface {
 	ViewPR(projectRoot, branch string) (state PRState, found bool, err error)
+	ListRunsForCommit(projectRoot, branch, sha string) ([]RunSummary, error)
 }
 
 // Deps are the test seams. Nil fields fall back to real implementations.
@@ -69,6 +80,13 @@ type Deps struct {
 	// ReadTaskMeta loads tasks/<slug>.md frontmatter. Defaults to a
 	// real read from projectRoot/tasks/<slug>.md.
 	ReadTaskMeta func(projectRoot, slug string) (frontmatter.Meta, error)
+	// HeadSHA returns the worktree's current HEAD sha. Defaults to
+	// `git -C <worktree> rev-parse HEAD`.
+	HeadSHA func(worktree string) (string, error)
+	// IsAncestor reports whether sha is reachable from ref in
+	// projectRoot. Defaults to `git -C <projectRoot> merge-base
+	// --is-ancestor <sha> <ref>`.
+	IsAncestor func(projectRoot, sha, ref string) (bool, error)
 }
 
 // Run evaluates the decision boundary and returns the Result.
@@ -115,11 +133,14 @@ func Run(req hooks.Request, deps Deps) Result {
 
 	branch := "wt/" + slug
 	pr, found, err := deps.GH.ViewPR(projectRoot, branch)
-	if err != nil || !found {
-		// gh failures or no-PR both degrade to silent exit 0; the rower
-		// will hit pushpending or wtmerge-mechanical first if work is
-		// truly unshipped.
+	if err != nil {
+		// gh failures degrade to silent exit 0; the rower will hit
+		// pushpending or wtmerge-mechanical first if work is truly
+		// unshipped.
 		return Result{}
+	}
+	if !found {
+		return decideDirectPush(projectRoot, worktree, deps)
 	}
 
 	switch pr.State {
@@ -130,6 +151,75 @@ func Run(req hooks.Request, deps Deps) Result {
 	case "OPEN":
 		return decideOpen(pr, branch)
 	}
+	return Result{}
+}
+
+func decideDirectPush(projectRoot, worktree string, deps Deps) Result {
+	sha, err := deps.HeadSHA(worktree)
+	if err != nil || sha == "" {
+		return Result{}
+	}
+	inMain, err := deps.IsAncestor(projectRoot, sha, "origin/main")
+	if err != nil || !inMain {
+		// Sha not yet on origin/main: rower is pre-push (pushpending /
+		// wtmerge-mechanical will fire instead) or has nothing to ship.
+		return Result{}
+	}
+
+	runs, err := deps.GH.ListRunsForCommit(projectRoot, "main", sha)
+	if err != nil {
+		return Result{}
+	}
+	if len(runs) == 0 {
+		// CI not scheduled yet; next Stop will re-check.
+		return Result{}
+	}
+
+	short := sha
+	if len(short) > 7 {
+		short = short[:7]
+	}
+
+	var failed []RunSummary
+	hasPending := false
+	for _, r := range runs {
+		if r.Status != "COMPLETED" {
+			hasPending = true
+			continue
+		}
+		switch r.Conclusion {
+		case "SUCCESS", "SKIPPED", "NEUTRAL":
+			// fine
+		case "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED":
+			failed = append(failed, r)
+		default:
+			// Unknown conclusion on a completed run: treat as failure
+			// so the rower investigates rather than ships silently.
+			failed = append(failed, r)
+		}
+	}
+
+	if len(failed) > 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "CI failed for %s on main and you have stopped. Fix and push:\n", short)
+		for _, r := range failed {
+			label := strings.ToLower(r.Conclusion)
+			if label == "" {
+				label = "failed"
+			}
+			if r.URL != "" {
+				fmt.Fprintf(&b, "  - %s (%s): %s\n", r.Name, label, r.URL)
+			} else {
+				fmt.Fprintf(&b, "  - %s (%s)\n", r.Name, label)
+			}
+		}
+		return Result{ExitCode: 2, Stderr: b.String()}
+	}
+
+	if hasPending {
+		return Result{}
+	}
+	// All runs completed successfully: rower can stop cleanly.
 	return Result{}
 }
 
@@ -246,7 +336,39 @@ func (d Deps) withDefaults() Deps {
 	if d.ReadTaskMeta == nil {
 		d.ReadTaskMeta = readTaskMetaFromDisk
 	}
+	if d.HeadSHA == nil {
+		d.HeadSHA = headSHAFromGit
+	}
+	if d.IsAncestor == nil {
+		d.IsAncestor = isAncestorFromGit
+	}
 	return d
+}
+
+func headSHAFromGit(worktree string) (string, error) {
+	out, err := exec.Command("git", "-C", worktree, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func isAncestorFromGit(projectRoot, sha, ref string) (bool, error) {
+	cmd := exec.Command("git", "-C", projectRoot, "merge-base", "--is-ancestor", sha, ref)
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		// Exit 1 = not ancestor; exit 128 = bad ref (e.g. origin/main
+		// missing). Treat both as "not in main" and let the rower flow
+		// degrade silently rather than spamming on a fresh repo.
+		if ee.ExitCode() == 1 || ee.ExitCode() == 128 {
+			return false, nil
+		}
+	}
+	return false, err
 }
 
 func readTaskMetaFromDisk(projectRoot, slug string) (frontmatter.Meta, error) {
