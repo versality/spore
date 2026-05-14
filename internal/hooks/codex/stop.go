@@ -89,6 +89,10 @@ func Stop(cfg StopConfig, r io.Reader) StopResult {
 		return StopResult{ExitCode: 2, Stderr: res.Message}
 	}
 
+	if res := codexStuckToolcallCheck(cfg, payload); res.ShouldExit2 {
+		return StopResult{ExitCode: 2, Stderr: res.Message}
+	}
+
 	if drained := drainWorkerInbox(cfg); drained.Count > 0 {
 		msg := fmt.Sprintf(
 			"CODEX WORKER INBOX: %d message(s) moved to %s/read. Read the JSON files there, handle them, then continue.\n",

@@ -25,7 +25,7 @@ func writeTask(t *testing.T, dir, slug, status, agent, host string) {
 func TestListActiveSlugs_FilterByAgentStatusHost(t *testing.T) {
 	tasks := t.TempDir()
 	writeTask(t, tasks, "alpha", "active", "opencode", "")          // ok (empty host)
-	writeTask(t, tasks, "bravo", "active", "opencode", "host-a")  // ok matches
+	writeTask(t, tasks, "bravo", "active", "opencode", "host-a")    // ok matches
 	writeTask(t, tasks, "charlie", "active", "opencode", "skybase") // skip wrong host
 	writeTask(t, tasks, "delta", "paused", "opencode", "")          // skip status
 	writeTask(t, tasks, "echo", "active", "claude", "")             // skip agent

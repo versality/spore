@@ -1,0 +1,8 @@
+{"timestamp":"2026-05-14T09:00:00.000Z","type":"session_meta","payload":{"id":"sess-clean","cwd":"/x"}}
+{"timestamp":"2026-05-14T09:00:01.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"ls\"}","call_id":"call_A"}}
+{"timestamp":"2026-05-14T09:00:02.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"pwd\"}","call_id":"call_B"}}
+{"timestamp":"2026-05-14T09:00:03.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_A","output":"a"}}
+{"timestamp":"2026-05-14T09:00:04.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_B","output":"/home"}}
+{"timestamp":"2026-05-14T09:00:05.000Z","type":"response_item","payload":{"type":"custom_tool_call","status":"in_progress","call_id":"call_P","name":"apply_patch","input":"*** Begin Patch\n*** End Patch\n"}}
+{"timestamp":"2026-05-14T09:00:06.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_P","output":"{\"output\":\"ok\"}"}}
+{"timestamp":"2026-05-14T09:00:07.000Z","type":"token_count","last_token_usage":{"total_tokens":900}}
