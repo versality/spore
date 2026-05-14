@@ -29,7 +29,18 @@ Subcommands:
   ls [--all] [--done]          List tasks (default hides done).
   edit <slug>                  Open task file in $EDITOR.
   pick                         Interactive rofi/fzf task picker.
-  start <slug>                 Flip to active, spawn worktree + tmux session.
+  start <slug> [--env KEY=VAL ...]
+                               Flip to active, spawn worktree + tmux session.
+                               --env is repeatable; each KEY=VAL lands on
+                               tmux new-session as -e KEY=VAL.
+  ensure <slug> [--env KEY=VAL ...]
+                               Idempotent, status-preserving respawn: makes
+                               sure the worktree, branch, and tmux session
+                               exist without flipping frontmatter. Refuses
+                               when the task is done. Used by external
+                               reconcilers (wt-go) to revive an
+                               active+no-tmux worker. --env semantics match
+                               'start'.
   pause <slug>                 Flip active task to paused (no teardown).
   park <slug>                  Flip active task to parked (no teardown).
   block <slug>                 Flip active task to blocked (no teardown).
