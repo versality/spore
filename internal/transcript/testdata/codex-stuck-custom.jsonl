@@ -1,0 +1,5 @@
+{"timestamp":"2026-05-14T09:00:00.000Z","type":"session_meta","payload":{"id":"sess-stuck-custom","cwd":"/x"}}
+{"timestamp":"2026-05-14T09:00:01.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"true\"}","call_id":"call_X"}}
+{"timestamp":"2026-05-14T09:00:02.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_X","output":""}}
+{"timestamp":"2026-05-14T09:00:03.000Z","type":"response_item","payload":{"type":"custom_tool_call","status":"in_progress","call_id":"call_Patch","name":"apply_patch","input":"*** Begin Patch\n*** End Patch\n"}}
+{"timestamp":"2026-05-14T09:00:04.000Z","type":"token_count","last_token_usage":{"total_tokens":4321}}
