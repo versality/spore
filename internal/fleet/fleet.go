@@ -184,6 +184,10 @@ func Reconcile(cfg Config) (Result, error) {
 		return res, err
 	}
 	agentCounts := agentCountsFromMetas(metas, runningSet)
+	metaBySlug := map[string]frontmatter.Meta{}
+	for _, m := range metas {
+		metaBySlug[m.Slug] = m
+	}
 
 	for _, slug := range actives {
 		if runningSet[slug] {
@@ -193,8 +197,18 @@ func Reconcile(cfg Config) (Result, error) {
 			res.Skipped = append(res.Skipped, slug)
 			continue
 		}
-		picked, err := assignAgent(cfg.TasksDir, slug, workersCfg, agentCounts)
-		if err != nil {
+		// Ratio gate: if the agent that SelectAgent would pick is
+		// paused via spore.toml [fleet.workers.ratio] <agent> = 0,
+		// skip the spawn instead of starting a worker. Defends
+		// against a stale active flip (e.g. operator parked but
+		// upstream matter sync or scheduler bounced it back) when
+		// the project has told us "no <agent> workers for now".
+		picked := SelectAgent(metaBySlug[slug], workersCfg, agentCounts)
+		if AgentRatioGated(workersCfg, picked) {
+			res.Skipped = append(res.Skipped, slug)
+			continue
+		}
+		if _, err := assignAgent(cfg.TasksDir, slug, workersCfg, agentCounts); err != nil {
 			return res, fmt.Errorf("assign agent %s: %w", slug, err)
 		}
 		if _, err := task.Ensure(cfg.TasksDir, slug, nil); err != nil {

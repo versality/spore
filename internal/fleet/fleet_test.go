@@ -328,6 +328,107 @@ mechanical = "codex"
 	}
 }
 
+func TestReconcileSkipsSpawnsForRatioZeroAgent(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	setTestAgentBinary(t)
+
+	if err := os.WriteFile(filepath.Join(dirs.project, "spore.toml"), []byte(`
+[fleet.workers]
+default = "claude"
+
+[fleet.workers.ratio]
+claude = 100
+codex = 0
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTaskWithAgent(t, dirs.tasks, "codex-task", "active", "codex")
+	writeTask(t, dirs.tasks, "claude-task", "active")
+
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  10,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got, want := r.Spawned, []string{"claude-task"}; !equalSlices(got, want) {
+		t.Errorf("Spawned = %v, want %v", got, want)
+	}
+	if got, want := r.Skipped, []string{"codex-task"}; !equalSlices(got, want) {
+		t.Errorf("Skipped = %v, want %v", got, want)
+	}
+}
+
+func TestReconcileSpawnsCodexWhenRatioNonZero(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	setTestAgentBinary(t)
+
+	if err := os.WriteFile(filepath.Join(dirs.project, "spore.toml"), []byte(`
+[fleet.workers]
+default = "claude"
+
+[fleet.workers.ratio]
+claude = 50
+codex = 50
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTaskWithAgent(t, dirs.tasks, "codex-task", "active", "codex")
+
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  10,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got, want := r.Spawned, []string{"codex-task"}; !equalSlices(got, want) {
+		t.Errorf("Spawned = %v, want %v", got, want)
+	}
+	if len(r.Skipped) != 0 {
+		t.Errorf("Skipped = %v, want empty", r.Skipped)
+	}
+}
+
+func TestAgentRatioGated(t *testing.T) {
+	cases := []struct {
+		name  string
+		cfg   WorkersConfig
+		agent string
+		want  bool
+	}{
+		{"explicit zero gates", WorkersConfig{Ratio: map[string]int{"codex": 0, "claude": 100}}, "codex", true},
+		{"positive does not gate", WorkersConfig{Ratio: map[string]int{"codex": 30}}, "codex", false},
+		{"missing key does not gate", WorkersConfig{Ratio: map[string]int{"claude": 100}}, "codex", false},
+		{"nil ratio does not gate", WorkersConfig{}, "codex", false},
+		{"empty agent does not gate", WorkersConfig{Ratio: map[string]int{"codex": 0}}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := AgentRatioGated(tc.cfg, tc.agent); got != tc.want {
+				t.Errorf("AgentRatioGated(%v, %q) = %v, want %v", tc.cfg, tc.agent, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadMaxWorkersTOML(t *testing.T) {
 	root := t.TempDir()
 	if got, err := LoadMaxWorkers(root); err != nil || got != DefaultMaxWorkers {

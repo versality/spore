@@ -123,6 +123,21 @@ func parseWorkersTOML(content string) (WorkersConfig, error) {
 // pins one. Matches workerAgentCommand's "claude" interpretation.
 const DefaultWorkerAgent = "claude"
 
+// AgentRatioGated reports whether the agent is paused for this project
+// by an explicit zero in cfg.Ratio. A missing key (or any positive
+// value) is not gated; the gate fires only when the operator wrote
+// `<agent> = 0` under [fleet.workers.ratio] to say "do not spawn this
+// agent at all". The reconciler skips spawns that resolve to a gated
+// agent instead of starting them; restoring ratio > 0 picks them up on
+// the next pass without further operator action.
+func AgentRatioGated(cfg WorkersConfig, agent string) bool {
+	if agent == "" || cfg.Ratio == nil {
+		return false
+	}
+	v, ok := cfg.Ratio[agent]
+	return ok && v == 0
+}
+
 // SelectAgent returns the agent name to assign to a worker for the
 // given task, honouring this precedence:
 //
