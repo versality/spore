@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/coordinator/state"
 	"github.com/versality/spore/internal/transcript"
 )
 
@@ -314,31 +315,38 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 		err := cmd.Run()
 		cancel()
 
+		timedOut := ctx.Err() == context.DeadlineExceeded
 		if err == nil {
 			continue
 		}
 		exitErr, ok := err.(*exec.ExitError)
 		if !ok {
 			fmt.Fprintf(&stderr, "spore hooks codex stop: chain %v: %v\n", h.Argv, err)
+			appendWorkerStopError(cfg, "spawn-error", h.Argv, -1, fmt.Sprintf("%v: %s", err, combined.String()))
 			continue
 		}
-		switch exitErr.ExitCode() {
-		case 2:
+		rc := exitErr.ExitCode()
+		switch {
+		case rc == 2:
 			stderr.WriteString(combined.String())
 			return chainResult{ExitCode: 2, Stderr: stderr.String()}
-		case 124, 137:
+		case timedOut || rc == 124 || rc == 137:
 			fmt.Fprintf(&stderr, "spore hooks codex stop: timed out after %s: %v\n", cfg.CommandTimeout, h.Argv)
+			appendWorkerStopError(cfg, "timeout", h.Argv, rc, combined.String())
 		default:
-			fmt.Fprintf(&stderr, "spore hooks codex stop: %v exited %d\n", h.Argv, exitErr.ExitCode())
+			fmt.Fprintf(&stderr, "spore hooks codex stop: %v exited %d\n", h.Argv, rc)
+			appendWorkerStopError(cfg, "exit", h.Argv, rc, combined.String())
 		}
 	}
 	return chainResult{ExitCode: 0, Stderr: stderr.String()}
 }
 
-// snapshotStateBeforeWrap writes a minimal state.md before the wrap
-// reminder fires, so a fresh coordinator booted from state.md keeps a
-// pointer to the most recent context-monitor event. Best-effort; any
-// failure here is silent (the wrap message is the primary signal).
+// snapshotStateBeforeWrap merges a recent-events bullet into state.md
+// before the wrap reminder fires, so a fresh coordinator booted from
+// state.md keeps a pointer to the most recent context-monitor event.
+// Existing sections (operator-questions, Active tasks, Rules, prior
+// Recent-events bullets, etc.) are preserved. Best-effort; any failure
+// here is silent (the wrap message is the primary signal).
 func snapshotStateBeforeWrap(cfg StopConfig, level string, ctx int, source string) {
 	if cfg.CoordinatorStateDir == "" {
 		return
@@ -347,17 +355,128 @@ func snapshotStateBeforeWrap(cfg StopConfig, level string, ctx int, source strin
 		return
 	}
 	stateFile := filepath.Join(cfg.CoordinatorStateDir, "state.md")
-	tmp := stateFile + ".tmp"
 	now := cfg.Now().Format(time.RFC3339)
-	body := fmt.Sprintf(
-		"# coordinator state - last updated %s\n\n"+
-			"## Recent events\n\n"+
-			"- %s codex-context-monitor: auto-snapshotted state before %s wrap prompt; ctx=%d source=%s\n",
-		now, now, level, ctx, source)
-	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+	bullet := fmt.Sprintf("- %s codex-context-monitor: auto-snapshotted state before %s wrap prompt; ctx=%d source=%s",
+		now, level, ctx, source)
+
+	existing, _ := os.ReadFile(stateFile)
+	var body []byte
+	if len(strings.TrimSpace(string(existing))) == 0 {
+		body = []byte(fmt.Sprintf(
+			"# coordinator state - last updated %s\n\n## Recent events\n\n%s\n",
+			now, bullet))
+	} else {
+		body = mergeRecentEvent(existing, bullet, now)
+	}
+
+	tmp := stateFile + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
 		return
 	}
 	_ = os.Rename(tmp, stateFile)
+}
+
+// mergeRecentEvent appends a new Recent-events bullet to state.md while
+// preserving all other sections. If `## Recent events` is missing, it
+// is inserted at the end of the document. The leading
+// `# coordinator state - last updated <ts>` line, if present, has its
+// timestamp refreshed; otherwise the document body is left as-is.
+func mergeRecentEvent(existing []byte, bullet, now string) []byte {
+	doc := state.Parse(existing)
+	if len(doc.Sections) == 0 {
+		return []byte(fmt.Sprintf(
+			"# coordinator state - last updated %s\n\n## Recent events\n\n%s\n",
+			now, bullet))
+	}
+
+	if doc.Sections[0].Level == 0 {
+		doc.Sections[0].Body = refreshCoordinatorHeading(doc.Sections[0].Body, now)
+	}
+
+	if sec := doc.FindSection("Recent events"); sec != nil {
+		if sec.Body == "" {
+			sec.Body = bullet
+		} else {
+			sec.Body = strings.TrimRight(sec.Body, "\n") + "\n" + bullet
+		}
+	} else {
+		doc.Sections = append(doc.Sections, state.Section{
+			Level:   2,
+			Heading: "Recent events",
+			Body:    bullet,
+		})
+	}
+
+	return state.Write(doc)
+}
+
+func refreshCoordinatorHeading(body, now string) string {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "# coordinator state") {
+			lines[i] = "# coordinator state - last updated " + now
+			return strings.Join(lines, "\n")
+		}
+	}
+	return body
+}
+
+// appendWorkerStopError writes one line to worker-stop-errors.jsonl so
+// the coordinator boot probe surfaces unresolved sub-hook failures.
+// kind is "timeout" | "exit" | "spawn-error". rc is the child's exit
+// code (-1 for spawn errors). stderr is truncated to 4 KiB.
+func appendWorkerStopError(cfg StopConfig, kind string, argv []string, rc int, childStderr string) {
+	dir := cfg.WorkerStateDir
+	if dir == "" {
+		dir = cfg.CoordinatorStateDir
+	}
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	const maxStderr = 4096
+	if len(childStderr) > maxStderr {
+		childStderr = childStderr[len(childStderr)-maxStderr:]
+	}
+	row := struct {
+		TS     string   `json:"ts"`
+		Slug   string   `json:"slug"`
+		Kind   string   `json:"kind"`
+		RC     int      `json:"rc"`
+		Argv   []string `json:"argv"`
+		Stderr string   `json:"stderr,omitempty"`
+	}{
+		TS:     cfg.Now().Format(time.RFC3339),
+		Slug:   stopSlug(cfg),
+		Kind:   kind,
+		RC:     rc,
+		Argv:   argv,
+		Stderr: childStderr,
+	}
+	line, err := json.Marshal(&row)
+	if err != nil {
+		return
+	}
+	appendFile(filepath.Join(dir, "worker-stop-errors.jsonl"), string(line)+"\n")
+}
+
+// stopSlug derives a short identifier for the current Stop-hook
+// context. For worker inboxes laid out as <WorkerStateDir>/<slug>/inbox
+// it returns the slug. Coordinator sessions return "coordinator".
+// Anything else falls back to the inbox's parent basename or "".
+func stopSlug(cfg StopConfig) string {
+	if isWorkerInbox(cfg) {
+		return filepath.Base(filepath.Dir(cfg.Inbox))
+	}
+	if cfg.CoordinatorStateDir != "" && inboxUnderRoot(cfg.Inbox, cfg.CoordinatorStateDir) {
+		return "coordinator"
+	}
+	if cfg.Inbox != "" {
+		return filepath.Base(filepath.Dir(cfg.Inbox))
+	}
+	return ""
 }
 
 func appendCodexContextLedger(cfg StopConfig, sid string, ctx int, source string, sizeBytes int64, soft, hard bool) {

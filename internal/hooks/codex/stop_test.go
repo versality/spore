@@ -270,6 +270,160 @@ func TestStop_Chain_PipesPayload(t *testing.T) {
 	}
 }
 
+func TestStop_SnapshotState_PreservesOperatorQuestionsAndTail(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "coord")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	existing := "# coordinator state - last updated 2026-04-01T00:00:00Z\n" +
+		"\n## Operator questions\n\n- still waiting on rollout window\n" +
+		"\n## Recent events\n\n- 2026-04-30T10:00:00Z spawned task-x\n- 2026-05-01T11:00:00Z reaped task-y\n" +
+		"\n## Directives\n\nStand down at 22:00.\n"
+	if err := os.WriteFile(filepath.Join(stateDir, "state.md"), []byte(existing), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tpath := writeCodexJSONL(t, dir, []string{
+		`{"type":"session_meta","payload":{"id":"sess-1"}}`,
+		`{"type":"token_count","last_token_usage":{"total_tokens":200000}}`,
+	})
+	cfg := StopConfig{
+		Inbox:               stateDir,
+		CoordinatorStateDir: stateDir,
+		Driver:              "codex",
+		Now:                 fixedNow("2026-05-10T12:00:00Z"),
+	}
+	payload := fmt.Sprintf(`{"session_id":"sess-1","transcript_path":"%s"}`, tpath)
+	res := Stop(cfg, strings.NewReader(payload))
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d, want 2", res.ExitCode)
+	}
+	body, err := os.ReadFile(filepath.Join(stateDir, "state.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(body)
+	for _, want := range []string{
+		"## Operator questions",
+		"still waiting on rollout window",
+		"2026-04-30T10:00:00Z spawned task-x",
+		"2026-05-01T11:00:00Z reaped task-y",
+		"## Directives",
+		"Stand down at 22:00.",
+		"2026-05-10T12:00:00Z codex-context-monitor: auto-snapshotted state before hard wrap prompt; ctx=200000",
+		"# coordinator state - last updated 2026-05-10T12:00:00Z",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("merged state.md missing %q\n---\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "last updated 2026-04-01T00:00:00Z") {
+		t.Errorf("heading timestamp not refreshed:\n%s", got)
+	}
+}
+
+func TestStop_SnapshotState_NoPriorFileWritesFresh(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "coord")
+	os.MkdirAll(stateDir, 0o700)
+	tpath := writeCodexJSONL(t, dir, []string{
+		`{"type":"session_meta","payload":{"id":"sess-1"}}`,
+		`{"type":"token_count","last_token_usage":{"total_tokens":200000}}`,
+	})
+	cfg := StopConfig{
+		Inbox:               stateDir,
+		CoordinatorStateDir: stateDir,
+		Driver:              "codex",
+		Now:                 fixedNow("2026-05-10T12:00:00Z"),
+	}
+	res := Stop(cfg, strings.NewReader(fmt.Sprintf(`{"session_id":"sess-1","transcript_path":"%s"}`, tpath)))
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d", res.ExitCode)
+	}
+	body, _ := os.ReadFile(filepath.Join(stateDir, "state.md"))
+	if !strings.Contains(string(body), "## Recent events") {
+		t.Errorf("fresh state.md missing Recent events: %s", body)
+	}
+}
+
+func TestStop_WorkerStopErrors_LogsTimeout(t *testing.T) {
+	dir := t.TempDir()
+	wtState := filepath.Join(dir, "wt-state")
+	inbox := filepath.Join(wtState, "feature-x", "inbox")
+	if err := os.MkdirAll(inbox, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := StopConfig{
+		Inbox:          inbox,
+		WorkerStateDir: wtState,
+		CommandTimeout: 200 * time.Millisecond,
+		Now:            fixedNow("2026-05-10T12:00:00Z"),
+		Chain: []ChainHook{
+			{Argv: []string{"sh", "-c", "sleep 5"}},
+		},
+	}
+	res := Stop(cfg, strings.NewReader(`{}`))
+	if res.ExitCode != 0 {
+		t.Fatalf("exit = %d", res.ExitCode)
+	}
+	body, err := os.ReadFile(filepath.Join(wtState, "worker-stop-errors.jsonl"))
+	if err != nil {
+		t.Fatalf("ledger missing: %v", err)
+	}
+	got := string(body)
+	if !strings.Contains(got, `"kind":"timeout"`) {
+		t.Errorf("ledger missing timeout kind: %s", got)
+	}
+	if !strings.Contains(got, `"slug":"feature-x"`) {
+		t.Errorf("ledger slug = %s, want feature-x", got)
+	}
+}
+
+func TestStop_WorkerStopErrors_LogsNonZeroExit(t *testing.T) {
+	dir := t.TempDir()
+	wtState := filepath.Join(dir, "wt-state")
+	inbox := filepath.Join(wtState, "feature-x", "inbox")
+	os.MkdirAll(inbox, 0o700)
+	cfg := StopConfig{
+		Inbox:          inbox,
+		WorkerStateDir: wtState,
+		Now:            fixedNow("2026-05-10T12:00:00Z"),
+		Chain: []ChainHook{
+			{Argv: []string{"sh", "-c", "echo nope >&2; exit 7"}},
+		},
+	}
+	res := Stop(cfg, strings.NewReader(`{}`))
+	if res.ExitCode != 0 {
+		t.Fatalf("exit = %d (non-2 exit should not propagate)", res.ExitCode)
+	}
+	body, _ := os.ReadFile(filepath.Join(wtState, "worker-stop-errors.jsonl"))
+	got := string(body)
+	if !strings.Contains(got, `"kind":"exit"`) || !strings.Contains(got, `"rc":7`) {
+		t.Errorf("ledger row wrong: %s", got)
+	}
+	if !strings.Contains(got, "nope") {
+		t.Errorf("ledger missing child stderr: %s", got)
+	}
+}
+
+func TestStop_WorkerStopErrors_NotWrittenOnClean(t *testing.T) {
+	dir := t.TempDir()
+	wtState := filepath.Join(dir, "wt-state")
+	inbox := filepath.Join(wtState, "feature-x", "inbox")
+	os.MkdirAll(inbox, 0o700)
+	cfg := StopConfig{
+		Inbox:          inbox,
+		WorkerStateDir: wtState,
+		Chain: []ChainHook{
+			{Argv: []string{"sh", "-c", "exit 0"}},
+		},
+	}
+	Stop(cfg, strings.NewReader(`{}`))
+	if _, err := os.Stat(filepath.Join(wtState, "worker-stop-errors.jsonl")); err == nil {
+		t.Errorf("ledger should be absent on clean chain run")
+	}
+}
+
 func TestStop_MissingTranscript_SkipsWithLedger(t *testing.T) {
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "coord")
