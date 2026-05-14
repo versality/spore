@@ -59,6 +59,7 @@ Subcommands:
   waybar                       Print JSON chip for waybar custom module.
   drift                        Auto-commit task file changes.
   migrate-priority [--dry-run] Backfill 'priority:' on tasks missing it.
+  migrate-status <from> <to>   Rewrite every tasks/*.md status==<from> to <to>.
 
 Flags for 'new':
   --draft                      Set status=draft (default).
@@ -120,6 +121,8 @@ func runTask(args []string) error {
 		return runTaskDrift(rest)
 	case "migrate-priority":
 		return runTaskMigratePriority(rest)
+	case "migrate-status":
+		return runTaskMigrateStatus(rest)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\n%s", sub, taskUsage)
 	}
@@ -348,15 +351,14 @@ func runTaskPause(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: spore task pause <slug>")
 	}
-	warnDeprecatedStatusCommand("pause")
-	return task.Pause("tasks", args[0])
+	fmt.Fprintln(os.Stderr, "status: pause is deprecated, use park or block (flipping to parked)")
+	return task.Park("tasks", args[0])
 }
 
 func runTaskPark(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: spore task park <slug>")
 	}
-	warnDeprecatedStatusCommand("park")
 	return task.Park("tasks", args[0])
 }
 
@@ -364,12 +366,7 @@ func runTaskBlock(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: spore task block <slug>")
 	}
-	warnDeprecatedStatusCommand("block")
 	return task.Block("tasks", args[0])
-}
-
-func warnDeprecatedStatusCommand(cmd string) {
-	fmt.Fprintf(os.Stderr, "status: %s is deprecated, use park\n", cmd)
 }
 
 func runTaskDone(args []string) error {

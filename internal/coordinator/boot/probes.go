@@ -99,6 +99,11 @@ func probeDefs(cfg Config) []probeDef {
 			OKShort: "comm-feedback (no)",
 			Run:     func() (int, string) { return probeCommFeedback(cfg) },
 		},
+		{
+			Name: "paused-status", Title: "paused-status drift", Mode: ModeSilentOnOK,
+			OKShort: "paused-status",
+			Run:     func() (int, string) { return probePausedStatus(cfg) },
+		},
 	}
 }
 

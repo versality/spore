@@ -31,6 +31,9 @@ func fakeExec(table map[string][2]any) func(string, ...string) (int, string) {
 
 func baseCfg(t *testing.T) Config {
 	dir := t.TempDir()
+	// Isolate the paused-status probe from the real ~/.config/wt/projects.
+	t.Setenv("WT_CFG", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	return Config{
 		StateDir: dir,
 		WTState:  filepath.Join(dir, "wt"),

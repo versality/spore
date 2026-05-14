@@ -55,6 +55,7 @@ func Default() []Lint {
 		ClaudeTotalSize{},
 		AgentMirror{},
 		TaskEvidence{TasksDir: "tasks"},
+		TaskStatus{},
 		TmuxSocketTest{},
 		LeakGuard{},
 	}
@@ -107,7 +108,6 @@ func Named() map[string]Lint {
 		FlakeInputShadow{},
 		Agenix{},
 		TaskSchedulerContext{},
-		TaskStatus{},
 		TaskNeeds{},
 	} {
 		out[l.Name()] = l

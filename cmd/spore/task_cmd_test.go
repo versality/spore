@@ -57,9 +57,9 @@ func TestRunTaskStatusCommandsWarnAndFlip(t *testing.T) {
 		wantStatus string
 		wantWarn   string
 	}{
-		{"pause", runTaskPause, "paused", "status: pause is deprecated, use park\n"},
-		{"park", runTaskPark, "parked", "status: park is deprecated, use park\n"},
-		{"block", runTaskBlock, "blocked", "status: block is deprecated, use park\n"},
+		{"pause", runTaskPause, "parked", "status: pause is deprecated, use park or block (flipping to parked)\n"},
+		{"park", runTaskPark, "parked", ""},
+		{"block", runTaskBlock, "blocked", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
