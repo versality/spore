@@ -95,10 +95,10 @@ type WorkerStatus struct {
 // Report is the aggregate result.
 type Report struct {
 	Stuck    []WorkerStatus `json:"stuck"`
-	OkCount  int           `json:"ok_count"`
-	Total    int           `json:"total"`
-	Note     string        `json:"note,omitempty"`
-	DBAbsent bool          `json:"-"`
+	OkCount  int            `json:"ok_count"`
+	Total    int            `json:"total"`
+	Note     string         `json:"note,omitempty"`
+	DBAbsent bool           `json:"-"`
 }
 
 // Probe is the pure verdict for one worker at a fixed wall-clock

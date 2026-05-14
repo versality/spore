@@ -129,15 +129,45 @@ func PreCommit(repoRoot string) error {
 	if len(names) == 1 && names[0] == "" {
 		return nil
 	}
-	args := append([]string{"-d", "-l", "--"}, names...)
+	tmp, err := os.MkdirTemp("", "spore-pre-commit-gofmt-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+
+	replacements := make(map[string]string, len(names))
+	args := []string{"-d", "-l"}
+	for _, name := range names {
+		rel := filepath.Clean(filepath.FromSlash(name))
+		if rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("invalid staged path %q", name)
+		}
+		path := filepath.Join(tmp, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		blob, err := exec.Command("git", "-C", repoRoot, "show", ":"+name).Output()
+		if err != nil {
+			return fmt.Errorf("git show :%s: %w", name, err)
+		}
+		if err := os.WriteFile(path, blob, 0o644); err != nil {
+			return err
+		}
+		replacements[path] = filepath.ToSlash(name)
+		args = append(args, path)
+	}
 	cmd := exec.Command("gofmt", args...)
 	cmd.Dir = repoRoot
 	out, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("gofmt -d -l: %w\n%s", err, strings.TrimSpace(string(out)))
+	msg := string(out)
+	for path, name := range replacements {
+		msg = strings.ReplaceAll(msg, path, name)
 	}
-	if strings.TrimSpace(string(out)) != "" {
-		return fmt.Errorf("gofmt needed:\n%s", strings.TrimSpace(string(out)))
+	if err != nil {
+		return fmt.Errorf("gofmt -d -l: %w\n%s", err, strings.TrimSpace(msg))
+	}
+	if strings.TrimSpace(msg) != "" {
+		return fmt.Errorf("gofmt needed:\n%s", strings.TrimSpace(msg))
 	}
 	return nil
 }

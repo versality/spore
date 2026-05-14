@@ -135,3 +135,49 @@ func TestPreCommitAllowsFormattedStagedGoFiles(t *testing.T) {
 		t.Fatalf("PreCommit: %v", err)
 	}
 }
+
+func TestPreCommitChecksStagedBlobNotWorkingTree(t *testing.T) {
+	if _, err := exec.LookPath("gofmt"); err != nil {
+		t.Skip("gofmt not on PATH")
+	}
+	root := newGitRepo(t)
+	path := filepath.Join(root, "main.go")
+	if err := os.WriteFile(path, []byte("package main\nfunc main(){println(\"x\")}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", root, "add", "main.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(path, []byte("package main\n\nfunc main() {\n\tprintln(\"x\")\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := PreCommit(root)
+	if err == nil {
+		t.Fatal("PreCommit should reject unformatted staged blob")
+	}
+	if !strings.Contains(err.Error(), "main.go") {
+		t.Fatalf("PreCommit error = %q, want staged path", err)
+	}
+}
+
+func TestPreCommitIgnoresUnstagedWorkingTreeFormatting(t *testing.T) {
+	if _, err := exec.LookPath("gofmt"); err != nil {
+		t.Skip("gofmt not on PATH")
+	}
+	root := newGitRepo(t)
+	path := filepath.Join(root, "main.go")
+	if err := os.WriteFile(path, []byte("package main\n\nfunc main() {\n\tprintln(\"x\")\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", root, "add", "main.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(path, []byte("package main\nfunc main(){println(\"x\")}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := PreCommit(root); err != nil {
+		t.Fatalf("PreCommit: %v", err)
+	}
+}
