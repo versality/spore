@@ -25,6 +25,7 @@ Usage:
   spore fleet replenish-hook
   spore fleet wake [<slug>]
   spore fleet reap [--force-published]
+  spore fleet auto-mint-cutover [flags]
   spore fleet enable
   spore fleet disable
   spore fleet status
@@ -54,6 +55,13 @@ Subcommands:
                   branch (refuses branches with unlanded commits unless
                   contained in origin/main). Blocked tasks have their
                   session killed but worktree preserved.
+  auto-mint-cutover Mint consume-spore-lint-<x> drafts in a consumer
+                  repo whenever a shipped spore lint still has its
+                  bash predecessor named on harness/bash-migration-
+                  allowlist.txt. Dedupe via scheduler-key
+                  cutover-automint:<x>. No floor gate; bound by
+                  --max-mints (default 3) per tick. See
+                  ` + "`" + `spore fleet auto-mint-cutover --help` + "`" + ` for flags.
   enable          Create the kill-switch flag (the reconciler resumes
                   spawning on the next pass).
   disable         Remove the kill-switch flag (the reconciler stops
@@ -135,6 +143,8 @@ func runFleet(args []string) error {
 		return runFleetWake(rest)
 	case "reap":
 		return runFleetReap(rest)
+	case "auto-mint-cutover":
+		return runFleetAutoMintCutover(rest)
 	case "enable":
 		return runFleetEnable(rest)
 	case "disable":
