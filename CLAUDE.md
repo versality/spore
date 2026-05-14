@@ -24,6 +24,7 @@ spore/
 |   |-- infect/       nixos-anywhere wrapper for `spore infect`.
 |   |-- install/      Drops embedded skills into a target's .claude/skills/.
 |   |-- lints/        Portable lint set (drift, file-size, comment-noise, em-dash).
+|   |-- scout/        Healer-task minter: clusters lint findings, writes briefs.
 |   `-- task/         Worktree-task driver.
 |-- rules/            Markdown rule pool, composed into CLAUDE.md / AGENTS.md.
 |   |-- consumers/    Per-consumer rule lists (line per fragment id).

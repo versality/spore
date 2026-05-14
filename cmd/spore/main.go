@@ -38,6 +38,7 @@ Commands:
   install    Drop the spore skills into a project's .claude/skills/.
   infect     Bootstrap a fresh server with NixOS via nixos-anywhere.
   lint       Run portable lints over the working tree.
+  scout      Append lint findings to a JSONL ledger for the healer pipeline.
   hooks      Install or run claude-code / git hooks.
   budget     Track rolling 5h + 7d Anthropic spend; gate Stop on cap crossings.
   coordinator  Coordinator session lifecycle (start/stop/restart/status) plus support hooks.
@@ -60,6 +61,9 @@ Usage:
 Flags:
   --root   Repo root to lint. Defaults to the current directory.
   --list   Print every named lint with a marker for default-set membership.
+  --json   Emit findings as JSONL on stdout (one object per line:
+           ts, lint, severity, path, line, message, fingerprint).
+           Consumed by 'spore scout mint-healers'.
   --allowlist, --consumers-dir, --rules-dir, --render-cmd, --consumers-cmd,
            --limit, --ext, --skip-path, --root-line-limit, --root-char-limit,
            --subdir-line-limit
@@ -84,6 +88,64 @@ claude-drift adapters:
 With no positional, runs the default set. With a name, runs that single
 named lint (default-set or not). Exits non-zero when any lint reports
 an issue.
+`
+
+const scoutUsage = `spore scout - append lint findings to a JSONL ledger
+
+Usage:
+  spore scout [--root <path>] [--state-file <path>] [--stdout]
+
+Flags:
+  --root         Repo root to scan. Defaults to the current directory.
+  --state-file   JSONL ledger to append findings to. Defaults to
+                 $XDG_STATE_HOME/spore/scout/scout-findings.jsonl
+                 (with $HOME/.local/state fallback).
+  --stdout       Also echo each finding to stdout. Off by default;
+                 scout is silent unless a lint errors.
+
+scout is the upstream half of the self-heal pipeline: it runs the
+default lint set and records every finding as one JSONL row
+{ts, lint, severity, path, line, message, fingerprint} appended to
+the ledger. 'spore scout mint-healers' consumes the ledger to mint
+healer tasks.
+
+Re-running scout appends; the mint step de-dups by fingerprint so a
+fresh ledger row for the same finding does not mint a duplicate task.
+Exit codes: 0 clean (or appended cleanly), 1 a lint errored, 2 usage.
+
+Subcommands:
+  scan          (default) walk the tree and append to the ledger.
+  mint-healers  read the ledger and mint healer tasks for new clusters.
+                See 'spore scout mint-healers --help'.
+`
+
+const scoutMintUsage = `spore scout mint-healers - mint healer tasks from the scout ledger
+
+Usage:
+  spore scout mint-healers [--ledger <path>] [--tasks-dir <path>]
+                           [--project <name>] [--max <int>]
+                           [--minted <path>] [--falsepos <path>]
+                           [--dry-run]
+
+Flags:
+  --ledger     JSONL findings ledger. Defaults to
+               $XDG_STATE_HOME/spore/scout/scout-findings.jsonl.
+  --tasks-dir  Directory to write tasks/<slug>.md into. Default 'tasks'.
+  --project    Project name written into each brief. Default 'spore'.
+  --max        Hard cap on healers minted per run. Default 10. Oldest
+               cluster first; the rest carry to the next run.
+  --minted     Append-only ledger of scheduler keys already minted.
+               Default state-dir/scout-minted.tsv.
+  --falsepos   List of fingerprints to skip. Healers append a finding
+               here when they decide it's not a real issue. Default
+               state-dir/scout-falsepos.tsv.
+  --dry-run    Compute clusters and would-be slugs without writing.
+
+Clustering: findings group by (lint, dirname(path)). One healer per
+cluster, scheduler-keyed by the cluster's content hash. Re-running
+without changing findings is a no-op.
+
+Stdout: one minted slug per line. Stderr: a one-line summary.
 `
 
 const hooksUsage = `spore hooks - install or run kernel hooks
@@ -192,6 +254,8 @@ func main() {
 		os.Exit(runInfect(args))
 	case "lint":
 		os.Exit(runLint(args))
+	case "scout":
+		os.Exit(runScout(args))
 	case "hooks":
 		os.Exit(runHooks(args))
 	case "align":

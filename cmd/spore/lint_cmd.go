@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/versality/spore/internal/lints"
 )
@@ -17,6 +19,7 @@ func runLint(args []string) int {
 	fs := flag.NewFlagSet("lint", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root to lint")
 	list := fs.Bool("list", false, "list every named lint and exit")
+	jsonOut := fs.Bool("json", false, "emit findings as JSONL on stdout instead of human text")
 	help := fs.Bool("h", false, "show help")
 	helpLong := fs.Bool("help", false, "show help")
 	allowlist := stringListFlag{}
@@ -89,6 +92,7 @@ func runLint(args []string) int {
 	taskEvidenceWarnOnly := lints.EvidenceWarnOnly()
 	taskPriorityWarnOnly := lints.PriorityWarnOnly()
 	var firstErr error
+	enc := json.NewEncoder(os.Stdout)
 	for _, l := range toRun {
 		issues, err := l.Run(*root)
 		if err != nil {
@@ -102,6 +106,16 @@ func runLint(args []string) int {
 		warnOnly := (l.Name() == "task-evidence" && taskEvidenceWarnOnly) ||
 			(l.Name() == "task-priority" && taskPriorityWarnOnly)
 		for _, i := range issues {
+			if *jsonOut {
+				if err := emitJSON(enc, l.Name(), i, warnOnly); err != nil {
+					fmt.Fprintln(os.Stderr, "spore lint:", err)
+					return 2
+				}
+				if !warnOnly {
+					bad = true
+				}
+				continue
+			}
 			line := prefix(l.Name(), i.String())
 			if warnOnly {
 				fmt.Fprintln(os.Stderr, "warn: "+line)
@@ -115,6 +129,52 @@ func runLint(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// jsonFinding is the stable on-wire schema emitted by `spore lint --json`.
+// Field names follow the scout-findings.jsonl format consumed by
+// `spore scout mint-healers`; adding fields is forward-compatible, but
+// renames require a `FingerprintVersion` bump so stale dedup state
+// invalidates.
+type jsonFinding struct {
+	Ts          string `json:"ts"`
+	Lint        string `json:"lint"`
+	Severity    string `json:"severity"`
+	Path        string `json:"path"`
+	Line        int    `json:"line"`
+	Message     string `json:"message"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+func emitJSON(enc *json.Encoder, lintName string, i lints.Issue, warnOnly bool) error {
+	return enc.Encode(buildFinding(lintName, i, warnOnly))
+}
+
+// buildFinding fills in defaults for Severity (error, or warn for
+// warn-only lints) and Fingerprint (computed from the issue tuple) so
+// scout and lint share one row schema.
+func buildFinding(lintName string, i lints.Issue, warnOnly bool) jsonFinding {
+	severity := i.Severity
+	if severity == "" {
+		if warnOnly {
+			severity = "warn"
+		} else {
+			severity = "error"
+		}
+	}
+	fp := i.Fingerprint
+	if fp == "" {
+		fp = lints.Fingerprint(lintName, i.Path, i.Line, i.Message)
+	}
+	return jsonFinding{
+		Ts:          time.Now().UTC().Format(time.RFC3339),
+		Lint:        lintName,
+		Severity:    severity,
+		Path:        i.Path,
+		Line:        i.Line,
+		Message:     i.Message,
+		Fingerprint: fp,
+	}
 }
 
 func printLintList(w *os.File) {
@@ -221,7 +281,7 @@ func lintFlagNeedsValue(arg string) bool {
 		name = name[:eq]
 	}
 	switch name {
-	case "h", "help", "list":
+	case "h", "help", "list", "json":
 		return false
 	default:
 		return true

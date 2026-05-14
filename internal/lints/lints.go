@@ -16,10 +16,19 @@ import (
 
 // Issue is one finding produced by a Lint. Path is repo-relative.
 // Line is 1-indexed; 0 means the issue is whole-file.
+//
+// Severity and Fingerprint are optional; both are populated by the CLI
+// emitter when blank so existing lints stay terse. Severity is one of
+// "info", "warn", or "error" (default "warn"). Fingerprint is a stable
+// content hash used by `spore scout mint-healers` to dedup findings
+// across runs; format is "v<n>:<16-hex>" where the version is bumped
+// whenever the lint's semantic output changes.
 type Issue struct {
-	Path    string
-	Line    int
-	Message string
+	Path        string
+	Line        int
+	Message     string
+	Severity    string
+	Fingerprint string
 }
 
 func (i Issue) String() string {
