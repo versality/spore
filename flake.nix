@@ -42,6 +42,7 @@
             src = ./.;
             subPackages = [ "cmd/spore" ];
             vendorHash = null;
+            nativeBuildInputs = [ pkgs.git ];
             ldflags = [ "-X=github.com/versality/spore.buildCommit=${commit}" ];
             meta = {
               description = "Drop-in harness template for LLM-coding agents.";
