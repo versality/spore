@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/versality/spore/internal/transcript"
 )
 
 // SessionStartConfig parameterizes the SessionStart adapter. All
@@ -49,7 +51,8 @@ func (c SessionStartConfig) defaults() SessionStartConfig {
 // SessionStartPayload is the subset of the Codex SessionStart hook
 // payload we read.
 type SessionStartPayload struct {
-	SessionID string `json:"session_id"`
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
 }
 
 // SessionStartResult holds either the JSON document the adapter wrote
@@ -96,6 +99,11 @@ func SessionStart(cfg SessionStartConfig, r io.Reader) (SessionStartResult, erro
 
 	appendSessionStartLedger(cfg, sid)
 
+	context := string(brief)
+	if carry := carryOverBlock(payload.TranscriptPath); carry != "" {
+		context += "\n" + carry
+	}
+
 	out := struct {
 		HookSpecificOutput struct {
 			HookEventName     string `json:"hookEventName"`
@@ -103,7 +111,7 @@ func SessionStart(cfg SessionStartConfig, r io.Reader) (SessionStartResult, erro
 		} `json:"hookSpecificOutput"`
 	}{}
 	out.HookSpecificOutput.HookEventName = "SessionStart"
-	out.HookSpecificOutput.AdditionalContext = string(brief)
+	out.HookSpecificOutput.AdditionalContext = context
 	doc, err := json.Marshal(out)
 	if err != nil {
 		return SessionStartResult{Skipped: true}, err
@@ -139,6 +147,31 @@ func appendSessionStartLedger(cfg SessionStartConfig, sid string) {
 	ts := cfg.Now().Format(time.RFC3339)
 	fmt.Fprintf(f, `{"ts":"%s","event":"session-start","session_id":%s,"source":"codex-session-start"}`+"\n",
 		ts, jsonString(sid))
+}
+
+// carryOverBlock returns a markdown block describing every unfinalized
+// tool call in the resumed transcript, or "" when the transcript is
+// empty / unreadable / clean. The block is appended to the SessionStart
+// additionalContext so codex starts the new session aware of what to
+// acknowledge before dispatching anything new.
+func carryOverBlock(transcriptPath string) string {
+	if transcriptPath == "" {
+		return ""
+	}
+	if _, err := os.Stat(transcriptPath); err != nil {
+		return ""
+	}
+	stuck, err := transcript.LastUnfinalizedToolCalls(transcriptPath)
+	if err != nil || len(stuck) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## Carry-over tool call(s) from prior turn\n\n")
+	for _, c := range stuck {
+		fmt.Fprintf(&b, "- %s `%s` (call_id=%s) was opened but not finalized.\n", c.Kind, c.Name, c.CallID)
+	}
+	b.WriteString("\nAcknowledge in your reply; do not re-dispatch the same call without operator confirmation. New tool dispatch will be refused until the prior call(s) finalize.\n")
+	return b.String()
 }
 
 func jsonString(s string) string {
