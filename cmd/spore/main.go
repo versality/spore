@@ -170,8 +170,14 @@ Subcommands:
   pr-finish              Stop-hook (M-finish-C / I9 + I10): exit 2
                          with a merge / rebase / CI-fix prompt based
                          on the open PR for wt/<slug>.
-  settings               Read a hook binding JSON from stdin, emit a
-                         deterministic settings.json to stdout.
+  settings [--kind K]    Read a hook binding JSON from stdin, emit a
+                         deterministic settings.json to stdout. --kind
+                         (or $SPORE_RENDER_KIND) drops bindings whose
+                         "kinds" list omits K; empty omits no bindings.
+  gate-kind K... -- CMD ARGS
+                         Read $WT_SESSION_KIND. If unset or not in K...,
+                         exit 0 silently. Otherwise exec CMD ARGS. Use
+                         as a wrapper around session-scoped hooks.
   watch-inbox [slug]          Stop-hook: block on inbox, exit 2 on message.
                               With no slug, reads $SPORE_TASK_INBOX.
   notify-coordinator [project]

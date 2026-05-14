@@ -221,6 +221,13 @@ func TestStartSpawnsWtStyleSessionForKnownProject(t *testing.T) {
 	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", want).Run(); err != nil {
 		t.Fatalf("expected tmux session %q: %v", want, err)
 	}
+	out, err := exec.Command("tmux", "-L", testTmuxSocket, "show-environment", "-t", want, "WT_SESSION_KIND").Output()
+	if err != nil {
+		t.Fatalf("tmux show-environment: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "WT_SESSION_KIND=worker" {
+		t.Errorf("WT_SESSION_KIND env on worker session = %q, want %q", got, "WT_SESSION_KIND=worker")
+	}
 }
 
 func TestDoneKillsFrontmatterSession(t *testing.T) {

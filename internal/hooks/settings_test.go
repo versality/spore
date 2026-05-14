@@ -114,6 +114,47 @@ func TestSettings_Consolidation(t *testing.T) {
 	}
 }
 
+func TestSettingsForKind_DropsMismatchedAndKeepsUnscoped(t *testing.T) {
+	events := map[string][]HookBin{
+		"Stop": {
+			{Name: "coord-watch", BinPath: "/bin/coord-watch", Kinds: []string{"coordinator"}},
+			{Name: "worker-token", BinPath: "/bin/worker-token", Kinds: []string{"worker"}},
+			{Name: "lint-noise", BinPath: "/bin/lint-noise"}, // unscoped
+		},
+	}
+
+	cases := []struct {
+		kind         string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{"coordinator", []string{"/bin/coord-watch", "/bin/lint-noise"}, []string{"/bin/worker-token"}},
+		{"worker", []string{"/bin/worker-token", "/bin/lint-noise"}, []string{"/bin/coord-watch"}},
+		{"operator", []string{"/bin/lint-noise"}, []string{"/bin/coord-watch", "/bin/worker-token"}},
+		{"", []string{"/bin/coord-watch", "/bin/worker-token", "/bin/lint-noise"}, nil},
+	}
+	for _, tc := range cases {
+		got, err := SettingsForKind(events, tc.kind)
+		if err != nil {
+			t.Fatalf("kind=%q: %v", tc.kind, err)
+		}
+		s := string(got)
+		for _, want := range tc.wantContains {
+			if !strings.Contains(s, want) {
+				t.Errorf("kind=%q: missing %q\n%s", tc.kind, want, s)
+			}
+		}
+		for _, absent := range tc.wantAbsent {
+			if strings.Contains(s, absent) {
+				t.Errorf("kind=%q: unexpected %q\n%s", tc.kind, absent, s)
+			}
+		}
+		if strings.Contains(s, `"kinds"`) || strings.Contains(s, `"Kinds"`) {
+			t.Errorf("kind=%q: rendered output leaks Kinds field\n%s", tc.kind, s)
+		}
+	}
+}
+
 func TestSettings_UserPromptSubmit(t *testing.T) {
 	got, err := Settings(map[string][]HookBin{
 		"UserPromptSubmit": {

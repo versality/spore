@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/versality/spore/evidence"
+	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/consumerclaim"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -526,6 +527,9 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if err := stageInitialPrompt(tasksDir, worktree, slug); err != nil {
 		return "", fmt.Errorf("stage initial-prompt: %w", err)
 	}
+	if _, _, err := inject.Inject(projectRoot, worktree, SessionKindWorker); err != nil {
+		return "", fmt.Errorf("inject settings: %w", err)
+	}
 	// Wrap the agent command through sh -c so we can append the
 	// initial-prompt brief on launch (mirrors the old wt-task
 	// `agent_cmd -- "$(cat .wt/initial-prompt)"` pattern). Without
@@ -546,6 +550,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		"-e", "WT_PROJECT=" + project,
 		"-e", "SPORE_TASK_INBOX=" + inbox,
 		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
+		"-e", SessionKindEnv + "=" + SessionKindWorker,
 	}
 	briefPath := filepath.Join(worktree, ".wt", "initial-prompt")
 	if _, err := os.Stat(briefPath); err == nil {

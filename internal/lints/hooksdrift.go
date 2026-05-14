@@ -23,6 +23,11 @@ type HooksDrift struct {
 	ExtrasPath      string
 	SettingsPath    string
 	FixHint         string
+	// Kind, when non-empty, filters the rendered settings to
+	// bindings whose "kinds" list contains Kind (unscoped bindings
+	// always pass). Empty Kind renders every binding (the default
+	// user-level lint shape).
+	Kind string
 }
 
 func (HooksDrift) Name() string { return "hooks-drift" }
@@ -32,11 +37,12 @@ type hooksConfigInput struct {
 }
 
 type hooksConfigBin struct {
-	Command     string `json:"command"`
-	Matcher     string `json:"matcher,omitempty"`
-	Timeout     int    `json:"timeout,omitempty"`
-	Async       bool   `json:"async,omitempty"`
-	AsyncRewake bool   `json:"asyncRewake,omitempty"`
+	Command     string   `json:"command"`
+	Matcher     string   `json:"matcher,omitempty"`
+	Timeout     int      `json:"timeout,omitempty"`
+	Async       bool     `json:"async,omitempty"`
+	AsyncRewake bool     `json:"asyncRewake,omitempty"`
+	Kinds       []string `json:"kinds,omitempty"`
 }
 
 func (l HooksDrift) Run(root string) ([]Issue, error) {
@@ -77,10 +83,11 @@ func (l HooksDrift) Run(root string) ([]Issue, error) {
 				Timeout:     b.Timeout,
 				Async:       b.Async,
 				AsyncRewake: b.AsyncRewake,
+				Kinds:       b.Kinds,
 			})
 		}
 	}
-	rendered, err := hooks.Settings(events)
+	rendered, err := hooks.SettingsForKind(events, l.Kind)
 	if err != nil {
 		return nil, err
 	}

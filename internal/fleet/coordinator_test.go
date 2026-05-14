@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -268,4 +269,28 @@ func sessionCreated(name string) (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+func TestEnsureCoordinatorSetsSessionKind(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	dir := t.TempDir()
+	t.Setenv("SPORE_COORDINATOR_AGENT", "sleep 30")
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", CoordinatorSessionName(dir)).Run()
+	})
+
+	session, _, err := EnsureCoordinator(dir)
+	if err != nil {
+		t.Fatalf("EnsureCoordinator: %v", err)
+	}
+	out, err := exec.Command("tmux", "-L", testTmuxSocket, "show-environment", "-t", session, "WT_SESSION_KIND").Output()
+	if err != nil {
+		t.Fatalf("tmux show-environment: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "WT_SESSION_KIND=coordinator" {
+		t.Errorf("WT_SESSION_KIND env on coordinator session = %q, want %q", got, "WT_SESSION_KIND=coordinator")
+	}
 }

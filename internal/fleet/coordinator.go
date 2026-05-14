@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/task"
 )
 
@@ -101,6 +102,10 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		return "", false, err
 	}
 
+	if _, _, err := inject.Inject(projectRoot, projectRoot, task.SessionKindCoordinator); err != nil {
+		return "", false, fmt.Errorf("inject settings: %w", err)
+	}
+
 	cmd := coordinatorShellCommand(agent, rolePath)
 	args := []string{
 		"new-session", "-d",
@@ -112,6 +117,7 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		"-e", "WT_PROJECT=" + project,
 		"-e", "SPORE_TASK_INBOX=" + inbox,
 		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
+		"-e", task.SessionKindEnv + "=" + task.SessionKindCoordinator,
 	}
 	if v := coordinatorProvider(tomlCfg); v != "" {
 		args = append(args, "-e", "SPORE_COORDINATOR_PROVIDER="+v)

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -45,7 +46,9 @@ func runHooks(args []string) int {
 	case "pr-finish":
 		return runHooksPRFinish()
 	case "settings":
-		return runHooksSettings()
+		return runHooksSettings(rest)
+	case "gate-kind":
+		return runHooksGateKind(rest)
 	case "watch-inbox":
 		return runHooksWatchInbox(rest)
 	case "notify-coordinator":
@@ -221,14 +224,58 @@ type settingsInput struct {
 }
 
 type settingsInputBin struct {
-	Command     string `json:"command"`
-	Matcher     string `json:"matcher,omitempty"`
-	Timeout     int    `json:"timeout,omitempty"`
-	Async       bool   `json:"async,omitempty"`
-	AsyncRewake bool   `json:"asyncRewake,omitempty"`
+	Command     string   `json:"command"`
+	Matcher     string   `json:"matcher,omitempty"`
+	Timeout     int      `json:"timeout,omitempty"`
+	Async       bool     `json:"async,omitempty"`
+	AsyncRewake bool     `json:"asyncRewake,omitempty"`
+	Kinds       []string `json:"kinds,omitempty"`
 }
 
-func runHooksSettings() int {
+func runHooksGateKind(args []string) int {
+	err := hooks.GateKind(args, nil)
+	if err == nil {
+		return 0
+	}
+	var exitErr *hooks.GateKindExitError
+	switch {
+	case errors.Is(err, hooks.ErrGateMiss):
+		return 0
+	case errors.As(err, &exitErr):
+		return exitErr.Code
+	case errors.Is(err, hooks.ErrGateUsage):
+		fmt.Fprintln(os.Stderr, "spore hooks gate-kind:", err)
+		return 2
+	default:
+		fmt.Fprintln(os.Stderr, "spore hooks gate-kind:", err)
+		return 1
+	}
+}
+
+func runHooksSettings(args []string) int {
+	kind := os.Getenv("SPORE_RENDER_KIND")
+	rest := args[:0:0]
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--kind":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "spore hooks settings: --kind needs a value")
+				return 2
+			}
+			kind = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--kind="):
+			kind = strings.TrimPrefix(a, "--kind=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) > 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks settings: unexpected args:", strings.Join(rest, " "))
+		return 2
+	}
+
 	body, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks settings:", err)
@@ -248,10 +295,11 @@ func runHooksSettings() int {
 				Timeout:     b.Timeout,
 				Async:       b.Async,
 				AsyncRewake: b.AsyncRewake,
+				Kinds:       b.Kinds,
 			})
 		}
 	}
-	out, err := hooks.Settings(events)
+	out, err := hooks.SettingsForKind(events, kind)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks settings:", err)
 		return 1
