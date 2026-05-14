@@ -81,8 +81,8 @@ type Git interface {
 	CommitsAhead(slug string) int
 }
 
-// RowerStatus is the per-worker verdict.
-type RowerStatus struct {
+// WorkerStatus is the per-worker verdict.
+type WorkerStatus struct {
 	Slug             string `json:"slug"`
 	Stuck            bool   `json:"stuck"`
 	IdleSeconds      int64  `json:"idle_seconds"`
@@ -94,7 +94,7 @@ type RowerStatus struct {
 
 // Report is the aggregate result.
 type Report struct {
-	Stuck    []RowerStatus `json:"stuck"`
+	Stuck    []WorkerStatus `json:"stuck"`
 	OkCount  int           `json:"ok_count"`
 	Total    int           `json:"total"`
 	Note     string        `json:"note,omitempty"`
@@ -104,10 +104,10 @@ type Report struct {
 // Probe is the pure verdict for one worker at a fixed wall-clock
 // `now`. Returns (status, ok-flag); when okFlag is true the worker is
 // counted under OkCount and Stuck is false.
-func Probe(now time.Time, cfg Config, slug string, stats SessionStats, commitsAhead int) RowerStatus {
+func Probe(now time.Time, cfg Config, slug string, stats SessionStats, commitsAhead int) WorkerStatus {
 	cfg = cfg.defaults()
 	nowS := now.Unix()
-	rs := RowerStatus{
+	rs := WorkerStatus{
 		Slug:             slug,
 		Session:          stats.LatestSession,
 		SessionsTotal:    stats.SessionCount,
@@ -139,10 +139,10 @@ func Probe(now time.Time, cfg Config, slug string, stats SessionStats, commitsAh
 	return rs
 }
 
-// ListRowers walks tasksDir and returns slugs that are (status=active,
+// ListWorkers walks tasksDir and returns slugs that are (status=active,
 // agent=opencode) AND have a worktree under mainRoot/.worktrees/<slug>
 // whose .wt/agent file says "opencode".
-func ListRowers(mainRoot string) ([]string, error) {
+func ListWorkers(mainRoot string) ([]string, error) {
 	tasksDir := filepath.Join(mainRoot, "tasks")
 	entries, err := os.ReadDir(tasksDir)
 	if err != nil {
@@ -198,7 +198,7 @@ func Run(now time.Time, cfg Config, mainRoot string, db DB, git Git) (Report, er
 	if !db.Available() {
 		return Report{Note: "db-missing", DBAbsent: true}, nil
 	}
-	slugs, err := ListRowers(mainRoot)
+	slugs, err := ListWorkers(mainRoot)
 	if err != nil {
 		return Report{}, err
 	}

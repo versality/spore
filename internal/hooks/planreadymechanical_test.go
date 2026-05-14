@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func setupRowerFixture(t *testing.T, slug, status, body string) (worktree, state, project string) {
+func setupWorkerFixture(t *testing.T, slug, status, body string) (worktree, state, project string) {
 	t.Helper()
 	root := t.TempDir()
 	worktree = filepath.Join(root, "worktree")
@@ -56,7 +56,7 @@ func planReadyFiles(t *testing.T, inbox string) []map[string]string {
 
 func TestPlanReadyMechanical_EmitsWhenPlanAndNoTell(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active",
+	worktree, state, project := setupWorkerFixture(t, slug, "active",
 		"# brief\n\nrun X.\n\n## Plan\n\n1. step\n")
 
 	if err := PlanReadyMechanical(slug, worktree, project); err != nil {
@@ -78,7 +78,7 @@ func TestPlanReadyMechanical_EmitsWhenPlanAndNoTell(t *testing.T) {
 
 func TestPlanReadyMechanical_NoopWhenTellAlreadyPresent(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active",
+	worktree, state, project := setupWorkerFixture(t, slug, "active",
 		"## Plan\n- a\n")
 
 	inbox := filepath.Join(state, project, "inbox")
@@ -106,7 +106,7 @@ func TestPlanReadyMechanical_NoopWhenTellAlreadyPresent(t *testing.T) {
 
 func TestPlanReadyMechanical_NoopWhenTellAlreadyInRead(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active",
+	worktree, state, project := setupWorkerFixture(t, slug, "active",
 		"## Plan\n- a\n")
 
 	inbox := filepath.Join(state, project, "inbox")
@@ -134,7 +134,7 @@ func TestPlanReadyMechanical_NoopWhenTellAlreadyInRead(t *testing.T) {
 
 func TestPlanReadyMechanical_NoopWhenNoPlanSection(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active",
+	worktree, state, project := setupWorkerFixture(t, slug, "active",
 		"# brief\n\nrun X.\n\n## Notes\n\nno plan yet.\n")
 
 	if err := PlanReadyMechanical(slug, worktree, project); err != nil {
@@ -148,7 +148,7 @@ func TestPlanReadyMechanical_NoopWhenNoPlanSection(t *testing.T) {
 
 func TestPlanReadyMechanical_NoopWhenStatusNotActive(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "done",
+	worktree, state, project := setupWorkerFixture(t, slug, "done",
 		"## Plan\n- a\n")
 
 	if err := PlanReadyMechanical(slug, worktree, project); err != nil {
@@ -177,7 +177,7 @@ func TestPlanReadyMechanical_NoopWhenTaskFileMissing(t *testing.T) {
 
 func TestPlanReadyMechanical_IgnoresPlanInsideFence(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active",
+	worktree, state, project := setupWorkerFixture(t, slug, "active",
 		"# brief\n\n```\n## Plan\n- not a real heading\n```\n\nbody.\n")
 
 	if err := PlanReadyMechanical(slug, worktree, project); err != nil {
@@ -191,7 +191,7 @@ func TestPlanReadyMechanical_IgnoresPlanInsideFence(t *testing.T) {
 
 func TestPlanReadyMechanical_DetectsPlanAtH3(t *testing.T) {
 	slug := "demo-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active",
+	worktree, state, project := setupWorkerFixture(t, slug, "active",
 		"## Section\n\n### Plan\n\n- a\n")
 
 	if err := PlanReadyMechanical(slug, worktree, project); err != nil {
@@ -218,7 +218,7 @@ func TestPlanReadyMechanicalEnv_RequiresSlugAndProject(t *testing.T) {
 
 func TestPlanReadyMechanicalEnv_HappyPath(t *testing.T) {
 	slug := "env-task"
-	worktree, state, project := setupRowerFixture(t, slug, "active", "## Plan\n- a\n")
+	worktree, state, project := setupWorkerFixture(t, slug, "active", "## Plan\n- a\n")
 
 	t.Setenv("SPORE_TASK_SLUG", slug)
 	t.Setenv("WT_PROJECT", project)

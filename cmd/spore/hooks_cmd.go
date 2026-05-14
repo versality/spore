@@ -52,7 +52,7 @@ func runHooks(args []string) int {
 	case "plan-ready-mechanical":
 		return runHooksPlanReadyMechanical(rest)
 	case "worker-continue":
-		return runHooksRowerContinue(rest)
+		return runHooksWorkerContinue(rest)
 	case "codex":
 		return runHooksCodex(rest)
 	case "context-tee":
@@ -315,7 +315,7 @@ func runHooksPlanReadyMechanical(args []string) int {
 	return 0
 }
 
-func runHooksRowerContinue(args []string) int {
+func runHooksWorkerContinue(args []string) int {
 	if len(args) != 0 {
 		fmt.Fprintln(os.Stderr, "spore hooks worker-continue: takes no args")
 		return 2

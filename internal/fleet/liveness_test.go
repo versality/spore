@@ -65,7 +65,7 @@ func newSetup(t *testing.T, projects map[string]map[string]string) setup {
 	}
 	state := filepath.Join(tmp, "state")
 	t.Setenv("XDG_STATE_HOME", state)
-	t.Setenv("WT_ROWER_WAKE_PENDING_TTL", "")
+	t.Setenv("WT_WORKER_WAKE_PENDING_TTL", "")
 	return setup{tmp: tmp, state: state, projects: projectDirs, projConfig: projConfig}
 }
 
@@ -603,7 +603,7 @@ func TestFleetStatusWakePendingTTLOverride(t *testing.T) {
 			"codex-expired": taskAgentSession("codex-expired", "active", "thishost", "codex", session),
 		},
 	})
-	t.Setenv("WT_ROWER_WAKE_PENDING_TTL", "60")
+	t.Setenv("WT_WORKER_WAKE_PENDING_TTL", "60")
 	writeUnread(t, s.projects[0], "codex-expired")
 	markWakePending(s.projects[0], "codex-expired")
 	e := newLivenessEnv(s, "thishost", &fakeTmux{})

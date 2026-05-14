@@ -12,7 +12,7 @@ import (
 	"github.com/versality/spore/internal/task"
 )
 
-type rowerRuntime struct {
+type workerRuntime struct {
 	slug, agent, session, state, detail, projectRoot string
 	unread                                           int
 	wakePending                                      bool
@@ -23,7 +23,7 @@ type rowerRuntime struct {
 
 type runtimeStats struct {
 	live, dead, zombie, unknown, duplicates, activeIdle, idleUnread, idleWakeStuck int
-	details                                                                        []rowerRuntime
+	details                                                                        []workerRuntime
 }
 
 // livenessEnv carries the dependency-injection seams. Production
@@ -143,7 +143,7 @@ func appendUnique(in []string, v string) []string {
 	return append(in, v)
 }
 
-func inspectRuntime(projectRoot, slug, agent, recordedSession string, tr tmuxRunner) rowerRuntime {
+func inspectRuntime(projectRoot, slug, agent, recordedSession string, tr tmuxRunner) workerRuntime {
 	if agent == "" {
 		agent = "claude"
 	}
@@ -169,7 +169,7 @@ func inspectRuntime(projectRoot, slug, agent, recordedSession string, tr tmuxRun
 		session = fallback
 	}
 
-	rt := rowerRuntime{slug: slug, agent: agent, session: session, state: "unknown", projectRoot: projectRoot}
+	rt := workerRuntime{slug: slug, agent: agent, session: session, state: "unknown", projectRoot: projectRoot}
 	if len(matches) > 1 {
 		rt.duplicates = matches
 	}
@@ -185,7 +185,7 @@ func inspectRuntime(projectRoot, slug, agent, recordedSession string, tr tmuxRun
 	}
 	candidates = appendUnique(candidates, fallback)
 
-	var firstUnhealthy rowerRuntime
+	var firstUnhealthy workerRuntime
 	for i, candidate := range candidates {
 		state, detail := inspectSession(candidate, agent, parsed, tr)
 		if state != "dead" && state != "zombie" {
@@ -201,7 +201,7 @@ func inspectRuntime(projectRoot, slug, agent, recordedSession string, tr tmuxRun
 			return rt
 		}
 		if firstUnhealthy.state == "" {
-			firstUnhealthy = rowerRuntime{session: candidate, state: state, detail: detail}
+			firstUnhealthy = workerRuntime{session: candidate, state: state, detail: detail}
 		}
 	}
 	rt.session = firstUnhealthy.session
@@ -397,7 +397,7 @@ func runStatus(stdout, stderr io.Writer, e livenessEnv) (int, error) {
 	return 0, nil
 }
 
-func writeAgentDetail(stdout io.Writer, rt rowerRuntime) {
+func writeAgentDetail(stdout io.Writer, rt workerRuntime) {
 	switch rt.agent {
 	case "codex":
 		if rt.state == "idle" && rt.unread > 0 && rt.wakeStuck {

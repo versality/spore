@@ -93,7 +93,7 @@ type fakeGit struct{ ahead map[string]int }
 
 func (f fakeGit) CommitsAhead(slug string) int { return f.ahead[slug] }
 
-func writeRower(t *testing.T, root, slug string, status string) {
+func writeWorker(t *testing.T, root, slug string, status string) {
 	t.Helper()
 	tasks := filepath.Join(root, "tasks")
 	if err := os.MkdirAll(tasks, 0o755); err != nil {
@@ -127,9 +127,9 @@ func TestRun_DBMissingShortCircuits(t *testing.T) {
 func TestRun_AggregatesPerSlug(t *testing.T) {
 	now := time.Unix(2_000_000, 0)
 	root := t.TempDir()
-	writeRower(t, root, "stuck1", "active")
-	writeRower(t, root, "ok1", "active")
-	writeRower(t, root, "ahead1", "active")
+	writeWorker(t, root, "stuck1", "active")
+	writeWorker(t, root, "ok1", "active")
+	writeWorker(t, root, "ahead1", "active")
 
 	wtFor := func(slug string) string { return filepath.Join(root, ".worktrees", slug) }
 
@@ -173,7 +173,7 @@ func TestRun_AggregatesPerSlug(t *testing.T) {
 func TestFormatJSON_RoundTripsStuckList(t *testing.T) {
 	rep := Report{
 		Total: 2, OkCount: 1,
-		Stuck: []RowerStatus{{Slug: "alpha", IdleSeconds: 1200, Reason: "r", Session: "s", SessionsTotal: 1, MessagesInLatest: 4}},
+		Stuck: []WorkerStatus{{Slug: "alpha", IdleSeconds: 1200, Reason: "r", Session: "s", SessionsTotal: 1, MessagesInLatest: 4}},
 	}
 	var buf bytes.Buffer
 	if err := FormatJSON(&buf, rep); err != nil {

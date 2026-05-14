@@ -248,7 +248,7 @@ func TestRunCommFeedbackPresentEmitsSection(t *testing.T) {
 	}
 }
 
-func TestRunRowerStopErrorsTailEmits(t *testing.T) {
+func TestRunWorkerStopErrorsTailEmits(t *testing.T) {
 	cfg := baseCfg(t)
 	if err := os.WriteFile(filepath.Join(cfg.StateDir, "state.md"), []byte("x\n"), 0o600); err != nil {
 		t.Fatal(err)

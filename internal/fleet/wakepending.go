@@ -69,7 +69,7 @@ func wakePendingState(projectRoot, slug string, now time.Time) wakePendingStatus
 }
 
 func wakePendingTTL() time.Duration {
-	raw := os.Getenv("WT_ROWER_WAKE_PENDING_TTL")
+	raw := os.Getenv("WT_WORKER_WAKE_PENDING_TTL")
 	if raw == "" {
 		return defaultWakePendingTTL
 	}
