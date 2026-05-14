@@ -18,20 +18,11 @@ import (
 	"strings"
 )
 
-// DefaultPathspecs is the conservative pathspec set the original
-// shell wrapper used. Callers may override this on the command line.
-var DefaultPathspecs = []string{
-	"justfile",
-	"nix/packages/wt",
-	"harness",
-	"docs/skyhelm-lifecycle.md",
-	"docs/codex.md",
-	"nix/features/codex.nix",
-	"nix/harness/claude",
-	"configs/claude",
-	"configs/codex",
-	"configs/opencode",
-}
+// DefaultPathspecs is empty: spore is consumer-agnostic, so callers
+// must pass their own pathspecs (positional args to `spore merge audit`
+// or `merge_audit.pathspecs` in spore.toml). Without args the audit
+// becomes a no-op.
+var DefaultPathspecs = []string{}
 
 // OwnerScanLimit is the per-path commit-log scan budget when
 // resolving a blob's authoring commit. The shell version exposed

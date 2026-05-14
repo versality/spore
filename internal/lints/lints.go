@@ -98,7 +98,7 @@ func Named() map[string]Lint {
 		HooksDrift{},
 		TechDebtRulings{},
 		TaskDoneZeroCommits{},
-		UserSkillsParity{Hosts: []string{"skypad", "skytower", "skywing"}},
+		UserSkillsParity{},
 		CaptureSignalCoverage{},
 		ClaudeSize{},
 		ClaudeSubdir{},

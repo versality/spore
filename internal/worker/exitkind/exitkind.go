@@ -1,7 +1,7 @@
 // Package exitkind classifies a rower wrapper's exit shape into one of
 // four kinds so the operator-visible signal (agent.log exit line +
-// skyhelm tell) names the cause directly instead of leaving operators
-// to re-derive it from rc.
+// coordinator tell) names the cause directly instead of leaving
+// operators to re-derive it from rc.
 //
 // The four kinds collapse three rc-shapes that the wrapper layer used
 // to lump together as "rc=129":

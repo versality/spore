@@ -27,6 +27,7 @@ type LintConfig struct {
 	SubdirLineLimit int
 	FlakePath       string
 	ScanDirs        []string
+	Hosts           []string
 }
 
 func LoadProjectConfig(root string) (Config, error) {
@@ -173,6 +174,11 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 		}
 		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
 		return v
+	case UserSkillsParity:
+		if len(cfg.Hosts) > 0 {
+			v.Hosts = cfg.Hosts
+		}
+		return v
 	default:
 		return l
 	}
@@ -217,6 +223,9 @@ func mergeLintConfig(base, over LintConfig) LintConfig {
 	}
 	if len(over.ScanDirs) > 0 {
 		base.ScanDirs = over.ScanDirs
+	}
+	if len(over.Hosts) > 0 {
+		base.Hosts = over.Hosts
 	}
 	return base
 }
@@ -272,6 +281,10 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 	case "scan_dirs":
 		v, err := parseStringList(raw)
 		cfg.ScanDirs = v
+		return errAt(lineNum, key, err)
+	case "hosts":
+		v, err := parseStringList(raw)
+		cfg.Hosts = v
 		return errAt(lineNum, key, err)
 	default:
 		return fmt.Errorf("line %d: unknown key %q in [lint.*]", lineNum, key)

@@ -119,7 +119,7 @@ func (l TaskSchedulerContext) Run(root string) ([]Issue, error) {
 			issues = append(issues, Issue{
 				Path:    rel,
 				Line:    line,
-				Message: "status=parked requires frontmatter scheduler: <skyhelm-owned trigger/resume condition>",
+				Message: "status=parked requires frontmatter scheduler: <coordinator-owned trigger/resume condition>",
 			})
 			continue
 		}

@@ -3,7 +3,6 @@ package audit
 import (
 	"bytes"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -115,14 +114,14 @@ func TestRun_DirtyMainProbe_WorktreeDiverges(t *testing.T) {
 func TestRun_MissingEvidenceReportedAsDash(t *testing.T) {
 	// File exists in HEAD but is missing on disk + absent from index.
 	g := fakeGit{
-		paths:    []string{"docs/skyhelm-lifecycle.md"},
-		head:     map[string]string{"docs/skyhelm-lifecycle.md": "B1"},
+		paths:    []string{"docs/example-lifecycle.md"},
+		head:     map[string]string{"docs/example-lifecycle.md": "B1"},
 		index:    map[string]string{}, // -> "-"
 		worktree: map[string]string{}, // -> "-"
 		logs: map[string][]LogEntry{
-			"docs/skyhelm-lifecycle.md": {{Commit: "c1", Meta: "1111 add doc"}},
+			"docs/example-lifecycle.md": {{Commit: "c1", Meta: "1111 add doc"}},
 		},
-		blobByCommit: map[string]map[string]string{"c1": {"docs/skyhelm-lifecycle.md": "B1"}},
+		blobByCommit: map[string]map[string]string{"c1": {"docs/example-lifecycle.md": "B1"}},
 	}
 	drifts, err := Run(g, Config{Pathspecs: []string{"."}})
 	if err != nil {
@@ -246,30 +245,12 @@ func TestFormatReport_EmptyDriftList(t *testing.T) {
 	}
 }
 
-func TestRun_DefaultPathspecs(t *testing.T) {
-	cfg := Config{}
+func TestRun_DefaultPathspecsEmpty(t *testing.T) {
+	if len(DefaultPathspecs) != 0 {
+		t.Fatalf("DefaultPathspecs must be empty in spore (consumer-agnostic), got %v", DefaultPathspecs)
+	}
 	g := fakeGit{paths: nil}
-	if _, err := Run(g, cfg); err != nil {
+	if _, err := Run(g, Config{}); err != nil {
 		t.Fatal(err)
-	}
-	// The pathspecs slice itself isn't observable from the fake,
-	// but DefaultPathspecs must remain non-empty.
-	if len(DefaultPathspecs) == 0 {
-		t.Fatal("DefaultPathspecs should not be empty")
-	}
-	wantHas := []string{"justfile", "harness", "configs/opencode"}
-	sortedDefaults := append([]string{}, DefaultPathspecs...)
-	sort.Strings(sortedDefaults)
-	for _, w := range wantHas {
-		found := false
-		for _, p := range sortedDefaults {
-			if p == w {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("missing %q from DefaultPathspecs", w)
-		}
 	}
 }

@@ -132,7 +132,7 @@ func TestFleetStatusReportsDeadPane(t *testing.T) {
 	})
 	tmux := &fakeTmux{
 		sessions: map[string]bool{session: true},
-		panesOut: session + "\tcodex\t1\t1\tcodex\tskytower\n",
+		panesOut: session + "\tcodex\t1\t1\tcodex\thost-a\n",
 	}
 
 	var stdout, stderr bytes.Buffer

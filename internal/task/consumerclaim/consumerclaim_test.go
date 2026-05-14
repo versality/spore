@@ -14,8 +14,8 @@ func TestParseClaim(t *testing.T) {
 		want Claim
 		err  bool
 	}{
-		{"nix-config:path:modules/skyhelm/totalsize.sh", Claim{Repo: "nix-config", Kind: KindPath, Value: "modules/skyhelm/totalsize.sh"}, false},
-		{"nix-config:grep:skyhelm-rower-watch", Claim{Repo: "nix-config", Kind: KindGrep, Value: "skyhelm-rower-watch"}, false},
+		{"example-consumer:path:modules/coordinator/totalsize.sh", Claim{Repo: "example-consumer", Kind: KindPath, Value: "modules/coordinator/totalsize.sh"}, false},
+		{"example-consumer:grep:coordinator-worker-watch", Claim{Repo: "example-consumer", Kind: KindGrep, Value: "coordinator-worker-watch"}, false},
 		{"  nix-config : grep : foo  ", Claim{Repo: "nix-config", Kind: KindGrep, Value: "foo"}, false},
 		// values with colons survive (SplitN 3)
 		{"nix-config:grep:http://example.com/foo", Claim{Repo: "nix-config", Kind: KindGrep, Value: "http://example.com/foo"}, false},

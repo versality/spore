@@ -7,9 +7,10 @@
 // coordinator/verify verdict so the next turn sees the verdict
 // without having to ask.
 //
-// Ported from harness/skyhelm-worker-watch (bash). The output banner
-// "SPORE WORKER WATCH:" is preserved verbatim so the downstream
-// Stop-hook reminder grep stays unchanged across the consumer swap.
+// Ported from the consumer-side coordinator worker-watch bash script.
+// The output banner "SPORE WORKER WATCH:" is preserved verbatim so the
+// downstream Stop-hook reminder grep stays unchanged across the
+// consumer swap.
 package workerwatch
 
 import (

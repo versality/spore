@@ -25,7 +25,7 @@ func writeTask(t *testing.T, dir, slug, status, agent, host string) {
 func TestListActiveSlugs_FilterByAgentStatusHost(t *testing.T) {
 	tasks := t.TempDir()
 	writeTask(t, tasks, "alpha", "active", "opencode", "")          // ok (empty host)
-	writeTask(t, tasks, "bravo", "active", "opencode", "skytower")  // ok matches
+	writeTask(t, tasks, "bravo", "active", "opencode", "host-a")  // ok matches
 	writeTask(t, tasks, "charlie", "active", "opencode", "skybase") // skip wrong host
 	writeTask(t, tasks, "delta", "paused", "opencode", "")          // skip status
 	writeTask(t, tasks, "echo", "active", "claude", "")             // skip agent
@@ -34,7 +34,7 @@ func TestListActiveSlugs_FilterByAgentStatusHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := ListActiveSlugs(tasks, "skytower")
+	got, err := ListActiveSlugs(tasks, "host-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,14 +64,14 @@ func TestRun_PausesEverySlug_KillsOrphans_WritesSummary(t *testing.T) {
 	if err := os.MkdirAll(tasks, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeTask(t, tasks, "alpha", "active", "opencode", "skytower")
-	writeTask(t, tasks, "bravo", "active", "opencode", "skytower")
+	writeTask(t, tasks, "alpha", "active", "opencode", "host-a")
+	writeTask(t, tasks, "bravo", "active", "opencode", "host-a")
 
 	var paused []string
 	var killed []int
 	cfg := Config{
 		MainRoot: root,
-		Host:     "skytower",
+		Host:     "host-a",
 		User:     "tester",
 		Pause: func(slug string) error {
 			paused = append(paused, slug)
@@ -122,12 +122,12 @@ func TestRun_PauseFailureFallsBackToSessionKill(t *testing.T) {
 	if err := os.MkdirAll(tasks, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeTask(t, tasks, "alpha", "active", "opencode", "skytower")
+	writeTask(t, tasks, "alpha", "active", "opencode", "host-a")
 
 	var killedSession string
 	cfg := Config{
 		MainRoot:    root,
-		Host:        "skytower",
+		Host:        "host-a",
 		User:        "tester",
 		Pause:       func(string) error { return errors.New("inbox unread") },
 		SessionName: func(_, slug string) (string, error) { return "spore/" + slug, nil },
@@ -163,7 +163,7 @@ func TestRun_NoActiveSlugs_StillSweepsOrphans(t *testing.T) {
 
 	cfg := Config{
 		MainRoot: root,
-		Host:     "skytower",
+		Host:     "host-a",
 		User:     "tester",
 		Pause:    func(string) error { return nil },
 		SessionName: func(string, string) (string, error) {
