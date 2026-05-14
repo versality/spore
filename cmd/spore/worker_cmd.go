@@ -35,6 +35,17 @@ Subcommands:
                   but wt is unavailable, exits non-zero so the wrapper
                   can log it; the classify line is still printed.
 
+  boot-audit      Read a Claude Code session.jsonl and emit a cold-boot
+                  quality profile: turn-1 input-token cost, ToolSearch
+                  round-trips before first useful work, MCP-connect
+                  surface count, boot-time tool errors, brief size.
+                  Sibling to 'spore coordinator sla-scan': pure
+                  read-only, structured one-line output, exit 2 on
+                  findings (e.g. boot-time tool errors > 0). Flags:
+                    --session=<path>  path to ~/.claude/projects/.../<id>.jsonl
+                    --boot-turns=N    turn window for per-turn metrics
+                                      (default 5)
+
   token-monitor   Stop-hook: check the worker's context budget and fire
                   a wrap-up reminder once it crosses the tier-keyed cap.
                   Tier read from $SPORE_ACCOUNT_TIER (defaults to non-max);
@@ -64,6 +75,8 @@ func runWorker(args []string) int {
 		return runWorkerTokenMonitor(rest)
 	case "exit-kind":
 		return runWorkerExitKind(rest)
+	case "boot-audit":
+		return runWorkerBootAudit(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore worker: unknown subcommand %q\n\n%s", sub, workerUsage)
 		return 2
