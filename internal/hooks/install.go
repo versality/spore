@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/versality/spore/internal/leakdict"
 )
 
 // GitHook is one shell hook spore writes when `spore hooks install`
@@ -103,7 +105,7 @@ func setCoreHooksPath(repoRoot, hooksDir string) error {
 
 // CommitMsg is the hook implementation for git's commit-msg event. It
 // reads msgPath, fails (returning a non-nil error) if the message
-// contains an em-dash or en-dash. Mirrors the writing-style rule.
+// contains an em-dash, en-dash, or a leak-guard dictionary term.
 func CommitMsg(msgPath string) error {
 	body, err := os.ReadFile(msgPath)
 	if err != nil {
@@ -111,6 +113,9 @@ func CommitMsg(msgPath string) error {
 	}
 	if bytes.ContainsAny(body, "\u2014\u2013") {
 		return fmt.Errorf("commit message contains em-dash or en-dash; replace with a hyphen, colon, parentheses, or a new sentence")
+	}
+	if hit := leakdict.ScanMessage(string(body), nil); hit != "" {
+		return fmt.Errorf("commit message contains consumer-private term %q; rephrase or rebase before retrying", hit)
 	}
 	return nil
 }

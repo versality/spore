@@ -56,6 +56,7 @@ func Default() []Lint {
 		AgentMirror{},
 		TaskEvidence{TasksDir: "tasks"},
 		TmuxSocketTest{},
+		LeakGuard{},
 	}
 }
 

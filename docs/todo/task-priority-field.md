@@ -52,7 +52,7 @@ lint, because the canonical statuses do not distinguish them.
 Unknown or empty priorities sort *after* `low` so a missing field never
 jumps the queue.
 
-Skyhelm (lives in nix-config) reads frontmatter directly and picks the
+The downstream coordinator reads frontmatter directly and picks the
 highest-priority backlog task when promoting. Auto-replenish stays off
 (floor=0); priority guides the human, not the harness.
 
