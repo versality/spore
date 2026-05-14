@@ -107,7 +107,7 @@ func TestDoneLeavesUnrelatedSessionsAlone(t *testing.T) {
 	}
 }
 
-func TestPauseLeavesActivelyUsedSessionAlive(t *testing.T) {
+func TestBlockLeavesActivelyUsedSessionAlive(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
 	}
@@ -140,16 +140,16 @@ func TestPauseLeavesActivelyUsedSessionAlive(t *testing.T) {
 	t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run() })
 
 	// Default 5min idle threshold; the session was just created so
-	// activity is fresh. Pause must NOT reap it.
-	if err := Pause(tasksDir, slug); err != nil {
-		t.Fatalf("Pause: %v", err)
+	// activity is fresh. Block must NOT reap it.
+	if err := Block(tasksDir, slug, "test:fresh"); err != nil {
+		t.Fatalf("Block: %v", err)
 	}
 	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", session).Run(); err != nil {
-		t.Errorf("Pause reaped a fresh session: %v", err)
+		t.Errorf("Block reaped a fresh session: %v", err)
 	}
 }
 
-func TestPauseReapsIdleSession(t *testing.T) {
+func TestBlockReapsIdleSession(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
 	}
@@ -185,10 +185,10 @@ func TestPauseReapsIdleSession(t *testing.T) {
 	// enough"; mirrors the >5min idle case without sleeping the test.
 	t.Setenv("SPORE_IDLE_REAP_SECS", "0")
 
-	if err := Pause(tasksDir, slug); err != nil {
-		t.Fatalf("Pause: %v", err)
+	if err := Block(tasksDir, slug, "test:idle"); err != nil {
+		t.Fatalf("Block: %v", err)
 	}
 	if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", session).Run(); err == nil {
-		t.Errorf("Pause did not reap idle session under threshold=0")
+		t.Errorf("Block did not reap idle session under threshold=0")
 	}
 }

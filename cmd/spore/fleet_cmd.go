@@ -107,9 +107,8 @@ Walks every git worktree rooted at <project>/.worktrees/ across the
 configured projects (` + "$WT_CFG/projects" + `, falling back to cwd's main
 repo when the file is missing). Per status:
 
-  active            no-op (handled by spore fleet reconcile)
-  parked            no-op unless wt/<slug> is contained in origin/main
-                    and origin/main's tasks/<slug>.md is done/superseded
+  active            no-op (handled by spore fleet reconcile); see
+                    --force-published for the published-merge cleanup.
   blocked           kill tmux session, keep worktree
   done | missing    kill session, ` + "`git worktree remove --force`" + `, and
                     ` + "`git branch -d`" + ` (or -D when contained in origin/main)

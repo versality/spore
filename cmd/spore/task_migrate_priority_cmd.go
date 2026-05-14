@@ -17,9 +17,11 @@ import (
 //
 //   - already valid: skip.
 //   - already present but invalid: error, operator fixes by hand.
-//   - missing on active/paused/draft (canonical: active + backlog with
-//     these legacy substatuses): medium.
-//   - missing on parked: low.
+//   - missing on active/draft (and legacy paused/backlog): medium.
+//   - missing on legacy parked: low. (Parked files alias to blocked
+//     via CanonicalStatus once `spore task migrate-status parked
+//     blocked` runs; the original parked tag still drives the
+//     priority backfill.)
 //   - missing on blocked: skipped, listed under "needs operator priority"
 //     so the operator can edit by hand. The lint will keep flagging
 //     until they do.

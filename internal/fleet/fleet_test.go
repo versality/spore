@@ -94,9 +94,9 @@ func TestReconcileSpawnsAndReaps(t *testing.T) {
 		t.Errorf("Kept (pass 3) = %v, want %v", got, want)
 	}
 
-	// Pause beta: reconcile must keep the session alive (pause is
-	// the operator-attached state, not a teardown signal).
-	flipStatus(t, dirs.tasks, "beta", "paused")
+	// Block beta: reconcile must keep the session alive (blocked is
+	// the operator-attention state, not a teardown signal).
+	flipStatus(t, dirs.tasks, "beta", "blocked")
 
 	r4, err := Reconcile(Config{
 		TasksDir:    dirs.tasks,
@@ -107,10 +107,10 @@ func TestReconcileSpawnsAndReaps(t *testing.T) {
 		t.Fatalf("Reconcile pass 4: %v", err)
 	}
 	if len(r4.Reaped) != 0 {
-		t.Errorf("Reaped (pass 4 / paused) = %v, want []", r4.Reaped)
+		t.Errorf("Reaped (pass 4 / blocked) = %v, want []", r4.Reaped)
 	}
 	if got, want := r4.Kept, []string{"beta"}; !equalSlices(got, want) {
-		t.Errorf("Kept (pass 4 / paused) = %v, want %v", got, want)
+		t.Errorf("Kept (pass 4 / blocked) = %v, want %v", got, want)
 	}
 }
 

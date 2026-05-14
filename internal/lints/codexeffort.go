@@ -12,8 +12,9 @@ import (
 // CodexEffortHighOnly rejects tasks/<slug>.md when `agent: codex` is
 // paired with `effort:` set to anything other than `high`. Empty
 // effort is fine - the launcher defaults to high. Status filter:
-// fires for draft|active|paused|blocked|parked. done is historical
-// (no backfill).
+// fires for draft|active|blocked. done is historical (no backfill);
+// legacy parked/paused values alias to blocked via CanonicalStatus
+// and are caught through that arm.
 type CodexEffortHighOnly struct {
 	TasksDir string
 }
@@ -56,7 +57,7 @@ func (l CodexEffortHighOnly) Run(root string) ([]Issue, error) {
 			continue
 		}
 		switch m.Status {
-		case "draft", "active", "paused", "blocked", "parked":
+		case "draft", "active", "blocked", "paused", "parked":
 		default:
 			continue
 		}

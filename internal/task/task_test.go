@@ -126,11 +126,11 @@ func TestListMixedLegacyAndBacklogStatuses(t *testing.T) {
 	if len(metas) != 2 {
 		t.Fatalf("expected 2 metas, got %d", len(metas))
 	}
-	if metas[0].Status != "parked" || CanonicalStatus(metas[0].Status) != StatusBacklog {
-		t.Errorf("legacy status = %q canonical=%q", metas[0].Status, CanonicalStatus(metas[0].Status))
+	if metas[0].Status != "parked" || CanonicalStatus(metas[0].Status) != StatusBlocked {
+		t.Errorf("legacy parked status = %q canonical=%q", metas[0].Status, CanonicalStatus(metas[0].Status))
 	}
-	if metas[1].Status != "backlog" || metas[1].Gate != "waiting" {
-		t.Errorf("new backlog meta = %+v", metas[1])
+	if metas[1].Status != "backlog" || CanonicalStatus(metas[1].Status) != StatusDraft || metas[1].Gate != "waiting" {
+		t.Errorf("legacy backlog meta = %+v canonical=%q", metas[1], CanonicalStatus(metas[1].Status))
 	}
 }
 

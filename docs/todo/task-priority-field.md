@@ -32,16 +32,18 @@ the boundary.
 ## Required vs optional
 
 Reconciled with the canonical state machine (`internal/task/status.go`
-collapses draft/paused/parked/blocked into `backlog`):
+post drop-parked-status-gate: `draft | active | blocked | done`;
+legacy `backlog | paused | parked` are read-only aliases):
 
-- Required on `active` and `backlog` (lint warns when missing or
+- Required on `active` and `draft` (lint warns when missing or
   invalid).
 - Optional on `done` (priority is a promote-order signal; done tasks do
   not promote).
 
-The legacy-status nuance ("low for parked, medium for paused/draft") is
-preserved only in the migration script's backfill heuristic, not in the
-lint, because the canonical statuses do not distinguish them.
+The legacy-status nuance ("low for blocked-ex-parked, medium for
+draft") is preserved only in the migration script's backfill
+heuristic, not in the lint, because the canonical statuses do not
+distinguish them.
 
 ## Promote-order
 
@@ -83,8 +85,10 @@ fully migrated.
 
 - already-valid priority: skip.
 - already-present but invalid priority: error, operator fixes by hand.
-- missing on `active|paused|draft|backlog`: assign `medium`.
-- missing on `parked`: assign `low`.
+- missing on `active|draft` (and legacy `paused|backlog`): assign
+  `medium`.
+- missing on legacy `parked`: assign `low` (parked files alias to
+  blocked once `spore task migrate-status parked blocked` runs).
 - missing on `blocked`: skipped and surfaced at the end of the run
   ("blocked tasks need operator priority"); the lint will keep flagging
   until the operator edits.

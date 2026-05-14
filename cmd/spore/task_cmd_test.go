@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,16 +49,14 @@ func TestRunTaskMergeMissingSlug(t *testing.T) {
 	}
 }
 
-func TestRunTaskStatusCommandsWarnAndFlip(t *testing.T) {
+func TestRunTaskStatusCommandsRetireParkAndPause(t *testing.T) {
 	cases := []struct {
-		name       string
-		run        func([]string) error
-		wantStatus string
-		wantWarn   string
+		name    string
+		run     func([]string) error
+		wantErr string
 	}{
-		{"pause", runTaskPause, "parked", "status: pause is deprecated, use park or block (flipping to parked)\n"},
-		{"park", runTaskPark, "parked", ""},
-		{"block", runTaskBlock, "blocked", ""},
+		{"pause", runTaskPause, "pause is retired"},
+		{"park", runTaskPark, "park is retired"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,23 +70,45 @@ func TestRunTaskStatusCommandsWarnAndFlip(t *testing.T) {
 			if err := os.WriteFile(path, []byte("---\nstatus: active\nslug: demo\ntitle: Demo\n---\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-
-			errOut := captureTaskStderr(t, func() {
-				if err := tc.run([]string{"demo"}); err != nil {
-					t.Fatalf("%s: %v", tc.name, err)
-				}
-			})
-			if errOut != tc.wantWarn {
-				t.Errorf("stderr = %q, want %q", errOut, tc.wantWarn)
+			err := tc.run([]string{"demo"})
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("%s: err = %v, want substring %q", tc.name, err, tc.wantErr)
 			}
 			raw, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(raw), "status: "+tc.wantStatus+"\n") {
-				t.Errorf("task status not flipped to %s:\n%s", tc.wantStatus, raw)
+			if !strings.Contains(string(raw), "status: active\n") {
+				t.Errorf("task status should be unchanged after retired verb:\n%s", raw)
 			}
 		})
+	}
+}
+
+func TestRunTaskBlockWritesBlockerAndUnblockClears(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := os.Mkdir("tasks", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join("tasks", "demo.md")
+	if err := os.WriteFile(path, []byte("---\nstatus: active\nslug: demo\ntitle: Demo\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runTaskBlock([]string{"demo", "--blocker", "scheduler:foo"}); err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), "status: blocked") || !strings.Contains(string(raw), "blocker: scheduler:foo") {
+		t.Errorf("after block, file lacks expected lines:\n%s", raw)
+	}
+	if err := runTaskUnblock([]string{"demo"}); err != nil {
+		t.Fatalf("unblock: %v", err)
+	}
+	raw, _ = os.ReadFile(path)
+	if !strings.Contains(string(raw), "status: active") || strings.Contains(string(raw), "blocker:") {
+		t.Errorf("after unblock, file unexpected:\n%s", raw)
 	}
 }
 
@@ -136,24 +155,4 @@ func TestRunTaskNewPriorityRejectsBogus(t *testing.T) {
 	if !strings.Contains(err.Error(), "critical|high|medium|low") {
 		t.Errorf("error %q should list valid values", err)
 	}
-}
-
-func captureTaskStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	orig := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stderr = w
-	t.Cleanup(func() { os.Stderr = orig })
-	fn()
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(out)
 }

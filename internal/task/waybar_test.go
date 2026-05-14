@@ -29,8 +29,8 @@ func TestWaybar(t *testing.T) {
 	if err := json.Unmarshal(out, &chip); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if chip.Text != "1/2/0/1" {
-		t.Errorf("text = %q, want 1/2/0/1", chip.Text)
+	if chip.Text != "1/2/1" {
+		t.Errorf("text = %q, want 1/2/1", chip.Text)
 	}
 	if chip.Class != "blocked" {
 		t.Errorf("class = %q, want blocked", chip.Class)

@@ -6,14 +6,14 @@ import (
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
-func TestCanonicalStatusAliasesLegacyToBacklog(t *testing.T) {
+func TestCanonicalStatusAliasesLegacy(t *testing.T) {
 	cases := map[string]string{
-		StatusDraft:   StatusBacklog,
-		StatusPaused:  StatusBacklog,
-		StatusParked:  StatusBacklog,
-		StatusBlocked: StatusBacklog,
-		StatusBacklog: StatusBacklog,
+		"backlog":     StatusDraft,
+		"paused":      StatusBlocked,
+		"parked":      StatusBlocked,
+		StatusDraft:   StatusDraft,
 		StatusActive:  StatusActive,
+		StatusBlocked: StatusBlocked,
 		StatusDone:    StatusDone,
 		"custom":      "custom",
 	}
@@ -24,16 +24,18 @@ func TestCanonicalStatusAliasesLegacyToBacklog(t *testing.T) {
 	}
 }
 
-func TestPromotableBacklogWithEmptyGate(t *testing.T) {
+func TestPromotableDraftWithEmptyGate(t *testing.T) {
 	cases := []struct {
 		name string
 		meta frontmatter.Meta
 		want bool
 	}{
-		{"legacy draft", frontmatter.Meta{Status: StatusDraft}, true},
-		{"legacy parked", frontmatter.Meta{Status: StatusParked}, true},
-		{"new backlog", frontmatter.Meta{Status: StatusBacklog}, true},
-		{"backlog gated", frontmatter.Meta{Status: StatusBacklog, Gate: "after x"}, false},
+		{"draft", frontmatter.Meta{Status: StatusDraft}, true},
+		{"legacy backlog", frontmatter.Meta{Status: "backlog"}, true},
+		{"draft gated", frontmatter.Meta{Status: StatusDraft, Gate: "after x"}, false},
+		{"legacy parked aliases to blocked, not promotable", frontmatter.Meta{Status: "parked"}, false},
+		{"legacy paused aliases to blocked, not promotable", frontmatter.Meta{Status: "paused"}, false},
+		{"blocked", frontmatter.Meta{Status: StatusBlocked}, false},
 		{"active", frontmatter.Meta{Status: StatusActive}, false},
 		{"unknown", frontmatter.Meta{Status: "weird"}, false},
 	}

@@ -52,7 +52,7 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 	}
 	prev := m.Status
 	switch CanonicalStatus(prev) {
-	case StatusBacklog:
+	case StatusDraft, StatusBlocked:
 	case StatusActive:
 		return "", fmt.Errorf("task %s: already active", slug)
 	case StatusDone:
@@ -133,47 +133,46 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 	return slugs, nil
 }
 
-// Pause flips an active task to paused. The worktree is left in
-// place; the tmux session is reaped only if it has been idle past
-// IdleReapThreshold (model exited, pane sitting at an empty prompt).
-// A mid-tool-call worker stays alive so the operator can attach and
-// finish a thought. Refuses when the inbox has unread messages.
+// Pause is retired. drop-parked-status-gate collapsed paused into
+// blocked; callers must name a blocker reason instead. The stub
+// returns a hard error pointing at the new verb.
 func Pause(tasksDir, slug string) error {
-	if err := inboxGate(slug); err != nil {
-		return err
-	}
-	if err := flipStatus(tasksDir, slug, StatusActive, StatusPaused); err != nil {
-		return err
-	}
-	reapIdleSlugSessions(tasksDir, slug)
-	return nil
+	return fmt.Errorf("task %s: pause is retired; use `spore task block %s --blocker \"<reason>\"`", slug, slug)
 }
 
-// Park flips an active task to parked. The worktree is left in place;
-// idle sessions are reaped on the same policy as Pause and Block.
+// Park is retired. drop-parked-status-gate collapsed parked into
+// blocked; callers must name a blocker reason instead. The stub
+// returns a hard error pointing at the new verb.
 func Park(tasksDir, slug string) error {
+	return fmt.Errorf("task %s: park is retired; use `spore task block %s --blocker \"<reason>\"`", slug, slug)
+}
+
+// Block flips an active task to blocked, persisting the blocker
+// reason. Same idle-gated reap as before: the worktree stays, the
+// session is killed only if idle past IdleReapThreshold. Refuses when
+// the inbox has unread messages. Refuses when called from a
+// coordinator session (drop-parked-status-gate gate: only operator
+// and a worker session on its own slug may block).
+func Block(tasksDir, slug, blocker string) error {
+	if err := blockCoordinatorGate(); err != nil {
+		return err
+	}
 	if err := inboxGate(slug); err != nil {
 		return err
 	}
-	if err := flipStatus(tasksDir, slug, StatusActive, StatusParked); err != nil {
+	if err := flipStatusWithBlocker(tasksDir, slug, StatusActive, StatusBlocked, blocker); err != nil {
 		return err
 	}
 	reapIdleSlugSessions(tasksDir, slug)
 	return nil
 }
 
-// Block flips an active task to blocked. Same idle-gated reap as
-// Pause: the worktree stays, the session is killed only if idle past
-// IdleReapThreshold. Refuses when the inbox has unread messages.
-func Block(tasksDir, slug string) error {
-	if err := inboxGate(slug); err != nil {
-		return err
-	}
-	if err := flipStatus(tasksDir, slug, StatusActive, StatusBlocked); err != nil {
-		return err
-	}
-	reapIdleSlugSessions(tasksDir, slug)
-	return nil
+// Unblock flips a blocked task back to active and clears the blocker
+// reason. Used by scheduler scripts when their trigger condition is
+// met and by the operator. No coordinator gate: a coordinator may
+// unblock; it just may not block.
+func Unblock(tasksDir, slug string) error {
+	return flipStatusWithBlocker(tasksDir, slug, StatusBlocked, StatusActive, "")
 }
 
 // Verify reads tasks/<slug>.md and runs the structural evidence
@@ -611,7 +610,13 @@ func readTaskMeta(tasksDir, slug string) (frontmatter.Meta, error) {
 	return m, nil
 }
 
-func flipStatus(tasksDir, slug, from, to string) error {
+// flipStatusWithBlocker flips a task's status with optional blocker
+// field handling: on transitions into blocked, blocker is the named
+// reason (machine-readable convention: `scheduler:<key>`); on
+// transitions out of blocked, blocker is cleared. Empty blocker on
+// entry to blocked is allowed; the lint catches it as a separate
+// check.
+func flipStatusWithBlocker(tasksDir, slug, from, to, blocker string) error {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -625,7 +630,29 @@ func flipStatus(tasksDir, slug, from, to string) error {
 		return fmt.Errorf("task %s: status %q (want %q)", slug, m.Status, from)
 	}
 	m.Status = to
+	if to == StatusBlocked {
+		if blocker != "" {
+			if m.Extra == nil {
+				m.Extra = map[string]string{}
+			}
+			m.Extra["blocker"] = blocker
+		}
+	} else {
+		delete(m.Extra, "blocker")
+	}
 	return os.WriteFile(path, frontmatter.Write(m, body), 0o644)
+}
+
+// blockCoordinatorGate refuses `spore task block` when the caller is
+// a coordinator session. Workers (own-slug block) and operator-
+// interactive sessions (env unset) pass. drop-parked-status-gate: the
+// coordinator must surface attention via notification, not by parking
+// work out of the runnable pool.
+func blockCoordinatorGate() error {
+	if os.Getenv(SessionKindEnv) == SessionKindCoordinator {
+		return fmt.Errorf("coordinator session is not authorized to block tickets; flag for operator attention via notification instead")
+	}
+	return nil
 }
 
 func projectRootFromTasksDir(tasksDir string) (string, error) {

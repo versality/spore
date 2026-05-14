@@ -23,7 +23,7 @@ type TaskStatus struct {
 
 func (TaskStatus) Name() string { return "task-status" }
 
-var defaultTaskStatuses = []string{"parked", "active", "blocked", "done"}
+var defaultTaskStatuses = []string{"draft", "active", "blocked", "done"}
 
 var taskStatusLine = regexp.MustCompile(`(?m)^status[[:space:]]*:`)
 

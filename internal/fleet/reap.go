@@ -177,13 +177,13 @@ func reapOne(mainRoot string, forcePublished bool, stdout, stderr io.Writer, e r
 		status := meta.Status
 
 		reapStatus := status
-		publishedReapable := status == task.StatusParked || (status == task.StatusActive && forcePublished)
+		publishedReapable := status == task.StatusActive && forcePublished
 		if publishedReapable && publishedClosed(mainRoot, slug, e) {
 			reapStatus = "published"
 		}
 
 		switch reapStatus {
-		case task.StatusActive, task.StatusParked:
+		case task.StatusActive:
 			// Live work; leave alone. The active-duplicate-session
 			// repair owned by spore Reconcile covers the remaining
 			// invariant.

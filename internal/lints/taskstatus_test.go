@@ -16,7 +16,7 @@ func TestTaskStatus(t *testing.T) {
 			name: "all canonical statuses accepted",
 			files: map[string]string{
 				"tasks/a.md": "---\nslug: a\nstatus: active\n---\nbody\n",
-				"tasks/b.md": "---\nslug: b\nstatus: parked\n---\nbody\n",
+				"tasks/b.md": "---\nslug: b\nstatus: draft\n---\nbody\n",
 				"tasks/c.md": "---\nslug: c\nstatus: blocked\n---\nbody\n",
 				"tasks/d.md": "---\nslug: d\nstatus: done\n---\nbody\n",
 			},
@@ -33,7 +33,7 @@ func TestTaskStatus(t *testing.T) {
 		{
 			name: "out-of-set value flagged with line",
 			files: map[string]string{
-				"tasks/bad.md": "---\nslug: bad\nstatus: draft\n---\nbody\n",
+				"tasks/bad.md": "---\nslug: bad\nstatus: parked\n---\nbody\n",
 			},
 			want: []string{"tasks/bad.md:3"},
 		},
@@ -94,7 +94,7 @@ func TestTaskStatusMessageMentionsValue(t *testing.T) {
 	if !strings.Contains(issues[0].Message, `"weird"`) {
 		t.Errorf("message %q missing offending value", issues[0].Message)
 	}
-	if !strings.Contains(issues[0].Message, "parked") {
+	if !strings.Contains(issues[0].Message, "draft") {
 		t.Errorf("message %q missing canonical set", issues[0].Message)
 	}
 }

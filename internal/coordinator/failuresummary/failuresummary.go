@@ -162,7 +162,7 @@ func Summarize(cfg Config) Summary {
 	var actions []string
 	if al, ok := activeLiveCount(cfg); ok && al < cfg.Floor {
 		actions = append(actions, fmt.Sprintf(
-			"active-live=%d below floor=%d -> mint a draft via spore task new --draft '<title>' or resume a paused slug",
+			"active-live=%d below floor=%d -> mint a draft via spore task new --draft '<title>' or unblock a blocked slug",
 			al, cfg.Floor))
 	}
 	if wakes := wakeErrorSources(codex, threshold, 3); len(wakes) > 0 {

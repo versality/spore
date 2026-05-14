@@ -142,7 +142,7 @@ func Reconcile(cfg Config) (Result, error) {
 	// are reaped.
 	for _, slug := range workerSlugs {
 		switch statusBySlug[slug] {
-		case task.StatusActive, task.StatusPaused, task.StatusBlocked:
+		case task.StatusActive, task.StatusBlocked:
 			res.Kept = append(res.Kept, slug)
 			continue
 		}

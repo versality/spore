@@ -15,9 +15,10 @@ import (
 // no `## Plan` heading. The plan-first contract requires a Plan
 // section before any source edit on high-effort workers.
 //
-// Status filter: fires only for active|paused|blocked. draft is the
-// operator's minting window; parked is waiting on a scheduler trigger;
-// done is post-work (no backfill).
+// Status filter: fires only for active|blocked. draft is the
+// operator's minting window; done is post-work (no backfill).
+// Legacy parked/paused values are aliased to blocked through the
+// canonical map.
 type PlanFirstRequired struct {
 	TasksDir string
 }
@@ -61,7 +62,7 @@ func (l PlanFirstRequired) Run(root string) ([]Issue, error) {
 			continue
 		}
 		switch m.Status {
-		case "active", "paused", "blocked":
+		case "active", "blocked", "paused", "parked":
 		default:
 			continue
 		}

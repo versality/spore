@@ -38,6 +38,11 @@ Severity rubric: high=could crash fleet/cause data loss, medium=surprising behav
 
 ### F-02: Task lifecycle statuses disagree across CLI, FSM, docs, and reconcile
 
+**Status**: [fixed in drop-parked-status-gate] - the enum collapsed to
+`draft | active | blocked | done`; legacy `backlog | paused | parked`
+are read-only aliases; the CLI lost `park` and gained `block --blocker`
+and `unblock`.
+
 **Class**: multi-defined-default | doc-code-drift | soft-limit-no-enforcement
 **Severity**: high (if this fires, a parked worker can be reaped or hidden even though docs promise the worktree and session survive)
 

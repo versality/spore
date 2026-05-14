@@ -12,7 +12,7 @@ import (
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
-func TestLifecycleStartPauseDone(t *testing.T) {
+func TestLifecycleStartBlockDone(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
 	}
@@ -82,15 +82,15 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 		t.Errorf("tmux has-session: %v: %s", err, out)
 	}
 
-	if err := Pause(tasksDir, slug); err != nil {
-		t.Fatalf("Pause: %v", err)
+	if err := Block(tasksDir, slug, "test:pause-equivalent"); err != nil {
+		t.Fatalf("Block: %v", err)
 	}
-	if status := readStatus(t, taskPath); status != "paused" {
-		t.Errorf("after Pause: status = %q, want paused", status)
+	if status := readStatus(t, taskPath); status != "blocked" {
+		t.Errorf("after Block: status = %q, want blocked", status)
 	}
 
-	if err := Pause(tasksDir, slug); err == nil {
-		t.Error("Pause from paused should error, got nil")
+	if err := Block(tasksDir, slug, "test:again"); err == nil {
+		t.Error("Block from blocked should error, got nil")
 	}
 
 	if err := Done(tasksDir, slug, false); err != nil {
@@ -114,7 +114,7 @@ func TestLifecycleStartPauseDone(t *testing.T) {
 	}
 }
 
-func TestStartResumesPaused(t *testing.T) {
+func TestStartResumesBlocked(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
 	}
@@ -151,13 +151,13 @@ func TestStartResumesPaused(t *testing.T) {
 		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
-	if err := Pause(tasksDir, slug); err != nil {
-		t.Fatalf("Pause: %v", err)
+	if err := Block(tasksDir, slug, "test:resume-target"); err != nil {
+		t.Fatalf("Block: %v", err)
 	}
 
 	resumed, err := Start(tasksDir, slug, nil)
 	if err != nil {
-		t.Fatalf("Start (resume from paused): %v", err)
+		t.Fatalf("Start (resume from blocked): %v", err)
 	}
 	if resumed != session {
 		t.Errorf("resumed session = %q, want %q", resumed, session)
@@ -448,14 +448,14 @@ func TestSlugFromSessionNameAcceptsCurrentAndLegacyShapes(t *testing.T) {
 	}
 }
 
-func TestPauseRequiresActive(t *testing.T) {
+func TestBlockRequiresActive(t *testing.T) {
 	tasksDir := t.TempDir()
 	taskPath := filepath.Join(tasksDir, "x.md")
 	if err := os.WriteFile(taskPath, []byte("---\nstatus: draft\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := Pause(tasksDir, "x"); err == nil {
-		t.Fatal("Pause on draft task should error, got nil")
+	if err := Block(tasksDir, "x", "test:reason"); err == nil {
+		t.Fatal("Block on draft task should error, got nil")
 	}
 }
 
@@ -582,34 +582,6 @@ func TestDoneForceBypassesInbox(t *testing.T) {
 	}
 }
 
-func TestPauseRefusesUnreadInbox(t *testing.T) {
-	tasksDir := t.TempDir()
-	taskPath := filepath.Join(tasksDir, "x.md")
-	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	state := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", state)
-	t.Chdir(filepath.Dir(tasksDir))
-
-	inbox := filepath.Join(state, "spore", filepath.Base(filepath.Dir(tasksDir)), "x", "inbox")
-	if err := os.MkdirAll(inbox, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(inbox, "1.json"), []byte(`{}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	err := Pause(tasksDir, "x")
-	if err == nil {
-		t.Fatal("Pause should refuse with unread inbox, got nil")
-	}
-	if !strings.Contains(err.Error(), "unread inbox") {
-		t.Errorf("error %q should mention 'unread inbox'", err)
-	}
-}
-
 func TestBlockRefusesUnreadInbox(t *testing.T) {
 	tasksDir := t.TempDir()
 	taskPath := filepath.Join(tasksDir, "x.md")
@@ -629,7 +601,7 @@ func TestBlockRefusesUnreadInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Block(tasksDir, "x")
+	err := Block(tasksDir, "x", "operator: waiting on something")
 	if err == nil {
 		t.Fatal("Block should refuse with unread inbox, got nil")
 	}
@@ -704,20 +676,6 @@ func TestDoneForceBypassesUnmergedCommits(t *testing.T) {
 	}
 	if readStatus(t, filepath.Join(tasksDir, "x.md")) != "done" {
 		t.Error("status should be done")
-	}
-}
-
-func TestBlockFlipsActiveToBlocked(t *testing.T) {
-	tasksDir := t.TempDir()
-	taskPath := filepath.Join(tasksDir, "x.md")
-	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Block(tasksDir, "x"); err != nil {
-		t.Fatalf("Block: %v", err)
-	}
-	if status := readStatus(t, taskPath); status != "blocked" {
-		t.Errorf("after Block: status = %q, want blocked", status)
 	}
 }
 

@@ -17,7 +17,7 @@ func TestPlanFirstRequired(t *testing.T) {
 		"tasks/active-medium.md":      taskWithBody("active-medium", "active", "medium", "no plan, no problem\n"),
 		"tasks/draft-high.md":         taskWithBody("draft-high", "draft", "high", "drafts skipped\n"),
 		"tasks/done-high.md":          taskWithBody("done-high", "done", "high", "no backfill\n"),
-		"tasks/parked-high.md":        taskWithBody("parked-high", "parked", "high", "scheduler may fill\n"),
+		"tasks/legacy-parked-high.md": taskWithBody("legacy-parked-high", "parked", "high", "legacy parked aliases to blocked\n"),
 		"tasks/blocked-xhigh.md":      taskWithBody("blocked-xhigh", "blocked", "xhigh", "no plan\n"),
 		"tasks/active-veryhigh.md":    taskWithBody("active-veryhigh", "active", "very-high", "no plan\n"),
 	})
@@ -33,13 +33,13 @@ func TestPlanFirstRequired(t *testing.T) {
 		"tasks/active-high-noplan.md",
 		"tasks/blocked-xhigh.md",
 		"tasks/active-veryhigh.md",
+		"tasks/legacy-parked-high.md",
 	}
 	wantSkip := []string{
 		"tasks/active-high-plan.md",
 		"tasks/active-medium.md",
 		"tasks/draft-high.md",
 		"tasks/done-high.md",
-		"tasks/parked-high.md",
 	}
 	for _, p := range wantHit {
 		if !got[p] {

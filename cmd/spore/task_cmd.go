@@ -30,9 +30,15 @@ Subcommands:
   edit <slug>                  Open task file in $EDITOR.
   pick                         Interactive rofi/fzf task picker.
   start <slug>                 Flip to active, spawn worktree + tmux session.
-  pause <slug>                 Flip active task to paused (no teardown).
-  park <slug>                  Flip active task to parked (no teardown).
-  block <slug>                 Flip active task to blocked (no teardown).
+  pause <slug>                 Retired; errors with redirect to block.
+  park <slug>                  Retired; errors with redirect to block.
+  block <slug> [--blocker R]   Flip active task to blocked. Refuses
+                               when called from a coordinator session
+                               (the coordinator surfaces attention via
+                               notification, never by parking work).
+  unblock <slug>               Flip blocked task back to active and
+                               clear the blocker reason. No
+                               coordinator gate.
   done <slug> [--force]         Flip to done, kill tmux + remove worktree.
   merge <slug> [--force-merge-red <reason>]
                                Merge wt/<slug> into main; push origin main:main only.
@@ -101,6 +107,8 @@ func runTask(args []string) error {
 		return runTaskPark(rest)
 	case "block":
 		return runTaskBlock(rest)
+	case "unblock":
+		return runTaskUnblock(rest)
 	case "done":
 		return runTaskDone(rest)
 	case "merge":
@@ -351,8 +359,7 @@ func runTaskPause(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: spore task pause <slug>")
 	}
-	fmt.Fprintln(os.Stderr, "status: pause is deprecated, use park or block (flipping to parked)")
-	return task.Park("tasks", args[0])
+	return task.Pause("tasks", args[0])
 }
 
 func runTaskPark(args []string) error {
@@ -363,10 +370,22 @@ func runTaskPark(args []string) error {
 }
 
 func runTaskBlock(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: spore task block <slug>")
+	fs := flag.NewFlagSet("task block", flag.ContinueOnError)
+	blocker := fs.String("blocker", "", "named blocker reason (e.g. scheduler:<key>, or operator note)")
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
 	}
-	return task.Block("tasks", args[0])
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: spore task block <slug> [--blocker \"<reason>\"]")
+	}
+	return task.Block("tasks", fs.Arg(0), *blocker)
+}
+
+func runTaskUnblock(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spore task unblock <slug>")
+	}
+	return task.Unblock("tasks", args[0])
 }
 
 func runTaskDone(args []string) error {

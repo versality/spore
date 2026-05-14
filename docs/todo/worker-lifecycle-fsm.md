@@ -1,7 +1,16 @@
-**Status**: spec
+**Status**: spec [partially superseded by drop-parked-status-gate]
 **Priority**: critical
 **Owner**: TBD (spec only; implementation split into M1-M3 follow-ups)
 **Source ticket**: tasks/worker-lifecycle-fsm-design.md
+
+> Superseded sections (drop-parked-status-gate): the canonical on-disk
+> enum is now `draft | active | blocked | done`. `parked` and `paused`
+> are read-only legacy aliases that collapse to `blocked`. The
+> coordinator may no longer call `spore task block`; only the operator
+> or a worker on its own slug may. Section 11's `trigger:` field is
+> replaced by `blocker:`; canonical machine-readable form is
+> `blocker: scheduler:<key>`. The text below predates that change;
+> read the sections about parked/paused transitions as historical.
 
 # Worker lifecycle FSM
 
