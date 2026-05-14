@@ -167,6 +167,12 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
 		v.AllowInputs = append(v.AllowInputs, cfg.Allowlist...)
 		return v
+	case Agenix:
+		if len(cfg.ScanDirs) > 0 {
+			v.ScanDirs = cfg.ScanDirs
+		}
+		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
+		return v
 	default:
 		return l
 	}
