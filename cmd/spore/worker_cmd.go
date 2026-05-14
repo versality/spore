@@ -21,19 +21,29 @@ Usage:
 Subcommands:
   exit-kind       Classify a rower wrapper's exit shape into one of
                   lifecycle | early-exit | sighup-external | crash-rc<n>
-                  and (optionally) emit a single 'wt task tell skyhelm'
-                  envelope so the coordinator gets one classified signal
-                  per rower end. Flags:
-                    --rc=<N>          wrapper's final rc (required)
-                    --marker=<path>   clean-exit marker the rower writes
-                                      BEFORE its own teardown; presence
-                                      means lifecycle even on rc=129
-                    --slug=<slug>     slug to include in the tell body
-                    --tell-skyhelm    shell out to 'wt task tell skyhelm'
-                                      with "<slug> exit kind=<k> rc=<N>"
-                  Prints <kind> on stdout. When --tell-skyhelm is set
-                  but wt is unavailable, exits non-zero so the wrapper
-                  can log it; the classify line is still printed.
+                  and (optionally) emit a single tell envelope to the
+                  coordinator inbox so the coordinator gets one
+                  classified signal per rower end. Flags:
+                    --rc=<N>             wrapper's final rc (required)
+                    --marker=<path>      clean-exit marker the rower
+                                         writes BEFORE its own teardown;
+                                         presence means lifecycle even
+                                         on rc=129
+                    --slug=<slug>        slug to include in tell body
+                    --tell-coordinator   shell out to
+                                         'wt task tell <dest> <body>'
+                                         where dest comes from
+                                         $SPORE_COORDINATOR_TELL_TARGET
+                                         (or --tell-target=<name>) and
+                                         body is
+                                         "<slug> exit kind=<k> rc=<N>"
+                    --tell-target=<name> override tell destination
+                                         (default: $SPORE_COORDINATOR_TELL_TARGET
+                                         or "coordinator")
+                  Prints <kind> on stdout. When --tell-coordinator is
+                  set but wt is unavailable, exits non-zero so the
+                  wrapper can log it; the classify line is still
+                  printed.
 
   boot-audit      Read a Claude Code session.jsonl and emit a cold-boot
                   quality profile: turn-1 input-token cost, ToolSearch
@@ -113,11 +123,17 @@ func runWorkerTokenMonitor(_ []string) int {
 	return 0
 }
 
+// defaultTellTarget is the destination name passed to
+// `wt task tell <dest>` when neither --tell-target nor
+// $SPORE_COORDINATOR_TELL_TARGET is set.
+const defaultTellTarget = "coordinator"
+
 // runWorkerExitKind classifies a rower wrapper exit and (optionally)
-// emits the single skyhelm-bound tell that replaces the four-ledger
-// split (rower-voluntary-events.jsonl, respawn-events.jsonl,
-// rower-watch.json, agent.log). The classify is unconditional so a
-// caller can pipe the kind into agent.log even when no tell goes out.
+// emits the single coordinator-bound tell that replaces the
+// four-ledger split (rower-voluntary-events.jsonl,
+// respawn-events.jsonl, rower-watch.json, agent.log). The classify is
+// unconditional so a caller can pipe the kind into agent.log even
+// when no tell goes out.
 func runWorkerExitKind(args []string) int {
 	fs := flag.NewFlagSet("exit-kind", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -126,11 +142,13 @@ func runWorkerExitKind(args []string) int {
 		marker string
 		slug   string
 		tell   bool
+		target string
 	)
 	fs.IntVar(&rc, "rc", -1, "wrapper final rc")
 	fs.StringVar(&marker, "marker", "", "clean-exit marker path")
 	fs.StringVar(&slug, "slug", "", "rower slug for the tell body")
-	fs.BoolVar(&tell, "tell-skyhelm", false, "emit `wt task tell skyhelm` envelope")
+	fs.BoolVar(&tell, "tell-coordinator", false, "emit `wt task tell <dest>` envelope")
+	fs.StringVar(&target, "tell-target", "", "destination name for the tell (overrides $SPORE_COORDINATOR_TELL_TARGET)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, "spore worker exit-kind:", err)
 		return 2
@@ -145,15 +163,22 @@ func runWorkerExitKind(args []string) int {
 		return 0
 	}
 	if slug == "" {
-		fmt.Fprintln(os.Stderr, "spore worker exit-kind: --slug is required with --tell-skyhelm")
+		fmt.Fprintln(os.Stderr, "spore worker exit-kind: --slug is required with --tell-coordinator")
 		return 2
 	}
 	if _, err := exec.LookPath("wt"); err != nil {
 		fmt.Fprintln(os.Stderr, "spore worker exit-kind: wt not on PATH; tell skipped")
 		return 1
 	}
+	dest := target
+	if dest == "" {
+		dest = os.Getenv("SPORE_COORDINATOR_TELL_TARGET")
+	}
+	if dest == "" {
+		dest = defaultTellTarget
+	}
 	body := fmt.Sprintf("%s exit kind=%s rc=%d", slug, kind, rc)
-	cmd := exec.Command("wt", "task", "tell", "skyhelm", body)
+	cmd := exec.Command("wt", "task", "tell", dest, body)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

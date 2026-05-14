@@ -102,8 +102,8 @@ func TestRunWorkerTokenMonitorOk(t *testing.T) {
 }
 
 // TestRunWorkerExitKindTellEnvelope is the acceptance "a clean wrap
-// shows one tell envelope reaching skyhelm inbox" check. The CLI
-// shells out to `wt task tell skyhelm <body>`; we stub `wt` with a
+// shows one tell envelope reaching coordinator inbox" check. The CLI
+// shells out to `wt task tell <dest> <body>`; we stub `wt` with a
 // script that captures argv to a file so the assertion runs without
 // touching the real operator inbox.
 func TestRunWorkerExitKindTellEnvelope(t *testing.T) {
@@ -134,7 +134,7 @@ func TestRunWorkerExitKindTellEnvelope(t *testing.T) {
 		"--rc=129",
 		"--marker=" + marker,
 		"--slug=spore-rower-exit-kind",
-		"--tell-skyhelm",
+		"--tell-coordinator",
 	}
 	if rc := runWorkerExitKind(args); rc != 0 {
 		t.Fatalf("runWorkerExitKind rc=%d, want 0", rc)
@@ -145,7 +145,7 @@ func TestRunWorkerExitKindTellEnvelope(t *testing.T) {
 		t.Fatalf("read capture: %v", err)
 	}
 	got := strings.Split(strings.TrimRight(string(body), "\n"), "\n")
-	want := []string{"task", "tell", "skyhelm", "spore-rower-exit-kind exit kind=lifecycle rc=129"}
+	want := []string{"task", "tell", "coordinator", "spore-rower-exit-kind exit kind=lifecycle rc=129"}
 	if len(got) != len(want) {
 		t.Fatalf("argv = %q, want %q", got, want)
 	}
