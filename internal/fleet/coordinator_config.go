@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -42,7 +43,7 @@ type CoordinatorConfig struct {
 // A missing file returns a zero CoordinatorConfig with no error so callers
 // can treat absent config as "use defaults".
 func LoadCoordinatorConfig(projectRoot string) (CoordinatorConfig, error) {
-	tomlPath := filepath.Join(projectRoot, "spore.toml")
+	tomlPath := filepath.Join(mainCheckoutRoot(projectRoot), "spore.toml")
 	b, err := os.ReadFile(tomlPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -119,6 +120,32 @@ func stripTOMLComment(line string) string {
 		}
 	}
 	return line
+}
+
+// mainCheckoutRoot returns the project root that owns spore.toml. When
+// projectRoot lives inside a git worktree, `git rev-parse --git-common-dir`
+// resolves to the main checkout's `.git/`, whose parent is the source of
+// truth. Worktrees branched before a spore.toml edit otherwise read a
+// stale frozen copy. Falls back to projectRoot for non-git layouts or any
+// git error so callers outside a repo (or in detached states without a
+// common dir) keep current behaviour.
+func mainCheckoutRoot(projectRoot string) string {
+	out, err := exec.Command("git", "-C", projectRoot, "rev-parse", "--git-common-dir").Output()
+	if err != nil {
+		return projectRoot
+	}
+	common := strings.TrimSpace(string(out))
+	if common == "" {
+		return projectRoot
+	}
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(projectRoot, common)
+	}
+	main := filepath.Dir(common)
+	if main == "" {
+		return projectRoot
+	}
+	return main
 }
 
 func stripTOMLQuotes(v string) string {

@@ -45,9 +45,37 @@ func TestHandoverSettingsWireCommunicationHooks(t *testing.T) {
 	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore hooks worker-continue") {
 		t.Fatal("handover settings missing worker-continue Stop hook")
 	}
+	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore hooks worker-stop-force-closing") {
+		t.Fatal("handover settings missing worker-stop-force-closing Stop hook")
+	}
 	if !workerContinueOrderedCorrectly(settings.Hooks["Stop"]) {
 		t.Fatal("worker-continue must run after plan-ready-mechanical and before watch-inbox")
 	}
+	if !forceClosingOrderedCorrectly(settings.Hooks["Stop"]) {
+		t.Fatal("worker-stop-force-closing must run after worker-continue and before watch-inbox")
+	}
+}
+
+func forceClosingOrderedCorrectly(groups []handoverHookGroup) bool {
+	workerIdx, forceIdx, watchIdx := -1, -1, -1
+	idx := 0
+	for _, group := range groups {
+		for _, hook := range group.Hooks {
+			switch hook.Command {
+			case "/usr/local/bin/spore hooks worker-continue":
+				workerIdx = idx
+			case "/usr/local/bin/spore hooks worker-stop-force-closing":
+				forceIdx = idx
+			case "/usr/local/bin/spore hooks watch-inbox":
+				watchIdx = idx
+			}
+			idx++
+		}
+	}
+	if workerIdx < 0 || forceIdx < 0 || watchIdx < 0 {
+		return false
+	}
+	return workerIdx < forceIdx && forceIdx < watchIdx
 }
 
 func workerContinueOrderedCorrectly(groups []handoverHookGroup) bool {

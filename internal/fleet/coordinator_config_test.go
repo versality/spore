@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -112,6 +113,42 @@ func TestLoadCoordinatorConfigReadsFile(t *testing.T) {
 	want := CoordinatorConfig{Driver: "codex", Model: "gpt-5.5", Brief: "docs/helm.md"}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestLoadCoordinatorConfigFromWorktreeReadsMain(t *testing.T) {
+	main := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+		{"commit", "-q", "--allow-empty", "-m", "init"},
+	} {
+		out, err := exec.Command("git", append([]string{"-C", main}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	body := []byte("[coordinator]\nexternal_session_pattern = \"^helm-.*\"\n")
+	if err := os.WriteFile(filepath.Join(main, "spore.toml"), body, 0o600); err != nil {
+		t.Fatalf("write spore.toml: %v", err)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	out, err := exec.Command("git", "-C", main, "worktree", "add", "-q", "-b", "feature", wt).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git worktree add: %v: %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(wt, "spore.toml")); err == nil {
+		if err := os.Remove(filepath.Join(wt, "spore.toml")); err != nil {
+			t.Fatalf("remove worktree spore.toml: %v", err)
+		}
+	}
+	got, err := LoadCoordinatorConfig(wt)
+	if err != nil {
+		t.Fatalf("LoadCoordinatorConfig from worktree: %v", err)
+	}
+	if got.ExternalSessionPattern != "^helm-.*" {
+		t.Errorf("worktree read missed main spore.toml: got %+v", got)
 	}
 }
 

@@ -36,13 +36,16 @@ func (LeakGuard) Name() string { return "leak-guard" }
 // and its tests, plus the leakguard lint sources (which exist to
 // detect the terms), plus the coordinator boot package (kernel side
 // of the skyhelm consumer contract, so naming the consumer here is
-// part of the binding).
+// part of the binding), plus the commit-msg hook in internal/hooks
+// (which exempts the consumer's wt-squash trailer literally).
 var leakGuardPathAllowlist = []string{
 	"internal/leakdict/leakdict.go",
 	"internal/leakdict/leakdict_test.go",
 	"internal/lints/leakguard*.go",
 	"internal/coordinator/boot/*.go",
 	"cmd/spore/coordinator_cmd.go",
+	"internal/hooks/install.go",
+	"internal/hooks/install_test.go",
 }
 
 // leakGuardTextExts is the set of file extensions whose content is

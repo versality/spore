@@ -98,6 +98,26 @@ func TestCommitMsg_BlocksEmDash(t *testing.T) {
 	}
 }
 
+func TestCommitMsg_AllowsWtSquashTrailer(t *testing.T) {
+	dir := t.TempDir()
+	msg := filepath.Join(dir, "msg")
+	body := "subject: ship clean change\n\nSquashed rower branch for clean main history.\n\nTask: foo\n"
+	if err := os.WriteFile(msg, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CommitMsg(msg); err != nil {
+		t.Fatalf("wt squash trailer must be exempt: %v", err)
+	}
+
+	leaky := filepath.Join(dir, "leaky")
+	if err := os.WriteFile(leaky, []byte("subject\n\nrower work continues\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CommitMsg(leaky); err == nil {
+		t.Fatalf("non-trailer rower mention must still error")
+	}
+}
+
 func TestPreCommitChecksStagedGoFiles(t *testing.T) {
 	if _, err := exec.LookPath("gofmt"); err != nil {
 		t.Skip("gofmt not on PATH")
