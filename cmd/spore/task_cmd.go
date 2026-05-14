@@ -527,6 +527,13 @@ func runTaskNew(args []string) error {
 		return err
 	}
 
+	tokens := len(out) / 4
+	if tokens > 1500 {
+		fmt.Printf("\x1b[33mbrief: ~%d tokens (over 1500, consider trimming)\x1b[0m\n", tokens)
+	} else {
+		fmt.Printf("brief: ~%d tokens\n", tokens)
+	}
+
 	wantEdit := *editFlag || (body == nil && !*noEdit && isTTY())
 	if wantEdit {
 		if editErr := task.Edit(tasksDir, slug); editErr != nil {
