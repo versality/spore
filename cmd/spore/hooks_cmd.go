@@ -14,6 +14,7 @@ import (
 	"github.com/versality/spore/internal/hooks/prfinish"
 	"github.com/versality/spore/internal/hooks/pushpending"
 	"github.com/versality/spore/internal/hooks/workercontinue"
+	"github.com/versality/spore/internal/hooks/workerstopforceclosing"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
 
@@ -53,6 +54,8 @@ func runHooks(args []string) int {
 		return runHooksPlanReadyMechanical(rest)
 	case "worker-continue":
 		return runHooksWorkerContinue(rest)
+	case "worker-stop-force-closing":
+		return runHooksWorkerStopForceClosing(rest)
 	case "codex":
 		return runHooksCodex(rest)
 	case "context-tee":
@@ -330,6 +333,27 @@ func runHooksWorkerContinue(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+func runHooksWorkerStopForceClosing(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks worker-stop-force-closing: takes no args")
+		return 2
+	}
+	req, err := readHookRequest()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks worker-stop-force-closing:", err)
+		return 1
+	}
+	res, err := workerstopforceclosing.RunEnv(req.TranscriptPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks worker-stop-force-closing:", err)
+		return 1
+	}
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
 }
 
 func runHooksContextTee(args []string) int {

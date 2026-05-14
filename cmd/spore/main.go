@@ -193,6 +193,16 @@ Subcommands:
                               worker-continue/<slug>.json suppresses
                               re-firing until the worker makes progress
                               (frontmatter mtime/size or HEAD changes).
+  worker-stop-force-closing   Stop-hook: refuse to end a turn without a
+                              closing move. Exit 2 unless any of these
+                              fired since the previous Stop: status flip
+                              away from active, HEAD advanced on wt/<slug>,
+                              or an Edit/Write/MultiEdit tool_use in the
+                              claude-code transcript. First turn is a no-op
+                              (state seeds on the first invocation).
+                              Reads $SPORE_TASK_SLUG plus the request's
+                              transcript_path. State at $XDG_STATE_HOME/
+                              spore/worker-stop-force-closing/<slug>.json.
   codex <event>          Codex hook adapters. Events: session-start.
   context-tee            Stop-hook: write a per-session token JSON
                          snapshot for status displays. Reads
