@@ -97,6 +97,7 @@ func Named() map[string]Lint {
 		FlakeInputShadow{},
 		Agenix{},
 		TaskSchedulerContext{},
+		TaskStatus{},
 	} {
 		out[l.Name()] = l
 	}
