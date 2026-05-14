@@ -75,6 +75,11 @@ func probeDefs(cfg Config) []probeDef {
 			Run:     func() (int, string) { return cfg.Exec(cfg.SelfExe, "coordinator", "monitor") },
 		},
 		{
+			Name: "reconcile-health", Title: "reconcile health", Mode: ModeSilentOnOK,
+			OKShort: "reconcile health",
+			Run:     func() (int, string) { return probeReconcileHealth(cfg) },
+		},
+		{
 			Name: "coordinator-state-debt", Title: "spore coordinator state-debt", Mode: ModeSilentOnOK,
 			OKShort: "state-debt",
 			Run:     func() (int, string) { return cfg.Exec(cfg.SelfExe, "coordinator", "state-debt") },

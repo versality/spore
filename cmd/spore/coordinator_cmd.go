@@ -14,6 +14,7 @@ import (
 	"github.com/versality/spore/internal/coordinator/boot"
 	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
+	"github.com/versality/spore/internal/coordinator/reconcilehealth"
 	"github.com/versality/spore/internal/coordinator/spawn"
 	"github.com/versality/spore/internal/coordinator/statedebt"
 	"github.com/versality/spore/internal/coordinator/tokenmonitor"
@@ -430,7 +431,7 @@ func runCoordinatorMonitor(args []string) int {
 		return 2
 	}
 	if *help || *helpLong {
-		fmt.Println("spore coordinator monitor - boot-time verdict over the token-monitor ledger")
+		fmt.Println("spore coordinator monitor - boot-time verdict over the token-monitor ledger + reconcile-health")
 		fmt.Println("  --threshold N  consecutive-broken count (default 3)")
 		return 0
 	}
@@ -438,13 +439,43 @@ func runCoordinatorMonitor(args []string) int {
 	cfg := tokenmonitor.Config{Inbox: "self"}
 	cfg = cfg.Defaults()
 
+	rc := 0
+	printedOK := false
+
 	broken, sessions := tokenmonitor.LedgerVerdict(cfg.LedgerFile, cfg.SoftCap, *threshold)
 	if broken {
 		fmt.Fprintf(os.Stderr, "broken-hook: %s\n", sessions)
-		return 2
+		rc = 2
 	}
-	fmt.Println("ok")
-	return 0
+
+	health, herr := reconcilehealth.Read(reconcilehealth.DefaultPath())
+	if herr != nil {
+		fmt.Fprintf(os.Stderr, "reconcile-health: %v\n", herr)
+		if rc < 2 {
+			rc = 2
+		}
+	} else {
+		findings, hrc := reconcilehealth.Verdict(health, time.Now(), reconcilehealth.DefaultStaleAfter)
+		for _, line := range findings {
+			if hrc == 0 {
+				// Informational (paused / unwritten). Prefix with `ok:`
+				// so the boot probe's silent-on-ok matcher folds it into
+				// the rollup; direct callers still see the reason.
+				fmt.Println("ok: " + line)
+				printedOK = true
+			} else {
+				fmt.Fprintln(os.Stderr, line)
+			}
+		}
+		if hrc > rc {
+			rc = hrc
+		}
+	}
+
+	if rc == 0 && !printedOK {
+		fmt.Println("ok")
+	}
+	return rc
 }
 
 func runCoordinatorLoopGuard(args []string) int {

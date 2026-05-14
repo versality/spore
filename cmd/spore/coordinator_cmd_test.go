@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	spore "github.com/versality/spore"
 )
@@ -216,6 +217,99 @@ func TestCoordinatorBootRejectsUnknownFlag(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "spore coordinator boot:") {
 		t.Errorf("stderr missing context: %q", errOut)
+	}
+}
+
+func captureMonitor(t *testing.T, args []string) (code int, stdout, stderr string) {
+	t.Helper()
+	origOut, origErr := os.Stdout, os.Stderr
+	t.Cleanup(func() { os.Stdout, os.Stderr = origOut, origErr })
+
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+	os.Stdout, os.Stderr = outW, errW
+
+	done := make(chan [2]string, 1)
+	go func() {
+		var ob, eb bytes.Buffer
+		_, _ = io.Copy(&ob, outR)
+		_, _ = io.Copy(&eb, errR)
+		done <- [2]string{ob.String(), eb.String()}
+	}()
+
+	code = runCoordinatorMonitor(args)
+	outW.Close()
+	errW.Close()
+	got := <-done
+	return code, got[0], got[1]
+}
+
+func TestCoordinatorMonitorReconcileHealthDirty(t *testing.T) {
+	wtState := t.TempDir()
+	t.Setenv("WT_STATE", wtState)
+	// Token-monitor ledger absent; only reconcile-health drives exit.
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", t.TempDir())
+
+	body := `{
+  "ts": "` + time.Now().UTC().Format(time.RFC3339) + `",
+  "version": 1,
+  "projects": {"spore": {"status": "dirty-main", "dirty_files": ["a", "b"]}}
+}`
+	if err := os.WriteFile(filepath.Join(wtState, "reconcile-health.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errOut := captureMonitor(t, nil)
+	if code != 2 {
+		t.Fatalf("exit=%d want 2; stdout=%q stderr=%q", code, out, errOut)
+	}
+	if !strings.Contains(errOut, "dirty-main spore") {
+		t.Errorf("stderr missing dirty-main: %q", errOut)
+	}
+	if strings.Contains(out, "ok") {
+		t.Errorf("stdout should not say ok on incident: %q", out)
+	}
+}
+
+func TestCoordinatorMonitorReconcileHealthMissing(t *testing.T) {
+	wtState := t.TempDir()
+	t.Setenv("WT_STATE", wtState)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", t.TempDir())
+
+	code, out, errOut := captureMonitor(t, nil)
+	if code != 0 {
+		t.Fatalf("exit=%d want 0; stdout=%q stderr=%q", code, out, errOut)
+	}
+	if !strings.Contains(out, "unwritten") {
+		t.Errorf("stdout missing unwritten note: %q", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), "ok:") {
+		t.Errorf("informational line should start with 'ok:': %q", out)
+	}
+}
+
+func TestCoordinatorMonitorReconcileHealthOK(t *testing.T) {
+	wtState := t.TempDir()
+	t.Setenv("WT_STATE", wtState)
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", t.TempDir())
+
+	body := `{"ts":"` + time.Now().UTC().Format(time.RFC3339) + `","version":1,"projects":{"spore":{"status":"ok"}}}`
+	if err := os.WriteFile(filepath.Join(wtState, "reconcile-health.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errOut := captureMonitor(t, nil)
+	if code != 0 {
+		t.Fatalf("exit=%d want 0; stdout=%q stderr=%q", code, out, errOut)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("stdout=%q want bare 'ok'", out)
 	}
 }
 

@@ -68,7 +68,7 @@ func render(cfg Config, state StateInfo, probes []ProbeResult) string {
 	// Remaining silent-on-ok probes: emit section on fail / non-ok output,
 	// otherwise contribute to the rollup line.
 	silent := []string{
-		"opencode-liveness", "coordinator-monitor",
+		"opencode-liveness", "coordinator-monitor", "reconcile-health",
 		"coordinator-state-debt", "idle-watchdog", "rower-stop-errors",
 	}
 	for _, name := range silent {

@@ -335,3 +335,157 @@ func TestRunAgentsStateFailureSurfacedAsSection(t *testing.T) {
 		t.Errorf("agents diagnostic missing:\n%s", r.Body)
 	}
 }
+
+func TestRunReconcileHealthDirtyMainSurfacesSection(t *testing.T) {
+	cfg := baseCfg(t)
+	if err := os.WriteFile(filepath.Join(cfg.StateDir, "state.md"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.WTState, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Snapshot timestamp is the boot clock minus 30s; well inside the
+	// 5-minute stale window, so only the dirty-main finding fires.
+	healthPath := filepath.Join(cfg.WTState, "reconcile-health.json")
+	body := `{
+  "ts": "2026-05-14T08:59:30Z",
+  "version": 1,
+  "projects": {
+    "spore": {"status": "dirty-main", "dirty_files": [" M cmd/spore/main.go"], "skipped_slugs": ["slug-a"]}
+  }
+}`
+	if err := os.WriteFile(healthPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.Exec = fakeExec(map[string][2]any{
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
+		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
+	})
+	r := Run(cfg)
+	if r.WorstRC != 2 {
+		t.Fatalf("worst=%d, want 2; body=%s", r.WorstRC, r.Body)
+	}
+	if !strings.Contains(r.Body, "## reconcile health [exit=2]") {
+		t.Errorf("reconcile-health section header missing:\n%s", r.Body)
+	}
+	if !strings.Contains(r.Body, "dirty-main spore") {
+		t.Errorf("dirty-main line missing:\n%s", r.Body)
+	}
+	if strings.Contains(r.Body, "\nok: ") && strings.Contains(r.Body, "reconcile health,") {
+		t.Errorf("reconcile health should not appear in ok rollup when dirty:\n%s", r.Body)
+	}
+}
+
+func TestRunReconcileHealthMissingFileSilent(t *testing.T) {
+	cfg := baseCfg(t)
+	if err := os.WriteFile(filepath.Join(cfg.StateDir, "state.md"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// No reconcile-health.json on disk. Probe must roll up silently.
+	cfg.Exec = fakeExec(map[string][2]any{
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
+		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
+	})
+	r := Run(cfg)
+	if r.WorstRC != 0 {
+		t.Fatalf("worst=%d, want 0 when file missing", r.WorstRC)
+	}
+	if strings.Contains(r.Body, "## reconcile health") {
+		t.Errorf("section should be silent when file missing:\n%s", r.Body)
+	}
+	if !strings.Contains(r.Body, "reconcile health") {
+		t.Errorf("ok rollup should still list 'reconcile health':\n%s", r.Body)
+	}
+}
+
+func TestRunReconcileHealthStaleFiresSection(t *testing.T) {
+	cfg := baseCfg(t)
+	if err := os.WriteFile(filepath.Join(cfg.StateDir, "state.md"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.WTState, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	healthPath := filepath.Join(cfg.WTState, "reconcile-health.json")
+	// Snapshot is 30 minutes old vs the boot clock; well past the
+	// 5-minute stale window.
+	body := `{"ts":"2026-05-14T08:30:00Z","version":1,"projects":{"spore":{"status":"ok"}}}`
+	if err := os.WriteFile(healthPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Exec = fakeExec(map[string][2]any{
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "on\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
+		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
+	})
+	r := Run(cfg)
+	if r.WorstRC != 2 {
+		t.Fatalf("worst=%d, want 2 on stale", r.WorstRC)
+	}
+	if !strings.Contains(r.Body, "## reconcile health [exit=2]") {
+		t.Errorf("reconcile-health section header missing:\n%s", r.Body)
+	}
+	if !strings.Contains(r.Body, "stale") {
+		t.Errorf("stale finding missing:\n%s", r.Body)
+	}
+}
+
+func TestRunReconcileHealthFleetDisabledSilent(t *testing.T) {
+	cfg := baseCfg(t)
+	if err := os.WriteFile(filepath.Join(cfg.StateDir, "state.md"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.WTState, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	healthPath := filepath.Join(cfg.WTState, "reconcile-health.json")
+	// fleet_disabled suppresses dirty-main as expected behaviour.
+	body := `{
+  "ts": "2026-05-14T08:59:30Z",
+  "version": 1,
+  "fleet_disabled": true,
+  "projects": {"spore": {"status": "dirty-main", "dirty_files": ["a"]}}
+}`
+	if err := os.WriteFile(healthPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Exec = fakeExec(map[string][2]any{
+		"wt task ls":             {0, "SLUG\n"},
+		"wt task fleet status":   {0, ""},
+		"wt task agents status":  {0, "off\n"},
+		"skyhelm-budget summary": {0, ""},
+		"skyhelm-sla-scanner":    {0, ""},
+		"skyhelm-idle-watchdog":  {0, "ok"},
+		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                      {0, "ok"},
+		"spore coordinator state-debt":                                   {0, ""},
+	})
+	r := Run(cfg)
+	if r.WorstRC != 0 {
+		t.Fatalf("worst=%d, want 0 under fleet_disabled; body=%s", r.WorstRC, r.Body)
+	}
+	if strings.Contains(r.Body, "## reconcile health [exit=2]") {
+		t.Errorf("reconcile-health should not surface incident under fleet_disabled:\n%s", r.Body)
+	}
+}
