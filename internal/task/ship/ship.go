@@ -1,7 +1,7 @@
 // Package ship implements the canonical streamlined `spore task ship`
-// verb described in tasks/spore-rower-finish-contract.md section 6.
+// verb described in tasks/spore-worker-finish-contract.md section 6.
 //
-// One Go entry point per rower-side tool call: just check -> push
+// One Go entry point per worker-side tool call: just check -> push
 // wt/<slug> -> gh pr create -> wait for checks -> gh pr merge --squash
 // --delete-branch -> fetch + ff local main -> task.Done (which runs
 // the I11 consumer-claim gate plus the standard inbox / evidence

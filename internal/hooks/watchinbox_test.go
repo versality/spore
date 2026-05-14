@@ -36,7 +36,7 @@ func (f *fakeWaiter) Close() error {
 func setupInbox(t *testing.T) (state, slug, inbox string) {
 	t.Helper()
 	state = t.TempDir()
-	slug = "rower-test"
+	slug = "worker-test"
 	t.Setenv("WT_STATE", state)
 	inbox = filepath.Join(state, slug, "inbox")
 	if err := os.MkdirAll(filepath.Join(inbox, "read"), 0o755); err != nil {

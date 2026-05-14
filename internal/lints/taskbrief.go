@@ -7,7 +7,7 @@ import (
 )
 
 // TaskBrief rejects a leading `# Brief` heading in tasks/<slug>.md
-// bodies. wt-task prepends `Brief:` to the rower prompt; a leading
+// bodies. wt-task prepends `Brief:` to the worker prompt; a leading
 // `# Brief` heading dups it.
 type TaskBrief struct {
 	TasksDir string

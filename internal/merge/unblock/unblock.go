@@ -1,7 +1,7 @@
 // Package unblock encapsulates the "ff-merge drift unblock" pattern:
-// when the main worktree's tasks/<slug>.md drifts from the rower's
+// when the main worktree's tasks/<slug>.md drifts from the worker's
 // wt-branch view, probe whether the file is tracked on main, pick
-// `git checkout` (tracked) vs `rm` (untracked), then ping the rower
+// `git checkout` (tracked) vs `rm` (untracked), then ping the worker
 // to retry. Refuses when the working-tree content matches neither
 // HEAD nor the wt-branch (= genuine local work, not drift).
 package unblock
@@ -108,7 +108,7 @@ func Run(r Repo, slug string, w io.Writer) (int, error) {
 	if err := r.Tell(slug, "drift cleared, retry wt merge"); err != nil {
 		fmt.Fprintln(w, "[wt-merge-unblock] wt task tell failed (non-fatal)")
 	}
-	fmt.Fprintf(w, "[wt-merge-unblock] %s: %s (%s); pinged rower\n", slug, action, reason)
+	fmt.Fprintf(w, "[wt-merge-unblock] %s: %s (%s); pinged worker\n", slug, action, reason)
 	return 0, nil
 }
 

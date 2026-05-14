@@ -14,6 +14,7 @@ func TestDictionaryNonEmpty(t *testing.T) {
 		"helm-mcom",
 		"marketercom",
 		"/home/sky/nix-config",
+		"rower",
 	}
 	have := map[string]bool{}
 	for _, t := range Dictionary {
@@ -36,6 +37,8 @@ func TestScanMessage(t *testing.T) {
 		{"fix skyhelm probe", "skyhelm"},
 		{"port harness from /home/sky/nix-config/harness/x.sh", "/home/sky/nix-config"},
 		{"SKYHELM uppercase still flagged", "skyhelm"},
+		{"stale rower reference", "rower"},
+		{"Rower mid-sentence", "rower"},
 	}
 	for _, c := range cases {
 		if got := ScanMessage(c.msg, nil); got != c.want {

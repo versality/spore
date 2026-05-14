@@ -1,12 +1,12 @@
 // Package fleetstop implements the opencode fleet-stop kill switch.
-// It pauses every active opencode rower on the local host via
+// It pauses every active opencode worker on the local host via
 // `wt task pause <slug>`, then sweeps any orphan `opencode` process.
-// Idempotent: zero rowers + zero orphans -> exit 0 with a "none"
+// Idempotent: zero workers + zero orphans -> exit 0 with a "none"
 // summary; partial failures still kill orphans and report in the
 // summary line.
 //
 // Used as a coordinator-callable kill switch when ollama serializes
-// multiple opencode rowers and completion latency climbs.
+// multiple opencode workers and completion latency climbs.
 package fleetstop
 
 import (
@@ -68,7 +68,7 @@ func (r Result) Summary() string {
 	if len(r.Paused) > 0 {
 		clause = "(slugs: " + strings.Join(r.Paused, ",") + ")"
 	}
-	return fmt.Sprintf("opencode-fleet-stop: paused %d rowers %s killed %d orphan procs",
+	return fmt.Sprintf("opencode-fleet-stop: paused %d workers %s killed %d orphan procs",
 		len(r.Paused), clause, r.Killed)
 }
 
@@ -115,7 +115,7 @@ func Run(cfg Config) (Result, error) {
 	return res, nil
 }
 
-// ListActiveSlugs scans tasksDir for active opencode rowers whose
+// ListActiveSlugs scans tasksDir for active opencode workers whose
 // host matches localHost (or is empty). Returns slugs in
 // directory-sorted order.
 func ListActiveSlugs(tasksDir, localHost string) ([]string, error) {

@@ -20,7 +20,7 @@ func TestClassify(t *testing.T) {
 		marker string
 		want   string
 	}{
-		// Marker present always wins, even on non-zero rc: the rower
+		// Marker present always wins, even on non-zero rc: the worker
 		// wrote it before tearing down its own pty, so the rc-shape is
 		// the lifecycle SIGHUP, not a crash.
 		{"lifecycle-clean", 129, marker, "lifecycle"},

@@ -306,7 +306,7 @@ func runTaskEnsure(args []string) error {
 // parseSlugAndEnv pulls a single positional <slug> and a repeatable
 // --env KEY=VAL flag out of args. Used by `spore task start` and
 // `spore task ensure`. Rejects --env without `=` so a typo doesn't
-// silently land an env-less rower.
+// silently land an env-less worker.
 func parseSlugAndEnv(sub string, args []string) (string, []string, error) {
 	slug := ""
 	var env []string

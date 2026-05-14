@@ -111,7 +111,7 @@ func TestNotifyCoordinatorEnv_PokesProjectInbox(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", state)
 	t.Setenv("WT_PROJECT", "myproject")
-	t.Setenv("SPORE_TASK_INBOX", filepath.Join(t.TempDir(), "rower-slug", "inbox"))
+	t.Setenv("SPORE_TASK_INBOX", filepath.Join(t.TempDir(), "worker-slug", "inbox"))
 
 	if err := NotifyCoordinatorEnv(); err != nil {
 		t.Fatalf("NotifyCoordinatorEnv: %v", err)

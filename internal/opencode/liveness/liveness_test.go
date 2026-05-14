@@ -19,7 +19,7 @@ func TestProbe_MidStreamGraceCountsAsOk(t *testing.T) {
 	}
 	rs := Probe(now, Config{}, "alpha", stats, 0)
 	if rs.Stuck {
-		t.Fatalf("rower in mid-stream grace must not be stuck: %+v", rs)
+		t.Fatalf("worker in mid-stream grace must not be stuck: %+v", rs)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestProbe_NoAssistantTurnIsStuck(t *testing.T) {
 	stats := SessionStats{} // no rows
 	rs := Probe(now, Config{}, "alpha", stats, 0)
 	if !rs.Stuck {
-		t.Errorf("rower with no assistant turn ever must be stuck")
+		t.Errorf("worker with no assistant turn ever must be stuck")
 	}
 	if rs.Session != "(none)" {
 		t.Errorf("Session = %q, want (none)", rs.Session)

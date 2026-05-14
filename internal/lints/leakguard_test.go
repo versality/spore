@@ -118,6 +118,32 @@ func TestLeakGuard_ExtraTerms(t *testing.T) {
 	}
 }
 
+func TestLeakGuard_RowerWordBoundary(t *testing.T) {
+	root := newTestRepo(t, map[string]string{
+		"docs/clean.md": "Kagi browser session; narrower form; grower of plants.\n",
+		"docs/leak.md":  "stale rower reference in this line\n",
+	})
+	issues, err := LeakGuard{}.Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	var clean, leak int
+	for _, i := range issues {
+		switch i.Path {
+		case "docs/clean.md":
+			clean++
+		case "docs/leak.md":
+			leak++
+		}
+	}
+	if clean != 0 {
+		t.Errorf("expected zero hits on browser/narrower/grower (got %d)", clean)
+	}
+	if leak == 0 {
+		t.Errorf("expected rower hit in docs/leak.md")
+	}
+}
+
 func TestLeakGuard_SkipsBinaryAndUnknownExts(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
 		"assets/x.png": "fake-png-skyhelm-bytes\n",

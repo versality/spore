@@ -5,12 +5,19 @@
 // package avoids an import cycle).
 package leakdict
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+	"sync"
+)
 
 // Dictionary is the canonical list of terms that must not appear in
-// spore source / commit messages. Matched case-insensitively as
-// substrings; the terms are long enough or distinctive enough that
-// false positives are very unlikely.
+// spore source / commit messages. Matched case-insensitively. Terms
+// composed entirely of word characters (letters, digits, underscore)
+// are matched with word boundaries so common English substrings do
+// not false-fire (e.g. "rower" must not match "browser" or
+// "narrower"). Terms with non-word characters (e.g. paths, hyphenated
+// slugs) are matched as plain substrings.
 var Dictionary = []string{
 	"skyhelm",
 	"skywing",
@@ -25,10 +32,9 @@ var Dictionary = []string{
 	"helm-coord",
 	"/home/sky/nix-config",
 	"~/projects/nix-config",
+	"rower",
 }
 
-// dictionaryLower caches the lowercased dictionary for the hot scan
-// path.
 var dictionaryLower = func() []string {
 	out := make([]string, len(Dictionary))
 	for i, t := range Dictionary {
@@ -36,6 +42,31 @@ var dictionaryLower = func() []string {
 	}
 	return out
 }()
+
+var patternCache sync.Map // lowercased term -> *regexp.Regexp
+
+func patternFor(lowerTerm string) *regexp.Regexp {
+	if r, ok := patternCache.Load(lowerTerm); ok {
+		return r.(*regexp.Regexp)
+	}
+	quoted := regexp.QuoteMeta(lowerTerm)
+	if isWordChar(lowerTerm[0]) {
+		quoted = `\b` + quoted
+	}
+	if isWordChar(lowerTerm[len(lowerTerm)-1]) {
+		quoted = quoted + `\b`
+	}
+	r := regexp.MustCompile(`(?i)` + quoted)
+	patternCache.Store(lowerTerm, r)
+	return r
+}
+
+func isWordChar(b byte) bool {
+	return b == '_' ||
+		(b >= '0' && b <= '9') ||
+		(b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z')
+}
 
 // FormFor returns the canonical (mixed-case) dictionary entry for a
 // lowercased term. Falls back to the input if no match.
@@ -63,14 +94,13 @@ func Merge(extra []string) []string {
 	return out
 }
 
-// ScanLine returns every dictionary term that appears (case-
-// insensitively) in line. Empty result means clean.
+// ScanLine returns every dictionary term that appears in line. Empty
+// result means clean.
 func ScanLine(line string, extra []string) []string {
 	terms := Merge(extra)
-	lower := strings.ToLower(line)
 	var hits []string
 	for _, term := range terms {
-		if strings.Contains(lower, term) {
+		if patternFor(term).MatchString(line) {
 			hits = append(hits, FormFor(term))
 		}
 	}
@@ -82,9 +112,8 @@ func ScanLine(line string, extra []string) []string {
 // commits introducing a leak.
 func ScanMessage(msg string, extra []string) string {
 	terms := Merge(extra)
-	lower := strings.ToLower(msg)
 	for _, term := range terms {
-		if strings.Contains(lower, term) {
+		if patternFor(term).MatchString(msg) {
 			return FormFor(term)
 		}
 	}

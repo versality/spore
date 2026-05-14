@@ -10,7 +10,7 @@ import (
 
 // IdleReapThreshold is how long a tmux session must sit without
 // activity before pause/block reaps it. Sessions younger than this
-// are kept alive: a mid-tool-call rower or a pane the operator just
+// are kept alive: a mid-tool-call worker or a pane the operator just
 // stopped typing into is not "abandoned". Override via
 // SPORE_IDLE_REAP_SECS for tests / operator tuning.
 const IdleReapThreshold = 5 * time.Minute

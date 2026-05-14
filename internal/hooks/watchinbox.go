@@ -29,7 +29,7 @@ func WatchInbox(slug string) error {
 // WatchInboxAt is the env-driven Stop-hook entry point. It targets
 // inboxDir directly instead of computing it from a slug, so callers
 // like `spore hooks watch-inbox` (no positional) can pass
-// $SPORE_TASK_INBOX, which the consumer harness sets per spawn (rower:
+// $SPORE_TASK_INBOX, which the consumer harness sets per spawn (worker:
 // $WT_STATE/<slug>/inbox; coordinator: $SPORE_COORDINATOR_STATE_DIR/<project>/inbox).
 func WatchInboxAt(inboxDir string) error {
 	return watchInboxAt(inboxDir, os.Stdout, os.Stderr, defaultWatchOpts())

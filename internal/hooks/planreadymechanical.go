@@ -15,13 +15,13 @@ import (
 )
 
 // PlanReadyMechanical implements the Stop-hook mechanical fix for the
-// "rower wrote a ## Plan section but never told the coordinator" wedge.
+// "worker wrote a ## Plan section but never told the coordinator" wedge.
 // When tasks/<slug>.md has a Plan section and the coordinator inbox
 // holds no `plan ready: <slug>` envelope yet, the hook drops one in.
 // All decision misses (no file, no Plan, not active, tell already
 // recorded) exit silently; only real I/O failures bubble out.
 //
-// slug names the task (from $SPORE_TASK_SLUG); worktree is the rower's
+// slug names the task (from $SPORE_TASK_SLUG); worktree is the worker's
 // CWD that contains tasks/<slug>.md; project keys the coordinator inbox
 // (from $WT_PROJECT).
 func PlanReadyMechanical(slug, worktree, project string) error {
@@ -59,7 +59,7 @@ func PlanReadyMechanical(slug, worktree, project string) error {
 	}
 
 	body_ := fmt.Sprintf(
-		"plan ready: %s (auto-emitted by plan-ready-mechanical hook; rower wrote Plan but did not post)",
+		"plan ready: %s (auto-emitted by plan-ready-mechanical hook; worker wrote Plan but did not post)",
 		slug,
 	)
 	return writeCoordinatorTell(inbox, body_)
@@ -68,7 +68,7 @@ func PlanReadyMechanical(slug, worktree, project string) error {
 // PlanReadyMechanicalEnv is the env-driven entry point for the Stop
 // hook. Reads $SPORE_TASK_SLUG, $WT_PROJECT, and uses os.Getwd() for the
 // worktree. Returns nil noop if any required input is missing so the
-// hook stays silent in non-rower contexts.
+// hook stays silent in non-worker contexts.
 func PlanReadyMechanicalEnv() error {
 	slug := os.Getenv("SPORE_TASK_SLUG")
 	project := os.Getenv("WT_PROJECT")

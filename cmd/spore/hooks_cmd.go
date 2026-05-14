@@ -13,7 +13,7 @@ import (
 	"github.com/versality/spore/internal/hooks/contexttee"
 	"github.com/versality/spore/internal/hooks/prfinish"
 	"github.com/versality/spore/internal/hooks/pushpending"
-	"github.com/versality/spore/internal/hooks/rowercontinue"
+	"github.com/versality/spore/internal/hooks/workercontinue"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
 
@@ -51,7 +51,7 @@ func runHooks(args []string) int {
 		return runHooksNotifyCoordinator(rest)
 	case "plan-ready-mechanical":
 		return runHooksPlanReadyMechanical(rest)
-	case "rower-continue":
+	case "worker-continue":
 		return runHooksRowerContinue(rest)
 	case "codex":
 		return runHooksCodex(rest)
@@ -132,10 +132,10 @@ func runHooksStop() int {
 }
 
 // runHooksWtMergeMechanical is the M1 Stop-hook entry point: when a
-// claude rower stops idle on its wt/<slug> branch with shipped-but-
+// claude worker stops idle on its wt/<slug> branch with shipped-but-
 // unmerged commits and a clean tree, exit 2 with a deterministic
 // nudge to run `wt merge` (or write the next step and continue).
-// Otherwise exit 0 silently. See docs/todo/rower-lifecycle-fsm.md
+// Otherwise exit 0 silently. See docs/todo/worker-lifecycle-fsm.md
 // section 9.
 func runHooksWtMergeMechanical() int {
 	req, err := readHookRequest()
@@ -151,10 +151,10 @@ func runHooksWtMergeMechanical() int {
 }
 
 // runHooksPushPending is the M-finish-B Stop-hook entry point: when a
-// rower idles after `wt merge` has fast-forwarded local main but
+// worker idles after `wt merge` has fast-forwarded local main but
 // origin/main is still behind, exit 2 with a deterministic nudge to
 // run `git push` (or `wt ship` once it lands). Otherwise exit 0
-// silently. See tasks/spore-rower-finish-contract.md section 5.
+// silently. See tasks/spore-worker-finish-contract.md section 5.
 func runHooksPushPending() int {
 	req, err := readHookRequest()
 	if err != nil {
@@ -169,10 +169,10 @@ func runHooksPushPending() int {
 }
 
 // runHooksPRFinish is the M-finish-C Stop-hook entry point: when a
-// rower idles on wt/<slug>, inspect the matching PR via `gh pr view`
+// worker idles on wt/<slug>, inspect the matching PR via `gh pr view`
 // and exit 2 with a deterministic next-step prompt (merge / rebase /
 // fix CI) when the PR needs one. Otherwise exit 0 silently. See
-// tasks/spore-rower-finish-contract.md section 5.
+// tasks/spore-worker-finish-contract.md section 5.
 func runHooksPRFinish() int {
 	req, err := readHookRequest()
 	if err != nil {
@@ -317,12 +317,12 @@ func runHooksPlanReadyMechanical(args []string) int {
 
 func runHooksRowerContinue(args []string) int {
 	if len(args) != 0 {
-		fmt.Fprintln(os.Stderr, "spore hooks rower-continue: takes no args")
+		fmt.Fprintln(os.Stderr, "spore hooks worker-continue: takes no args")
 		return 2
 	}
-	res, err := rowercontinue.RunEnv()
+	res, err := workercontinue.RunEnv()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "spore hooks rower-continue:", err)
+		fmt.Fprintln(os.Stderr, "spore hooks worker-continue:", err)
 		return 1
 	}
 	if res.ShouldFire {

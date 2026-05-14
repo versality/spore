@@ -42,8 +42,8 @@ func TestStateDir(t *testing.T) {
 
 func TestStatePath(t *testing.T) {
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", "/srv/state")
-	got := StatePath("rower-watch.json")
-	want := filepath.Join("/srv/state", "rower-watch.json")
+	got := StatePath("worker-watch.json")
+	want := filepath.Join("/srv/state", "worker-watch.json")
 	if got != want {
 		t.Fatalf("StatePath = %q, want %q", got, want)
 	}

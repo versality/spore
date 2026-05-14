@@ -1,6 +1,6 @@
-// Package wtmergemechanical implements M1 of the rower-lifecycle FSM
-// (docs/todo/rower-lifecycle-fsm.md section 9): a Claude Stop-hook
-// that fires exit 2 with a merge nudge when a rower idles on its
+// Package wtmergemechanical implements M1 of the worker-lifecycle FSM
+// (docs/todo/worker-lifecycle-fsm.md section 9): a Claude Stop-hook
+// that fires exit 2 with a merge nudge when a worker idles on its
 // wt/<slug> branch with shipped-but-unmerged commits and a clean
 // working tree.
 //
@@ -9,10 +9,10 @@
 //  1. unmerged := task.UnmergedCommits(projectRoot, "wt/<slug>") > 0
 //  2. git -C <worktree> status --porcelain is empty
 //  3. <worktree>'s git-dir contains no MERGE_HEAD, rebase-merge, or rebase-apply
-//  4. agentpane.Classify on the rower pane reports "idle"
+//  4. agentpane.Classify on the worker pane reports "idle"
 //
 // SPORE_TASK_SLUG drives the branch + session lookup; without it the
-// hook is a no-op (the firing process is not a known rower).
+// hook is a no-op (the firing process is not a known worker).
 package wtmergemechanical
 
 import (
@@ -71,7 +71,7 @@ func Run(req hooks.Request, deps Deps) Result {
 	}
 	worktree := req.CWD
 	if worktree == "" {
-		// Last-resort: assume the rower is running inside its worktree.
+		// Last-resort: assume the worker is running inside its worktree.
 		worktree = filepath.Join(projectRoot, ".worktrees", slug)
 	}
 

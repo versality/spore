@@ -1,5 +1,5 @@
 // Package consumerclaim parses and scans `consumer-claims:` task
-// frontmatter entries (tasks/spore-rower-finish-contract.md section
+// frontmatter entries (tasks/spore-worker-finish-contract.md section
 // 4). A claim names a downstream consumer repo plus a mechanical
 // signal that proves the consumer has caught up to a spore lift:
 // either a `path` that must no longer exist, or a `grep` pattern that

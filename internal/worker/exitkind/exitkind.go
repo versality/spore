@@ -1,4 +1,4 @@
-// Package exitkind classifies a rower wrapper's exit shape into one of
+// Package exitkind classifies a worker wrapper's exit shape into one of
 // four kinds so the operator-visible signal (agent.log exit line +
 // coordinator tell) names the cause directly instead of leaving
 // operators to re-derive it from rc.
@@ -6,12 +6,12 @@
 // The four kinds collapse three rc-shapes that the wrapper layer used
 // to lump together as "rc=129":
 //
-//   - lifecycle: the rower ran its clean-exit step (e.g. tmux
+//   - lifecycle: the worker ran its clean-exit step (e.g. tmux
 //     kill-session) which SIGHUP'd the wrapper. Detected by the
-//     clean-exit marker the rower writes BEFORE the kill. This is the
+//     clean-exit marker the worker writes BEFORE the kill. This is the
 //     normal exit shape, not a crash.
 //   - sighup-external: rc=129 with NO clean-exit marker. Something
-//     other than the rower tore down the pty (external kill-session,
+//     other than the worker tore down the pty (external kill-session,
 //     pane teardown by a sibling script, tmux server signal).
 //   - crash-rc<n>: any non-zero rc that isn't 129 (the agent itself
 //     bailed: agent crash, OOM, exec failure). The rc suffix is grep
@@ -27,7 +27,7 @@ import (
 )
 
 // Classify returns the kind string for a wrapper exit. markerPath is
-// the path the rower writes before tearing down the pty; empty or
+// the path the worker writes before tearing down the pty; empty or
 // missing means no lifecycle marker. The classifier never reads the
 // marker contents; presence is the signal.
 func Classify(rc int, markerPath string) string {

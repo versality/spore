@@ -124,7 +124,7 @@ func writeUnread(t *testing.T, projectRoot, slug string) {
 }
 
 func TestFleetStatusReportsDeadPane(t *testing.T) {
-	session := "rower project/dead-pane [codex-high]"
+	session := "worker project/dead-pane [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"dead-pane": taskAgentSession("dead-pane", "active", "thishost", "codex", session),
@@ -155,8 +155,8 @@ func TestFleetStatusReportsDeadPane(t *testing.T) {
 }
 
 func TestFleetStatusDistinguishesCodexIdleAndRunning(t *testing.T) {
-	idleSession := "rower project/codex-idle [codex-medium]"
-	runningSession := "rower project/codex-running [codex-high]"
+	idleSession := "worker project/codex-idle [codex-medium]"
+	runningSession := "worker project/codex-running [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"codex-idle":    taskAgentSession("codex-idle", "active", "thishost", "codex", idleSession),
@@ -197,7 +197,7 @@ func TestFleetStatusDistinguishesCodexIdleAndRunning(t *testing.T) {
 }
 
 func TestFleetStatusReportsIdleCodexUnreadInbox(t *testing.T) {
-	session := "rower project/codex-idle-unread [codex-high]"
+	session := "worker project/codex-idle-unread [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"codex-idle-unread": taskAgentSession("codex-idle-unread", "active", "thishost", "codex", session),
@@ -233,7 +233,7 @@ func TestFleetStatusReportsIdleCodexUnreadInbox(t *testing.T) {
 }
 
 func TestFleetStatusDoesNotCountBlockedSessionActiveLive(t *testing.T) {
-	session := "rower project/blocked-task [codex-high]"
+	session := "worker project/blocked-task [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"blocked-task": taskAgentSession("blocked-task", "blocked", "thishost", "codex", session),
@@ -265,7 +265,7 @@ func TestFleetStatusDoesNotCountBlockedSessionActiveLive(t *testing.T) {
 }
 
 func TestFleetStatusReportsCodexInterruptedPaneAsDead(t *testing.T) {
-	session := "rower project/codex-interrupted [codex-high]"
+	session := "worker project/codex-interrupted [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"codex-interrupted": taskAgentSession("codex-interrupted", "active", "thishost", "codex", session),
@@ -299,7 +299,7 @@ func TestFleetStatusReportsCodexInterruptedPaneAsDead(t *testing.T) {
 }
 
 func TestFleetStatusReportsInterruptedClaudePaneAsIdle(t *testing.T) {
-	session := "rower project/claude-interrupted [claude-opus]"
+	session := "worker project/claude-interrupted [claude-opus]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"claude-interrupted": taskAgentSession("claude-interrupted", "active", "thishost", "claude", session),
@@ -333,7 +333,7 @@ func TestFleetStatusReportsInterruptedClaudePaneAsIdle(t *testing.T) {
 }
 
 func TestFleetStatusReportsClaudeAtEmptyPromptAsIdle(t *testing.T) {
-	session := "rower project/claude-idle [claude-opus]"
+	session := "worker project/claude-idle [claude-opus]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"claude-idle": taskAgentSession("claude-idle", "active", "thishost", "claude", session),
@@ -372,13 +372,13 @@ func TestFleetStatusReportsClaudeAtEmptyPromptAsIdle(t *testing.T) {
 // gets classified idle, not running. This is the false-positive the
 // operator hit before the lift.
 func TestFleetStatusReportsClaudeAtPastedBriefAsIdle(t *testing.T) {
-	session := "rower project/claude-pasted [claude-opus]"
+	session := "worker project/claude-pasted [claude-opus]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"claude-pasted": taskAgentSession("claude-pasted", "active", "thishost", "claude", session),
 		},
 	})
-	briefPrompt := "❯ ---\n  slug: rower-claim\n  title: claim some thing\n  status: active\n  ---\n\n  Hello, please do the thing described above."
+	briefPrompt := "❯ ---\n  slug: worker-claim\n  title: claim some thing\n  status: active\n  ---\n\n  Hello, please do the thing described above."
 	capture := strings.Join([]string{
 		"  ctx 33k / 120k (27%) unknown",
 		"",
@@ -416,7 +416,7 @@ func TestFleetStatusReportsClaudeAtPastedBriefAsIdle(t *testing.T) {
 }
 
 func TestFleetStatusReportsClaudeWithSpinnerAsRunning(t *testing.T) {
-	session := "rower project/claude-running [claude-opus]"
+	session := "worker project/claude-running [claude-opus]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"claude-running": taskAgentSession("claude-running", "active", "thishost", "claude", session),
@@ -443,12 +443,12 @@ func TestFleetStatusReportsClaudeWithSpinnerAsRunning(t *testing.T) {
 		t.Errorf("stdout=%q", got)
 	}
 	if strings.Contains(got, "claude-idle") {
-		t.Errorf("running rower wrongly flagged idle: %s", got)
+		t.Errorf("running worker wrongly flagged idle: %s", got)
 	}
 }
 
 func TestFleetStatusReportsClaudeRunningToolAsRunning(t *testing.T) {
-	session := "rower project/claude-tool [claude-opus]"
+	session := "worker project/claude-tool [claude-opus]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"claude-tool": taskAgentSession("claude-tool", "active", "thishost", "claude", session),
@@ -476,7 +476,7 @@ func TestFleetStatusReportsClaudeRunningToolAsRunning(t *testing.T) {
 }
 
 func TestFleetStatusFlagsClaudeIdleWithUnreadInbox(t *testing.T) {
-	session := "rower project/claude-idle-unread [claude-opus]"
+	session := "worker project/claude-idle-unread [claude-opus]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"claude-idle-unread": taskAgentSession("claude-idle-unread", "active", "thishost", "claude", session),
@@ -512,7 +512,7 @@ func TestFleetStatusFlagsClaudeIdleWithUnreadInbox(t *testing.T) {
 }
 
 func TestFleetStatusSuppressesFreshWakePending(t *testing.T) {
-	session := "rower project/codex-pending [codex-high]"
+	session := "worker project/codex-pending [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"codex-pending": taskAgentSession("codex-pending", "active", "thishost", "codex", session),
@@ -549,7 +549,7 @@ func TestFleetStatusSuppressesFreshWakePending(t *testing.T) {
 }
 
 func TestFleetStatusReportsExpiredWakePendingAsStuck(t *testing.T) {
-	session := "rower project/codex-expired [codex-high]"
+	session := "worker project/codex-expired [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"codex-expired": taskAgentSession("codex-expired", "active", "thishost", "codex", session),
@@ -597,7 +597,7 @@ func TestFleetStatusReportsExpiredWakePendingAsStuck(t *testing.T) {
 }
 
 func TestFleetStatusWakePendingTTLOverride(t *testing.T) {
-	session := "rower project/codex-expired [codex-high]"
+	session := "worker project/codex-expired [codex-high]"
 	s := newSetup(t, map[string]map[string]string{
 		"project": {
 			"codex-expired": taskAgentSession("codex-expired", "active", "thishost", "codex", session),

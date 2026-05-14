@@ -1,10 +1,10 @@
-// Package rowercontinue is the rower-side Stop-hook stage that
-// refuses to let a rower idle when its task is still active and
+// Package workercontinue is the worker-side Stop-hook stage that
+// refuses to let a worker idle when its task is still active and
 // nothing blocks progress. It runs after plan-ready-mechanical
 // (so a freshly-emitted "plan ready: <slug>" suppresses it via
 // the plan-pending-ack check) and before watch-inbox (so a fire
 // short-circuits the long inotify wait).
-package rowercontinue
+package workercontinue
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ type Result struct {
 	Message    string
 }
 
-const reminder = "ROWER STILL ACTIVE: tasks/%s.md is status=active and no blocker is recorded " +
+const reminder = "WORKER STILL ACTIVE: tasks/%s.md is status=active and no blocker is recorded " +
 	"(no unread inbox, no plan ack pending, no token wrap). " +
 	"Resume work on the brief, or flip status to done/blocked with reason.\n"
 
@@ -123,7 +123,7 @@ func Check(cfg Config) (Result, error) {
 
 // Run wraps Check and persists the ledger marker on a fire so the
 // same fingerprint does not double-fire on the next Stop without
-// rower progress.
+// worker progress.
 func Run(cfg Config) (Result, error) {
 	cfg = cfg.defaults()
 	res, err := Check(cfg)
@@ -141,8 +141,8 @@ func Run(cfg Config) (Result, error) {
 	return res, nil
 }
 
-// RunEnv reads the rower env and dispatches to Run. Silent no-op
-// outside a rower context so the Stop chain stays clean.
+// RunEnv reads the worker env and dispatches to Run. Silent no-op
+// outside a worker context so the Stop chain stays clean.
 func RunEnv() (Result, error) {
 	slug := os.Getenv("SPORE_TASK_SLUG")
 	project := os.Getenv("WT_PROJECT")
@@ -212,7 +212,7 @@ func defaultLedgerDir() string {
 	if base == "" {
 		return ""
 	}
-	return filepath.Join(base, "spore", "rower-continue")
+	return filepath.Join(base, "spore", "worker-continue")
 }
 
 func hasUnreadInbox(dir string) (bool, error) {

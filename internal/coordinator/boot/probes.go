@@ -39,8 +39,8 @@ type probeDef struct {
 }
 
 func probeDefs(cfg Config) []probeDef {
-	openCodeLive := filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh")
-	stopErrors := filepath.Join(cfg.WTState, "rower-stop-errors.jsonl")
+	openCodeLive := filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh")
+	stopErrors := filepath.Join(cfg.WTState, "worker-stop-errors.jsonl")
 
 	return []probeDef{
 		{
@@ -65,7 +65,7 @@ func probeDefs(cfg Config) []probeDef {
 			Run: func() (int, string) { return cfg.Exec("skyhelm-sla-scanner") },
 		},
 		{
-			Name: "opencode-liveness", Title: "opencode rower liveness", Mode: ModeSilentOnOK,
+			Name: "opencode-liveness", Title: "opencode worker liveness", Mode: ModeSilentOnOK,
 			OKShort: "opencode liveness",
 			Run:     func() (int, string) { return cfg.Exec(openCodeLive) },
 		},
@@ -90,8 +90,8 @@ func probeDefs(cfg Config) []probeDef {
 			Run:     func() (int, string) { return cfg.Exec("skyhelm-idle-watchdog") },
 		},
 		{
-			Name: "rower-stop-errors", Title: "rower Stop hook errors", Mode: ModeSilentOnOK,
-			OKShort: "rower stop errors",
+			Name: "worker-stop-errors", Title: "worker Stop hook errors", Mode: ModeSilentOnOK,
+			OKShort: "worker stop errors",
 			Run:     func() (int, string) { return probeStopErrors(stopErrors) },
 		},
 		{
@@ -131,7 +131,7 @@ func firstNonEmptyLine(s string) string {
 	return ""
 }
 
-// probeStopErrors emits a `tail -n 5` snapshot of the rower-stop-errors
+// probeStopErrors emits a `tail -n 5` snapshot of the worker-stop-errors
 // ledger when it has any content. An empty / missing ledger is silent.
 func probeStopErrors(path string) (int, string) {
 	info, err := os.Stat(path)
@@ -147,7 +147,7 @@ func probeStopErrors(path string) (int, string) {
 		lines = lines[len(lines)-5:]
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "unresolved rower Stop hook errors from %s:\n", path)
+	fmt.Fprintf(&b, "unresolved worker Stop hook errors from %s:\n", path)
 	for _, line := range lines {
 		fmt.Fprintln(&b, line)
 	}

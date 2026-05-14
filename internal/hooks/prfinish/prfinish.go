@@ -1,6 +1,6 @@
-// Package prfinish implements M-finish-C of the rower ship-cycle
-// contract (tasks/spore-rower-finish-contract.md section 5): a Stop
-// hook that fires exit 2 when a rower idles on a wt/<slug> branch
+// Package prfinish implements M-finish-C of the worker ship-cycle
+// contract (tasks/spore-worker-finish-contract.md section 5): a Stop
+// hook that fires exit 2 when a worker idles on a wt/<slug> branch
 // whose pushed PR (or pushed-direct-to-main commit) needs a
 // deterministic next action.
 //
@@ -15,12 +15,12 @@
 //   - state=OPEN, mergeable=UNKNOWN:      exit 0 (gh has not computed; wait).
 //   - state=MERGED:                       exit 0 (M-finish-D consumer-claim
 //     scan will fire on the next stop).
-//   - state=CLOSED (not merged):          exit 0 (rower closed the PR; no
+//   - state=CLOSED (not merged):          exit 0 (worker closed the PR; no
 //     further automatic action).
 //
 // When `gh pr view wt/<slug>` finds no PR, the direct-push branch
 // kicks in instead (see decideDirectPush): if the worktree's HEAD sha
-// is reachable from origin/main, the rower has already merged + pushed
+// is reachable from origin/main, the worker has already merged + pushed
 // without opening a PR, so the hook gates exit on GH Actions runs for
 // that sha. Pre-push (sha not in origin/main) stays a silent exit 0
 // because pushpending / wtmerge-mechanical already cover those states.
@@ -134,7 +134,7 @@ func Run(req hooks.Request, deps Deps) Result {
 	branch := "wt/" + slug
 	pr, found, err := deps.GH.ViewPR(projectRoot, branch)
 	if err != nil {
-		// gh failures degrade to silent exit 0; the rower will hit
+		// gh failures degrade to silent exit 0; the worker will hit
 		// pushpending or wtmerge-mechanical first if work is truly
 		// unshipped.
 		return Result{}
@@ -161,7 +161,7 @@ func decideDirectPush(projectRoot, worktree string, deps Deps) Result {
 	}
 	inMain, err := deps.IsAncestor(projectRoot, sha, "origin/main")
 	if err != nil || !inMain {
-		// Sha not yet on origin/main: rower is pre-push (pushpending /
+		// Sha not yet on origin/main: worker is pre-push (pushpending /
 		// wtmerge-mechanical will fire instead) or has nothing to ship.
 		return Result{}
 	}
@@ -194,7 +194,7 @@ func decideDirectPush(projectRoot, worktree string, deps Deps) Result {
 			failed = append(failed, r)
 		default:
 			// Unknown conclusion on a completed run: treat as failure
-			// so the rower investigates rather than ships silently.
+			// so the worker investigates rather than ships silently.
 			failed = append(failed, r)
 		}
 	}
@@ -219,14 +219,14 @@ func decideDirectPush(projectRoot, worktree string, deps Deps) Result {
 	if hasPending {
 		return Result{}
 	}
-	// All runs completed successfully: rower can stop cleanly.
+	// All runs completed successfully: worker can stop cleanly.
 	return Result{}
 }
 
 func decideMerged(projectRoot, slug string, pr PRState, deps Deps) Result {
 	m, err := deps.ReadTaskMeta(projectRoot, slug)
 	if err != nil {
-		// No task file or unreadable: nothing to scrub; let the rower flip done.
+		// No task file or unreadable: nothing to scrub; let the worker flip done.
 		return Result{}
 	}
 	if len(m.ConsumerClaims) == 0 {
@@ -362,7 +362,7 @@ func isAncestorFromGit(projectRoot, sha, ref string) (bool, error) {
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
 		// Exit 1 = not ancestor; exit 128 = bad ref (e.g. origin/main
-		// missing). Treat both as "not in main" and let the rower flow
+		// missing). Treat both as "not in main" and let the worker flow
 		// degrade silently rather than spamming on a fresh repo.
 		if ee.ExitCode() == 1 || ee.ExitCode() == 128 {
 			return false, nil

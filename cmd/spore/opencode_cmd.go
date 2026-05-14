@@ -42,15 +42,15 @@ Usage:
   spore opencode <subcommand> [flags]
 
 Subcommands:
-  fleet-stop   Pause every active opencode rower on this host, then
+  fleet-stop   Pause every active opencode worker on this host, then
                sweep any orphan opencode process. Idempotent kill
-               switch when ollama serializes opencode rowers.
-  liveness     Probe active opencode rowers for stuckness. Exit 0
-               when every rower made progress in the last 10 min;
+               switch when ollama serializes opencode workers.
+  liveness     Probe active opencode workers for stuckness. Exit 0
+               when every worker made progress in the last 10 min;
                exit 2 when at least one is stuck.
 `
 
-const opencodeFleetStopUsage = `spore opencode fleet-stop - pause active opencode rowers + reap orphans
+const opencodeFleetStopUsage = `spore opencode fleet-stop - pause active opencode workers + reap orphans
 
 Usage:
   spore opencode fleet-stop [--root <path>]
@@ -59,7 +59,7 @@ Flags:
   --root   Project main root (default: $PWD).
 `
 
-const opencodeLivenessUsage = `spore opencode liveness - probe opencode rowers for stuckness
+const opencodeLivenessUsage = `spore opencode liveness - probe opencode workers for stuckness
 
 Usage:
   spore opencode liveness [--json] [--root <path>]

@@ -1,6 +1,6 @@
 // Package cutover mints a draft task brief in a consumer repo asking
 // it to catch up to a spore lift. Peer of internal/task/ship per
-// tasks/spore-rower-finish-contract.md section 6b.
+// tasks/spore-worker-finish-contract.md section 6b.
 //
 // One Mint per unresolved consumer-claim. The minted task lives at
 // <consumer-root>/tasks/consume-<source>-<feature>.md (or

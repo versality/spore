@@ -1,6 +1,6 @@
-// Package pushpending implements M-finish-B of the rower ship-cycle
-// contract (tasks/spore-rower-finish-contract.md section 5): a Stop
-// hook that fires exit 2 when a rower idles after `wt merge` has
+// Package pushpending implements M-finish-B of the worker ship-cycle
+// contract (tasks/spore-worker-finish-contract.md section 5): a Stop
+// hook that fires exit 2 when a worker idles after `wt merge` has
 // fast-forwarded local main but `origin/main` is still behind.
 //
 // Decision boundary (all must hold; else exit 0):
@@ -8,10 +8,10 @@
 //  1. UnpushedMainCommits(projectRoot) > 0  (local main ahead of origin/main).
 //  2. git -C <worktree> status --porcelain is empty.
 //  3. <worktree>'s git-dir contains no MERGE_HEAD, rebase-merge, or rebase-apply.
-//  4. agentpane.Classify on the rower pane reports "idle".
+//  4. agentpane.Classify on the worker pane reports "idle".
 //
 // SPORE_TASK_SLUG drives the session lookup; without it the hook is a
-// no-op (the firing process is not a known rower).
+// no-op (the firing process is not a known worker).
 package pushpending
 
 import (

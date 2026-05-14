@@ -79,7 +79,7 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 // Ensure makes sure the wt/<slug> branch, worktree, and tmux session
 // exist. Idempotent and status-preserving. Refuses when the task is
 // done. Used by the fleet reconciler to revive an active+no-tmux
-// rower without flipping its frontmatter. extraEnv mirrors Start.
+// worker without flipping its frontmatter. extraEnv mirrors Start.
 func Ensure(tasksDir, slug string, extraEnv []string) (string, error) {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
@@ -135,7 +135,7 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 // Pause flips an active task to paused. The worktree is left in
 // place; the tmux session is reaped only if it has been idle past
 // IdleReapThreshold (model exited, pane sitting at an empty prompt).
-// A mid-tool-call rower stays alive so the operator can attach and
+// A mid-tool-call worker stays alive so the operator can attach and
 // finish a thought. Refuses when the inbox has unread messages.
 func Pause(tasksDir, slug string) error {
 	if err := inboxGate(slug); err != nil {
@@ -316,7 +316,7 @@ func copyExtra(in map[string]string) map[string]string {
 // the soak window or when SPORE_EVIDENCE_WARN_ONLY=1 is set, blocking
 // verdicts are reduced to a stderr warning.
 // consumerClaimsGate enforces I11
-// (tasks/spore-rower-finish-contract.md section 3): a task with
+// (tasks/spore-worker-finish-contract.md section 3): a task with
 // `consumer-claims:` frontmatter cannot flip `done` until every claim
 // resolves clean (consumer no longer references the obsoleted thing)
 // or the operator passes --force. Skipped claims (consumer checkout
@@ -529,7 +529,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	// Wrap the agent command through sh -c so we can append the
 	// initial-prompt brief on launch (mirrors the old wt-task
 	// `agent_cmd -- "$(cat .wt/initial-prompt)"` pattern). Without
-	// this the claude TUI opens empty and the rower idles waiting
+	// this the claude TUI opens empty and the worker idles waiting
 	// for the operator to type. The conditional cat keeps the path
 	// no-op when the file is absent.
 	if strings.HasPrefix(strings.TrimSpace(agent), "claude") && !strings.Contains(agent, "--dangerously-skip-permissions") {

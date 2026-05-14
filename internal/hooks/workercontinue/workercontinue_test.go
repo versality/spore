@@ -1,4 +1,4 @@
-package rowercontinue
+package workercontinue
 
 import (
 	"encoding/json"

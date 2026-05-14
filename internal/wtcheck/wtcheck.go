@@ -1,6 +1,6 @@
 // Package wtcheck implements `spore wt-check`: the Go replacement
 // for the per-project `.wt/check.sh` step that wt-go's `wt merge`
-// runs after rebasing the rower branch onto main. The wrapper exists
+// runs after rebasing the worker branch onto main. The wrapper exists
 // so projects can keep their lint+test gate in Go instead of shipping
 // a bash trampoline; net-bash stays flat under the bash-net-positive
 // merge lint.

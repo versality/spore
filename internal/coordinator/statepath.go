@@ -21,7 +21,7 @@ func StateDir() string {
 }
 
 // StatePath returns a path inside StateDir for the named primitive.
-// Pass the bare filename (e.g. "rower-watch.json"); StatePath does
+// Pass the bare filename (e.g. "worker-watch.json"); StatePath does
 // not create the directory.
 func StatePath(name string) string {
 	return filepath.Join(StateDir(), name)

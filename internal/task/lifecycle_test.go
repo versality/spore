@@ -247,7 +247,7 @@ func TestDoneKillsFrontmatterSession(t *testing.T) {
 	// Pretend an external spawner registered a custom session name in
 	// the brief. The kernel-computed name "spore/<project>/demo"
 	// would never match; only the frontmatter value should.
-	customSession := "rower-demo-" + filepath.Base(t.TempDir())
+	customSession := "worker-demo-" + filepath.Base(t.TempDir())
 	body := "---\nstatus: active\nslug: demo\ntitle: Demo\nsession: " + customSession + "\n---\nbody\n"
 	taskPath := filepath.Join(tasksDir, slug+".md")
 	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {

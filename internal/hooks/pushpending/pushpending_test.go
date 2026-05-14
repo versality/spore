@@ -52,7 +52,7 @@ func newRepoFixture(t *testing.T, slug string, unpushedCommits int) repoFixture 
 		run(t, root, "git", "commit", "-q", "-m", "advance "+name)
 	}
 
-	// wt/<slug> branch + worktree (empty, parity with the rower setup).
+	// wt/<slug> branch + worktree (empty, parity with the worker setup).
 	branch := "wt/" + slug
 	run(t, root, "git", "branch", branch)
 	worktree := filepath.Join(root, ".worktrees", slug)

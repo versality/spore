@@ -5,7 +5,7 @@
 # QUIET_SUCCESS unset/empty: passthrough (exec the command directly).
 #
 # When the label starts with "build", the run takes a per-user flock
-# at "$XDG_RUNTIME_DIR/spore-build.lock" so concurrent rower fleets
+# at "$XDG_RUNTIME_DIR/spore-build.lock" so concurrent worker fleets
 # cannot fan out into N parallel builds. Nested invocations inherit
 # the lock fd and skip via SPORE_BUILD_LOCK_HELD=1.
 set -euo pipefail

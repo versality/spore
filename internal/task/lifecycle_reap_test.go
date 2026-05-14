@@ -29,7 +29,7 @@ func TestDoneKillsAllMatchingSlugSessions(t *testing.T) {
 	slug := "demo"
 	project := filepath.Base(repo)
 	// Recorded session: matches the wt-style "<icon> <project>/<slug> [tag]"
-	// shape the operator's idle haiku rower hit. Two sister sessions
+	// shape the operator's idle haiku worker hit. Two sister sessions
 	// drift the tier tag (haiku vs opus) and the spore-style prefix;
 	// Done must reap all three even though only one is in frontmatter.
 	recorded := "X " + project + "/" + slug + " [haiku]"

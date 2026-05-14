@@ -59,10 +59,10 @@ func Classify(capture CaptureFunc, target, agent string) (string, string) {
 	return "running", ""
 }
 
-// classifyClaudePane tells running from idle for a Claude Code rower.
+// classifyClaudePane tells running from idle for a Claude Code worker.
 // The TUI keeps the input box and mode bar visible even when no turn
 // is in flight, so pane process liveness alone is not enough: a
-// rower at an empty prompt, a "Interrupted ·" banner, or a
+// worker at an empty prompt, a "Interrupted ·" banner, or a
 // pasted-but-unsubmitted brief in the input area all look "alive" to
 // the pane but are idle to the operator. The rule is:
 //

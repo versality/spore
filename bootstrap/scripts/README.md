@@ -22,7 +22,7 @@ is unambiguous on its own (`auto-commit-tasks.sh <repo-root>`,
 - `quiet-run.sh` - `<label> <cmd...>` wrapper. With `QUIET_SUCCESS=1`
   captures output and only prints on non-zero exit. When the label
   starts with `build`, takes a per-user flock at
-  `$XDG_RUNTIME_DIR/spore-build.lock` so concurrent rower fleets do
+  `$XDG_RUNTIME_DIR/spore-build.lock` so concurrent worker fleets do
   not fan out into N parallel builds.
 - `report-main-worktree-dirty.sh [root]` - one-shot diagnostic that
   prints a short status block when the main checkout has local

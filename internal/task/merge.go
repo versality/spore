@@ -255,7 +255,7 @@ func mergeGateWorktree(projectRoot, slug, branch string) (string, func(), error)
 
 // logMergeOverride appends a JSONL row to
 // $STATE_DIR/merge-override.jsonl recording a --force-merge-red
-// bypass. Operators tail the ledger to spot rowers shipping red.
+// bypass. Operators tail the ledger to spot workers shipping red.
 // SPORE_MERGE_OVERRIDE_LOG overrides the path (used by tests).
 func logMergeOverride(projectRoot, slug, branch, reason string) error {
 	path := os.Getenv("SPORE_MERGE_OVERRIDE_LOG")

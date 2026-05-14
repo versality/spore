@@ -11,9 +11,9 @@ import (
 )
 
 // PlanFirstRequired rejects tasks/<slug>.md when effort=high|xhigh
-// (incl. very-high aliases) and the rower is live but the body has
+// (incl. very-high aliases) and the worker is live but the body has
 // no `## Plan` heading. The plan-first contract requires a Plan
-// section before any source edit on high-effort rowers.
+// section before any source edit on high-effort workers.
 //
 // Status filter: fires only for active|paused|blocked. draft is the
 // operator's minting window; parked is waiting on a scheduler trigger;

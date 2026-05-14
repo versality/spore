@@ -106,7 +106,7 @@ func TestRun_PausesEverySlug_KillsOrphans_WritesSummary(t *testing.T) {
 	if res.Killed != 2 || res.Orphans != 2 {
 		t.Errorf("Killed=%d Orphans=%d", res.Killed, res.Orphans)
 	}
-	want := "opencode-fleet-stop: paused 2 rowers (slugs: alpha,bravo) killed 2 orphan procs"
+	want := "opencode-fleet-stop: paused 2 workers (slugs: alpha,bravo) killed 2 orphan procs"
 	if got := res.Summary(); got != want {
 		t.Errorf("summary = %q, want %q", got, want)
 	}
@@ -145,7 +145,7 @@ func TestRun_PauseFailureFallsBackToSessionKill(t *testing.T) {
 	if killedSession != "spore/alpha" {
 		t.Errorf("killedSession = %q", killedSession)
 	}
-	want := "opencode-fleet-stop: paused 0 rowers (none) killed 0 orphan procs"
+	want := "opencode-fleet-stop: paused 0 workers (none) killed 0 orphan procs"
 	if got := res.Summary(); got != want {
 		t.Errorf("summary = %q, want %q", got, want)
 	}

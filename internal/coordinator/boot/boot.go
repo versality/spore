@@ -34,7 +34,7 @@ const (
 type Config struct {
 	StateDir string
 	WTState  string
-	Root     string // project root, used to find harness/opencode-rower-liveness.sh
+	Root     string // project root, used to find harness/opencode-worker-liveness.sh
 	LineCap  int
 	ByteCap  int
 	SLACap   int

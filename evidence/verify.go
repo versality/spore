@@ -109,7 +109,7 @@ func Verify(meta map[string]any, body string) (Verdict, []string) {
 	return Unknown, diags
 }
 
-// completionRe matches prose markers a rower writes when they think
+// completionRe matches prose markers a worker writes when they think
 // the work is done: "merged", "shipped", "all green", etc. Used to
 // distinguish suspect-hallucination (claims work) from unknown
 // (genuine ambiguity).

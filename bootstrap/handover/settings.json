@@ -64,7 +64,7 @@
           },
           {
             "type": "command",
-            "command": "/usr/local/bin/spore hooks rower-continue",
+            "command": "/usr/local/bin/spore hooks worker-continue",
             "timeout": 10
           },
           {

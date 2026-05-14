@@ -688,7 +688,7 @@ func runCoordinatorSpawn(args []string) int {
 func runCoordinatorBoot(args []string) int {
 	fs := flag.NewFlagSet("coordinator boot", flag.ContinueOnError)
 	stateDir := fs.String("state-dir", "", "skyhelm state dir (default $SKYHELM_STATE_DIR or ~/.local/state/skyhelm)")
-	root := fs.String("root", "", "harness root for opencode-rower-liveness.sh (default $SKYHELM_HARNESS_ROOT or cwd)")
+	root := fs.String("root", "", "harness root for opencode-worker-liveness.sh (default $SKYHELM_HARNESS_ROOT or cwd)")
 	lineCap := fs.Int("line-cap", 0, "state.md line cap (default 80, env SKYHELM_STATE_LINE_CAP)")
 	byteCap := fs.Int("byte-cap", 0, "state.md byte cap (default 8192, env SKYHELM_STATE_BYTE_CAP)")
 	slaCap := fs.Int("sla-cap", 0, "SLA stale-list cap (default 3, env SKYHELM_SLA_PRINT_CAP)")
@@ -702,7 +702,7 @@ func runCoordinatorBoot(args []string) int {
 	if *help || *helpLong {
 		fmt.Println("spore coordinator boot - run all skyhelm cold-boot probes in one call")
 		fmt.Println("  --state-dir PATH  skyhelm state dir")
-		fmt.Println("  --root PATH       harness root (resolves harness/opencode-rower-liveness.sh)")
+		fmt.Println("  --root PATH       harness root (resolves harness/opencode-worker-liveness.sh)")
 		fmt.Println("  --line-cap N      state.md line cap (default 80)")
 		fmt.Println("  --byte-cap N      state.md byte cap (default 8192)")
 		fmt.Println("  --sla-cap N       SLA stale-list cap (default 3)")
@@ -710,7 +710,7 @@ func runCoordinatorBoot(args []string) int {
 		fmt.Println("Emits one structured summary covering state.md (header + inline body),")
 		fmt.Println("wt task ls (diff vs prior boot), wt task fleet status, agents flag,")
 		fmt.Println("skyhelm-budget, skyhelm-sla-scanner, opencode liveness,")
-		fmt.Println("spore coordinator monitor + state-debt, idle-watchdog, rower stop")
+		fmt.Println("spore coordinator monitor + state-debt, idle-watchdog, worker stop")
 		fmt.Println("errors, and comm-feedback. Exit code is min(2, max(probe rcs)).")
 		return 0
 	}

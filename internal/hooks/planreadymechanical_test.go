@@ -87,7 +87,7 @@ func TestPlanReadyMechanical_NoopWhenTellAlreadyPresent(t *testing.T) {
 	}
 	existing := map[string]string{
 		"ts":     "2026-05-13T09:00:00+03:00",
-		"source": "rower",
+		"source": "worker",
 		"body":   "plan ready: " + slug,
 	}
 	raw, _ := json.Marshal(existing)
@@ -115,7 +115,7 @@ func TestPlanReadyMechanical_NoopWhenTellAlreadyInRead(t *testing.T) {
 	}
 	existing := map[string]string{
 		"ts":     "2026-05-13T09:00:00+03:00",
-		"source": "rower",
+		"source": "worker",
 		"body":   "plan ready: " + slug + " here is the plan",
 	}
 	raw, _ := json.Marshal(existing)

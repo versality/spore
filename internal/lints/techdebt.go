@@ -144,7 +144,7 @@ func readRulings(path string) (map[string]string, error) {
 
 // TaskDoneZeroCommits is the pre-merge gate that tasks/tech-debt-*.md
 // flipped to status=done with a `decision=fix` ruling row MUST have
-// at least one rower commit (Task=<slug> trailer) that touches files
+// at least one worker commit (Task=<slug> trailer) that touches files
 // outside the bookkeeping pair (the task file itself and the rulings
 // ledger).
 type TaskDoneZeroCommits struct {

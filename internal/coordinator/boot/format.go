@@ -69,7 +69,7 @@ func render(cfg Config, state StateInfo, probes []ProbeResult) string {
 	// otherwise contribute to the rollup line.
 	silent := []string{
 		"opencode-liveness", "coordinator-monitor", "reconcile-health",
-		"coordinator-state-debt", "idle-watchdog", "rower-stop-errors",
+		"coordinator-state-debt", "idle-watchdog", "worker-stop-errors",
 	}
 	for _, name := range silent {
 		for _, p := range probes {

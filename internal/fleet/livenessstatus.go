@@ -249,7 +249,7 @@ func inspectSession(session, agent string, panes []paneInfo, tr tmuxRunner) (sta
 // scanActiveRuntimes walks every project listed in the projects file,
 // reads each tasks/*.md, filters to status=active on the local host,
 // inspects the tmux state, and returns aggregated counts plus
-// per-rower details. Tasks without parseable frontmatter are skipped.
+// per-worker details. Tasks without parseable frontmatter are skipped.
 func scanActiveRuntimes(e livenessEnv) (runtimeStats, error) {
 	var stats runtimeStats
 	localHost := e.hostname()
@@ -348,8 +348,8 @@ func countUnreadAt(projectRoot, slug string) (int, error) {
 }
 
 // RunStatus is the exported entry point for `spore fleet status`. It
-// prints the wt-task-shape one-liner plus per-rower detail lines and
-// returns 0 on a clean fleet, 2 when any rower needs attention
+// prints the wt-task-shape one-liner plus per-worker detail lines and
+// returns 0 on a clean fleet, 2 when any worker needs attention
 // (dead/zombie/duplicates/idle-unread/idle-wake-stuck).
 func RunStatus(stdout, stderr io.Writer) (int, error) {
 	return runStatus(stdout, stderr, defaultLivenessEnv())

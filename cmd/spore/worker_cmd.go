@@ -19,13 +19,13 @@ Usage:
   spore worker <subcommand> [flags]
 
 Subcommands:
-  exit-kind       Classify a rower wrapper's exit shape into one of
+  exit-kind       Classify a worker wrapper's exit shape into one of
                   lifecycle | early-exit | sighup-external | crash-rc<n>
                   and (optionally) emit a single tell envelope to the
                   coordinator inbox so the coordinator gets one
-                  classified signal per rower end. Flags:
+                  classified signal per worker end. Flags:
                     --rc=<N>             wrapper's final rc (required)
-                    --marker=<path>      clean-exit marker the rower
+                    --marker=<path>      clean-exit marker the worker
                                          writes BEFORE its own teardown;
                                          presence means lifecycle even
                                          on rc=129
@@ -128,10 +128,10 @@ func runWorkerTokenMonitor(_ []string) int {
 // $SPORE_COORDINATOR_TELL_TARGET is set.
 const defaultTellTarget = "coordinator"
 
-// runWorkerExitKind classifies a rower wrapper exit and (optionally)
+// runWorkerExitKind classifies a worker wrapper exit and (optionally)
 // emits the single coordinator-bound tell that replaces the
-// four-ledger split (rower-voluntary-events.jsonl,
-// respawn-events.jsonl, rower-watch.json, agent.log). The classify is
+// four-ledger split (worker-voluntary-events.jsonl,
+// respawn-events.jsonl, worker-watch.json, agent.log). The classify is
 // unconditional so a caller can pipe the kind into agent.log even
 // when no tell goes out.
 func runWorkerExitKind(args []string) int {
@@ -146,7 +146,7 @@ func runWorkerExitKind(args []string) int {
 	)
 	fs.IntVar(&rc, "rc", -1, "wrapper final rc")
 	fs.StringVar(&marker, "marker", "", "clean-exit marker path")
-	fs.StringVar(&slug, "slug", "", "rower slug for the tell body")
+	fs.StringVar(&slug, "slug", "", "worker slug for the tell body")
 	fs.BoolVar(&tell, "tell-coordinator", false, "emit `wt task tell <dest>` envelope")
 	fs.StringVar(&target, "tell-target", "", "destination name for the tell (overrides $SPORE_COORDINATOR_TELL_TARGET)")
 	if err := fs.Parse(args); err != nil {

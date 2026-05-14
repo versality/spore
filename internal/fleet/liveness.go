@@ -58,7 +58,7 @@ func parsePanes(out string) []paneInfo {
 
 // agentShellCommands are the foreground commands a tmux pane reports
 // when the agent process has exited but the parent shell is still in
-// the pane. None of the supported rower agents ever sit at one of
+// the pane. None of the supported worker agents ever sit at one of
 // these as their normal foreground command, so seeing one in an
 // agent-named window is the zombie signal.
 var agentShellCommands = map[string]bool{

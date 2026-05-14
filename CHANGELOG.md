@@ -26,7 +26,7 @@
   from `$SPORE_HOOKS_CLAUDE_DIR` (default `<repo>/configs/claude`).
   Coordinator/operator binaries, the four scripts flagged for Go
   ports (`capture-command-signal`, `opencode-fleet-stop`,
-  `opencode-rower-liveness`, `merge-integrity-audit`), and the
+  `opencode-worker-liveness`, `merge-integrity-audit`), and the
   consumer-coupled bundle (`sweep-tech-debt`, `archive-aged-maybes`,
   `self-care`, `notify-attention`, `block-sources-inference`,
   `look-desk`, `look-web.mjs`, `plan-first-enforcement`,

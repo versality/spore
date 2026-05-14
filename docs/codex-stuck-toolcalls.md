@@ -2,7 +2,7 @@
 
 ## Problem
 
-Codex rowers can leave a turn with a `tool_use` envelope opened but no
+Codex workers can leave a turn with a `tool_use` envelope opened but no
 matching `tool_result` before Stop fires. The next turn starts with the
 pending call still in the rollout transcript, which either blocks new
 tool dispatch entirely or produces duplicate / conflicting effects when

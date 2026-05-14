@@ -133,7 +133,7 @@ func TestRunWorkerExitKindTellEnvelope(t *testing.T) {
 	args := []string{
 		"--rc=129",
 		"--marker=" + marker,
-		"--slug=spore-rower-exit-kind",
+		"--slug=spore-worker-exit-kind",
 		"--tell-coordinator",
 	}
 	if rc := runWorkerExitKind(args); rc != 0 {
@@ -145,7 +145,7 @@ func TestRunWorkerExitKindTellEnvelope(t *testing.T) {
 		t.Fatalf("read capture: %v", err)
 	}
 	got := strings.Split(strings.TrimRight(string(body), "\n"), "\n")
-	want := []string{"task", "tell", "coordinator", "spore-rower-exit-kind exit kind=lifecycle rc=129"}
+	want := []string{"task", "tell", "coordinator", "spore-worker-exit-kind exit kind=lifecycle rc=129"}
 	if len(got) != len(want) {
 		t.Fatalf("argv = %q, want %q", got, want)
 	}

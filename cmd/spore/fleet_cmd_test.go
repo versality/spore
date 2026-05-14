@@ -16,7 +16,7 @@ func TestIsCoordinatorSession(t *testing.T) {
 		{"empty inbox is not coordinator", "", state, false},
 		{"inbox exactly the state dir", state, state, true},
 		{"inbox under state dir", filepath.Join(state, "proj/inbox"), state, true},
-		{"inbox unrelated to state dir", "/tmp/rower-x/inbox", state, false},
+		{"inbox unrelated to state dir", "/tmp/worker-x/inbox", state, false},
 		{"trailing slash on state dir is normalised", filepath.Join(state, "proj/inbox"), state + "/", true},
 	}
 	for _, tc := range cases {

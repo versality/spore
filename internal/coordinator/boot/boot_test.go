@@ -57,9 +57,9 @@ func TestRunHealthyAllOK(t *testing.T) {
 		"skyhelm-budget summary": {0, "tokens 1000/1M\n"},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok\n"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok\n"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok\n"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 
 	r := Run(cfg)
@@ -78,7 +78,7 @@ func TestRunHealthyAllOK(t *testing.T) {
 	if !strings.Contains(r.Body, "\nok: agents on") {
 		t.Errorf("ok rollup missing 'agents on':\n%s", r.Body)
 	}
-	for _, want := range []string{"opencode liveness", "spore monitor", "state-debt", "idle watchdog", "rower stop errors", "comm-feedback (no)"} {
+	for _, want := range []string{"opencode liveness", "spore monitor", "state-debt", "idle watchdog", "worker stop errors", "comm-feedback (no)"} {
 		if !strings.Contains(r.Body, want) {
 			t.Errorf("ok rollup missing %q:\n%s", want, r.Body)
 		}
@@ -104,9 +104,9 @@ func TestRunOversizedStateMdTripsExit2(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 
 	r := Run(cfg)
@@ -130,9 +130,9 @@ func TestRunMissingStateMd(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 0 {
@@ -163,9 +163,9 @@ func TestRunTaskLSDiff(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 0 {
@@ -195,9 +195,9 @@ func TestRunSLAOverCapEmitsFooterAndSidecar(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {2, slaOut},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -232,9 +232,9 @@ func TestRunCommFeedbackPresentEmitsSection(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if !strings.Contains(r.Body, "## comm-feedback.ready") {
@@ -256,7 +256,7 @@ func TestRunRowerStopErrorsTailEmits(t *testing.T) {
 	if err := os.MkdirAll(cfg.WTState, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ledger := filepath.Join(cfg.WTState, "rower-stop-errors.jsonl")
+	ledger := filepath.Join(cfg.WTState, "worker-stop-errors.jsonl")
 	body := strings.Repeat(`{"slug":"x","err":"boom"}`+"\n", 7)
 	if err := os.WriteFile(ledger, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -268,16 +268,16 @@ func TestRunRowerStopErrorsTailEmits(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
 		t.Fatalf("worst=%d body=%s", r.WorstRC, r.Body)
 	}
-	if !strings.Contains(r.Body, "unresolved rower Stop hook errors from") {
-		t.Errorf("rower-stop-errors section absent:\n%s", r.Body)
+	if !strings.Contains(r.Body, "unresolved worker Stop hook errors from") {
+		t.Errorf("worker-stop-errors section absent:\n%s", r.Body)
 	}
 	// Tail-5 contract: must not contain a sixth line.
 	count := strings.Count(r.Body, `{"slug":"x","err":"boom"}`)
@@ -298,9 +298,9 @@ func TestRunWorstExitCapped(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -320,9 +320,9 @@ func TestRunAgentsStateFailureSurfacedAsSection(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -365,9 +365,9 @@ func TestRunReconcileHealthDirtyMainSurfacesSection(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -397,9 +397,9 @@ func TestRunReconcileHealthMissingFileSilent(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 0 {
@@ -435,9 +435,9 @@ func TestRunReconcileHealthStaleFiresSection(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 2 {
@@ -477,9 +477,9 @@ func TestRunReconcileHealthFleetDisabledSilent(t *testing.T) {
 		"skyhelm-budget summary": {0, ""},
 		"skyhelm-sla-scanner":    {0, ""},
 		"skyhelm-idle-watchdog":  {0, "ok"},
-		filepath.Join(cfg.Root, "harness", "opencode-rower-liveness.sh"): {0, ""},
-		"spore coordinator monitor":                                      {0, "ok"},
-		"spore coordinator state-debt":                                   {0, ""},
+		filepath.Join(cfg.Root, "harness", "opencode-worker-liveness.sh"): {0, ""},
+		"spore coordinator monitor":                                       {0, "ok"},
+		"spore coordinator state-debt":                                    {0, ""},
 	})
 	r := Run(cfg)
 	if r.WorstRC != 0 {

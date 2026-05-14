@@ -9,7 +9,7 @@ import (
 
 // worktreeState classifies the live state of the (worktree path, branch)
 // pair against `git worktree list --porcelain`. ensureSession routes on
-// it to stay idempotent across rower restarts and operator-side cleanups.
+// it to stay idempotent across worker restarts and operator-side cleanups.
 type worktreeState int
 
 const (
@@ -20,7 +20,7 @@ const (
 	// branch. Fresh add.
 	worktreeAbsent
 	// Branch is registered at our exact path but the dir is gone. Prune
-	// then re-add. This is the production trigger for stuck rowers.
+	// then re-add. This is the production trigger for stuck workers.
 	worktreeStaleReg
 	// Branch is registered at a different live path. Real conflict;
 	// surface to the operator.

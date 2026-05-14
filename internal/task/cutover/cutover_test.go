@@ -88,9 +88,9 @@ func TestMintHappyPath(t *testing.T) {
 
 	r, err := Mint(Options{
 		Consumer:   "nix-config",
-		Feature:    "rower-finish-contract",
+		Feature:    "worker-finish-contract",
 		SourceRepo: "spore",
-		SourceSlug: "spore-rower-finish-contract",
+		SourceSlug: "spore-worker-finish-contract",
 		SourcePR:   42,
 		Claim:      "nix-config:path:modules/foo.sh",
 		Reason:     "covered by spore lint totalsize",
@@ -101,7 +101,7 @@ func TestMintHappyPath(t *testing.T) {
 	if r.Skipped {
 		t.Error("Skipped = true on first mint")
 	}
-	wantSlug := "consume-spore-rower-finish-contract"
+	wantSlug := "consume-spore-worker-finish-contract"
 	if r.Slug != wantSlug {
 		t.Errorf("Slug = %q, want %q", r.Slug, wantSlug)
 	}
@@ -118,7 +118,7 @@ func TestMintHappyPath(t *testing.T) {
 		"priority: medium",
 		"created: 2026-05-13T10:30:00Z",
 		"source-repo: spore",
-		"source-slug: spore-rower-finish-contract",
+		"source-slug: spore-worker-finish-contract",
 		"source-pr: 42",
 		"claim: nix-config:path:modules/foo.sh",
 		"reason: covered by spore lint totalsize",

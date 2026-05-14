@@ -162,11 +162,11 @@ Subcommands:
   stop                   Read a claude-code Stop JSON request from stdin,
                          write the (currently no-op) response JSON.
   wtmerge-mechanical     Stop-hook (M1): exit 2 with a wt-merge nudge
-                         when a rower idles on wt/<slug> with shipped-
+                         when a worker idles on wt/<slug> with shipped-
                          but-unmerged commits and a clean tree.
   push-pending           Stop-hook (M-finish-B / I8): exit 2 with a
                          push nudge when local main is ahead of
-                         origin/main and the rower is idle.
+                         origin/main and the worker is idle.
   pr-finish              Stop-hook (M-finish-C / I9 + I10): exit 2
                          with a merge / rebase / CI-fix prompt based
                          on the open PR for wt/<slug>.
@@ -182,16 +182,16 @@ Subcommands:
                               coordinator inbox has no "plan ready: <slug>"
                               envelope yet, emit one. Reads $SPORE_TASK_SLUG,
                               $WT_PROJECT, $SPORE_COORDINATOR_STATE_DIR;
-                              always exits 0 (no-op outside rower context).
-  rower-continue              Stop-hook: refuse to idle when tasks/<slug>.md
+                              always exits 0 (no-op outside worker context).
+  worker-continue              Stop-hook: refuse to idle when tasks/<slug>.md
                               is status=active and no blocker is recorded
                               (no unread inbox, no plan ack pending, no
                               recent token-wrap). Exit 2 with a one-line
                               reminder. Honours the fleet kill-switch
                               (silent during operator pause windows).
                               Per-slug ledger at $XDG_STATE_HOME/spore/
-                              rower-continue/<slug>.json suppresses
-                              re-firing until the rower makes progress
+                              worker-continue/<slug>.json suppresses
+                              re-firing until the worker makes progress
                               (frontmatter mtime/size or HEAD changes).
   codex <event>          Codex hook adapters. Events: session-start.
   context-tee            Stop-hook: write a per-session token JSON

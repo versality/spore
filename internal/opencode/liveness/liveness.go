@@ -1,11 +1,11 @@
-// Package liveness probes opencode rowers for stuckness.
+// Package liveness probes opencode workers for stuckness.
 //
-// A rower is "stuck" when both signals fire:
+// A worker is "stuck" when both signals fire:
 //   - last assistant message in opencode's SQLite for this worktree's
 //     sessions is older than StuckSeconds (default 10 min), AND
 //   - wt/<slug> has zero commits beyond merge-base with main.
 //
-// Mid-stream rowers (any-message touched within GraceSeconds, default
+// Mid-stream workers (any-message touched within GraceSeconds, default
 // 60s) are excluded so a slow ollama turn isn't called dead.
 //
 // The probe is split into a pure Probe(...) function over an injected
@@ -51,7 +51,7 @@ func (c Config) defaults() Config {
 	return c
 }
 
-// SessionStats is the per-rower view of opencode's SQLite for one
+// SessionStats is the per-worker view of opencode's SQLite for one
 // worktree directory. All timestamps are unix milliseconds (matching
 // opencode's `time_updated` column); zero means "no row matched".
 type SessionStats struct {
@@ -67,7 +67,7 @@ type SessionStats struct {
 // the rows in a test.
 type DB interface {
 	// Available reports whether the opencode SQLite is present.
-	// When false the probe short-circuits to "no rowers ever ran".
+	// When false the probe short-circuits to "no workers ever ran".
 	Available() bool
 	// Stats returns the session aggregate for wtDir or
 	// (zero-value, nil) if no sessions match.
@@ -81,7 +81,7 @@ type Git interface {
 	CommitsAhead(slug string) int
 }
 
-// RowerStatus is the per-rower verdict.
+// RowerStatus is the per-worker verdict.
 type RowerStatus struct {
 	Slug             string `json:"slug"`
 	Stuck            bool   `json:"stuck"`
@@ -101,8 +101,8 @@ type Report struct {
 	DBAbsent bool          `json:"-"`
 }
 
-// Probe is the pure verdict for one rower at a fixed wall-clock
-// `now`. Returns (status, ok-flag); when okFlag is true the rower is
+// Probe is the pure verdict for one worker at a fixed wall-clock
+// `now`. Returns (status, ok-flag); when okFlag is true the worker is
 // counted under OkCount and Stuck is false.
 func Probe(now time.Time, cfg Config, slug string, stats SessionStats, commitsAhead int) RowerStatus {
 	cfg = cfg.defaults()
@@ -191,7 +191,7 @@ func ListRowers(mainRoot string) ([]string, error) {
 	return slugs, nil
 }
 
-// Run is the high-level driver: list rowers, probe each, aggregate.
+// Run is the high-level driver: list workers, probe each, aggregate.
 // db.Available() == false short-circuits to a zero report with note
 // "db-missing".
 func Run(now time.Time, cfg Config, mainRoot string, db DB, git Git) (Report, error) {
@@ -236,18 +236,18 @@ func FormatDuration(s int64) string {
 // (one summary line plus an optional bullet list of stuck slugs).
 func FormatText(w io.Writer, rep Report) {
 	if rep.DBAbsent {
-		fmt.Fprintln(w, "ok: opencode db not present (no rowers ever ran)")
+		fmt.Fprintln(w, "ok: opencode db not present (no workers ever ran)")
 		return
 	}
 	if rep.Total == 0 {
-		fmt.Fprintln(w, "ok: no opencode rowers")
+		fmt.Fprintln(w, "ok: no opencode workers")
 		return
 	}
 	if len(rep.Stuck) == 0 {
 		if rep.Total == 1 {
-			fmt.Fprintln(w, "ok: 1 opencode rower, making progress")
+			fmt.Fprintln(w, "ok: 1 opencode worker, making progress")
 		} else {
-			fmt.Fprintf(w, "ok: %d opencode rowers, all making progress\n", rep.Total)
+			fmt.Fprintf(w, "ok: %d opencode workers, all making progress\n", rep.Total)
 		}
 		return
 	}
@@ -259,9 +259,9 @@ func FormatText(w io.Writer, rep Report) {
 	}
 	oldestHuman := FormatDuration(oldest)
 	if len(rep.Stuck) == 1 {
-		fmt.Fprintf(w, "stuck: 1 opencode rower idle (no progress in %s)\n", oldestHuman)
+		fmt.Fprintf(w, "stuck: 1 opencode worker idle (no progress in %s)\n", oldestHuman)
 	} else {
-		fmt.Fprintf(w, "stuck: %d opencode rowers idle (oldest %s)\n", len(rep.Stuck), oldestHuman)
+		fmt.Fprintf(w, "stuck: %d opencode workers idle (oldest %s)\n", len(rep.Stuck), oldestHuman)
 	}
 	for _, s := range rep.Stuck {
 		suggest := "poke or abandon"
