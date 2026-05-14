@@ -98,6 +98,7 @@ func Named() map[string]Lint {
 		Agenix{},
 		TaskSchedulerContext{},
 		TaskStatus{},
+		TaskNeeds{},
 	} {
 		out[l.Name()] = l
 	}
