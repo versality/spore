@@ -50,6 +50,32 @@ func TestLeakGuard_AllowlistsSelf(t *testing.T) {
 	}
 }
 
+func TestLeakGuard_AllowlistsCoordinatorBoot(t *testing.T) {
+	root := newTestRepo(t, map[string]string{
+		"internal/coordinator/boot/boot.go":   "package boot // skyhelm cold-boot probes\n",
+		"internal/coordinator/boot/probes.go": "package boot // exec(\"skyhelm-budget\", \"summary\")\n",
+		"docs/leaks.md":                       "this file mentions skyhelm and must flag\n",
+	})
+	issues, err := LeakGuard{}.Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, i := range issues {
+		if strings.HasPrefix(i.Path, "internal/coordinator/boot/") {
+			t.Errorf("expected coordinator/boot to be allowlisted, got %v", i)
+		}
+	}
+	var flaggedDocs bool
+	for _, i := range issues {
+		if i.Path == "docs/leaks.md" {
+			flaggedDocs = true
+		}
+	}
+	if !flaggedDocs {
+		t.Errorf("expected docs/leaks.md to still flag, got issues=%v", issues)
+	}
+}
+
 func TestLeakGuard_CaseInsensitive(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
 		"docs/x.md": "See SKYHELM and SkyHelm references.\n",
