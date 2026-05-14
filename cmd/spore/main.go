@@ -47,6 +47,7 @@ Commands:
   search     Lookup helpers (nix packages / options against search.nixos.org).
   secret     Manage age secrets (add via tmux popup; audit registration / consumers).
   signal     Record warning / error signals from a wrapped command.
+  wt-check   Run the project's lint+test gate (nix develop -c just check).
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
@@ -223,6 +224,8 @@ func main() {
 		os.Exit(runSecret(args))
 	case "signal":
 		os.Exit(runSignal(args))
+	case "wt-check":
+		os.Exit(runWtCheck(args))
 	default:
 		fmt.Fprintf(os.Stderr, "spore: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
