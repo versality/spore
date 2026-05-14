@@ -23,6 +23,8 @@ const fleetUsage = `spore fleet - reconcile worker tmux sessions against the tas
 Usage:
   spore fleet reconcile [--max-workers N]
   spore fleet replenish-hook
+  spore fleet wake [<slug>]
+  spore fleet reap [--force-published]
   spore fleet enable
   spore fleet disable
   spore fleet status
@@ -40,6 +42,18 @@ Subcommands:
                   ($SPORE_TASK_INBOX, $WT_PROJECT, $WT_FLEET_FLOOR), no-ops in
                   non-coordinator sessions, skips when the budget advice
                   is tighten, and never propagates errors.
+  wake            Scan active workers across configured projects and
+                  re-mint the tmux session of any idle worker with an
+                  unread inbox. Body-free: never types the inbox event
+                  into the tmux input. Deduped by a 5-min wake-pending
+                  marker (override via WT_WORKER_WAKE_PENDING_TTL).
+                  When <slug> is given, only that slug is considered.
+  reap            Walk every worktree under .worktrees/ and tear down
+                  done / orphan tasks: kill the tmux session, run
+                  ` + "`" + `git worktree remove --force` + "`" + `, and delete the wt/<slug>
+                  branch (refuses branches with unlanded commits unless
+                  contained in origin/main). Blocked tasks have their
+                  session killed but worktree preserved.
   enable          Create the kill-switch flag (the reconciler resumes
                   spawning on the next pass).
   disable         Remove the kill-switch flag (the reconciler stops
@@ -49,6 +63,57 @@ Subcommands:
 
 Flags (reconcile):
   --max-workers N   Override concurrency cap. Beats spore.toml.
+
+Flags (reap):
+  --force-published Also reap active tasks whose wt/<slug> is contained
+                    in origin/main and whose tasks/<slug>.md on
+                    origin/main is done or superseded. Used after a
+                    cross-fleet merge so the local copy catches up.
+`
+
+const fleetWakeUsage = `spore fleet wake - re-mint idle workers with unread inbox
+
+Usage:
+  spore fleet wake [<slug>]
+
+Walks every status=active task on the local host (across projects
+configured in $WT_CFG/projects), filters to ones whose tmux pane is
+classified as idle and whose inbox has unread *.json events, and calls
+the same ensure-session path used by ` + "`" + `spore task start` + "`" + ` to nudge the
+agent back into a turn. Idempotent: a fresh wake-pending marker (5 min
+default; WT_WORKER_WAKE_PENDING_TTL overrides) suppresses repeat wakes.
+
+Body-free: the inbox event payload is never typed into the tmux input.
+The worker drains its inbox via its own Stop-hook on the next agent turn.
+
+Exit codes: 0 on success (including no-op), 2 when one or more wakes
+failed.
+`
+
+const fleetReapUsage = `spore fleet reap - tear down done / orphan worktrees and sessions
+
+Usage:
+  spore fleet reap [--force-published]
+
+Walks every git worktree rooted at <project>/.worktrees/ across the
+configured projects (` + "$WT_CFG/projects" + `, falling back to cwd's main
+repo when the file is missing). Per status:
+
+  active            no-op (handled by spore fleet reconcile)
+  parked            no-op unless wt/<slug> is contained in origin/main
+                    and origin/main's tasks/<slug>.md is done/superseded
+  blocked           kill tmux session, keep worktree
+  done | missing    kill session, ` + "`git worktree remove --force`" + `, and
+                    ` + "`git branch -d`" + ` (or -D when contained in origin/main)
+
+Sentinel: when tasks/<slug>.md is missing on main but wt/<slug> still
+holds unlanded commits, the worktree/session/branch are preserved
+(wt-merge-unblock window).
+
+Flags:
+  --force-published Also reap active tasks whose wt/<slug> is in
+                    origin/main and whose origin/main task is
+                    done/superseded.
 `
 
 func runFleet(args []string) error {
@@ -66,6 +131,10 @@ func runFleet(args []string) error {
 		return runFleetReconcile(rest)
 	case "replenish-hook":
 		return runFleetReplenishHook(rest)
+	case "wake":
+		return runFleetWake(rest)
+	case "reap":
+		return runFleetReap(rest)
 	case "enable":
 		return runFleetEnable(rest)
 	case "disable":
@@ -158,6 +227,66 @@ func runFleetDisable(args []string) error {
 	}
 	p, _ := fleet.FlagPath()
 	fmt.Printf("fleet: disabled (%s removed)\n", p)
+	return nil
+}
+
+func runFleetWake(args []string) error {
+	fs := flag.NewFlagSet("fleet wake", flag.ContinueOnError)
+	slugFlag := fs.String("slug", "", "wake only this slug (also accepted as positional arg)")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if *help || *helpLong {
+		fmt.Print(fleetWakeUsage)
+		return nil
+	}
+	slug := *slugFlag
+	switch fs.NArg() {
+	case 0:
+	case 1:
+		if slug != "" && slug != fs.Arg(0) {
+			return fmt.Errorf("fleet wake: positional slug %q conflicts with --slug %q", fs.Arg(0), slug)
+		}
+		slug = fs.Arg(0)
+	default:
+		return fmt.Errorf("fleet wake: unexpected positional args: %v", fs.Args()[1:])
+	}
+	rc, err := fleet.Wake(slug, os.Stdout, os.Stderr)
+	if err != nil {
+		return err
+	}
+	if rc != 0 {
+		os.Exit(rc)
+	}
+	return nil
+}
+
+func runFleetReap(args []string) error {
+	fs := flag.NewFlagSet("fleet reap", flag.ContinueOnError)
+	forcePublished := fs.Bool("force-published", false, "also reap active tasks closed on origin/main")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if *help || *helpLong {
+		fmt.Print(fleetReapUsage)
+		return nil
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("fleet reap: unexpected positional args: %v", fs.Args())
+	}
+	rc, err := fleet.Reap(*forcePublished, os.Stdout, os.Stderr)
+	if err != nil {
+		return err
+	}
+	if rc != 0 {
+		os.Exit(rc)
+	}
 	return nil
 }
 
