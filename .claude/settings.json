@@ -33,6 +33,11 @@
             "type": "command"
           },
           {
+            "command": "spore hooks worker-continue",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
             "command": "spore hooks push-pending",
             "timeout": 10,
             "type": "command"
