@@ -42,6 +42,34 @@ func TestHandoverSettingsWireCommunicationHooks(t *testing.T) {
 	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore hooks plan-ready-mechanical") {
 		t.Fatal("handover settings missing plan-ready-mechanical Stop hook")
 	}
+	if !hasCommand(settings.Hooks["Stop"], "/usr/local/bin/spore hooks rower-continue") {
+		t.Fatal("handover settings missing rower-continue Stop hook")
+	}
+	if !rowerContinueOrderedCorrectly(settings.Hooks["Stop"]) {
+		t.Fatal("rower-continue must run after plan-ready-mechanical and before watch-inbox")
+	}
+}
+
+func rowerContinueOrderedCorrectly(groups []handoverHookGroup) bool {
+	planIdx, rowerIdx, watchIdx := -1, -1, -1
+	idx := 0
+	for _, group := range groups {
+		for _, hook := range group.Hooks {
+			switch hook.Command {
+			case "/usr/local/bin/spore hooks plan-ready-mechanical":
+				planIdx = idx
+			case "/usr/local/bin/spore hooks rower-continue":
+				rowerIdx = idx
+			case "/usr/local/bin/spore hooks watch-inbox":
+				watchIdx = idx
+			}
+			idx++
+		}
+	}
+	if planIdx < 0 || rowerIdx < 0 || watchIdx < 0 {
+		return false
+	}
+	return planIdx < rowerIdx && rowerIdx < watchIdx
 }
 
 type handoverHookGroup struct {

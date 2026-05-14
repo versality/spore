@@ -13,6 +13,7 @@ import (
 	"github.com/versality/spore/internal/hooks/contexttee"
 	"github.com/versality/spore/internal/hooks/prfinish"
 	"github.com/versality/spore/internal/hooks/pushpending"
+	"github.com/versality/spore/internal/hooks/rowercontinue"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
 
@@ -50,6 +51,8 @@ func runHooks(args []string) int {
 		return runHooksNotifyCoordinator(rest)
 	case "plan-ready-mechanical":
 		return runHooksPlanReadyMechanical(rest)
+	case "rower-continue":
+		return runHooksRowerContinue(rest)
 	case "codex":
 		return runHooksCodex(rest)
 	case "context-tee":
@@ -308,6 +311,23 @@ func runHooksPlanReadyMechanical(args []string) int {
 	if err := hooks.PlanReadyMechanicalEnv(); err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks plan-ready-mechanical:", err)
 		return 1
+	}
+	return 0
+}
+
+func runHooksRowerContinue(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks rower-continue: takes no args")
+		return 2
+	}
+	res, err := rowercontinue.RunEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks rower-continue:", err)
+		return 1
+	}
+	if res.ShouldFire {
+		fmt.Fprint(os.Stderr, res.Message)
+		return 2
 	}
 	return 0
 }

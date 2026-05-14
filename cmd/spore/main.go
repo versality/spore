@@ -183,6 +183,16 @@ Subcommands:
                               envelope yet, emit one. Reads $SPORE_TASK_SLUG,
                               $WT_PROJECT, $SPORE_COORDINATOR_STATE_DIR;
                               always exits 0 (no-op outside rower context).
+  rower-continue              Stop-hook: refuse to idle when tasks/<slug>.md
+                              is status=active and no blocker is recorded
+                              (no unread inbox, no plan ack pending, no
+                              recent token-wrap). Exit 2 with a one-line
+                              reminder. Honours the fleet kill-switch
+                              (silent during operator pause windows).
+                              Per-slug ledger at $XDG_STATE_HOME/spore/
+                              rower-continue/<slug>.json suppresses
+                              re-firing until the rower makes progress
+                              (frontmatter mtime/size or HEAD changes).
   codex <event>          Codex hook adapters. Events: session-start.
   context-tee            Stop-hook: write a per-session token JSON
                          snapshot for status displays. Reads
