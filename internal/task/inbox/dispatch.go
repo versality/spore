@@ -1,9 +1,8 @@
 // Package inbox provides reusable inbox-drain primitives for spore
 // coordinators and helpers. Dispatch lifts the
 // "drain envelopes matching a token, call a handler, move to
-// inbox/read/" pattern out of consumer harness scripts (see
-// marketercom's helm-handle-blocked-upstream.sh) so coordinators
-// stop reimplementing it.
+// inbox/read/" pattern out of consumer harness scripts so
+// coordinators stop reimplementing it.
 package inbox
 
 import (
