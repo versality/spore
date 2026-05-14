@@ -51,6 +51,14 @@ Events:
                   $SPORE_CODEX_STOP_CHAIN (JSON file mapping argv lists
                   to the post-monitor sub-hook chain),
                   $SPORE_CODEX_STOP_TIMEOUT (per-hook seconds, default 8).
+  pre-tool-use    Codex PreToolUse hook: refuse a new tool dispatch
+                  when the transcript still has at least one prior
+                  tool call without a matching *_output. Re-parses the
+                  transcript live; never consults the ledger. Reads
+                  $SPORE_DRIVER, $SPORE_TASK_INBOX, and
+                  $SPORE_COORDINATOR_STATE_DIR for the coordinator-session
+                  gate. Exits 2 with codex-stuck-toolcall-prior when
+                  prior is unfinalized; 0 otherwise.
 `
 
 func runHooksCodex(args []string) int {
@@ -67,6 +75,8 @@ func runHooksCodex(args []string) int {
 		return runHooksCodexSessionStart(rest)
 	case "stop":
 		return runHooksCodexStop(rest)
+	case "pre-tool-use":
+		return runHooksCodexPreToolUse(rest)
 	case "inbox-watcher":
 		return runHooksCodexInboxWatcher(rest)
 	default:
@@ -124,6 +134,23 @@ func runHooksCodexStop(args []string) int {
 	}
 
 	res := codex.Stop(cfg, os.Stdin)
+	if res.Stderr != "" {
+		io.WriteString(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
+}
+
+func runHooksCodexPreToolUse(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks codex pre-tool-use: takes no args")
+		return 2
+	}
+	cfg := codex.PreToolUseConfig{
+		Inbox:               os.Getenv("SPORE_TASK_INBOX"),
+		CoordinatorStateDir: defaultCoordinatorStateDirEnv(),
+		Driver:              os.Getenv("SPORE_DRIVER"),
+	}
+	res := codex.PreToolUse(cfg, os.Stdin)
 	if res.Stderr != "" {
 		io.WriteString(os.Stderr, res.Stderr)
 	}
