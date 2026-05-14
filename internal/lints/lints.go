@@ -94,6 +94,7 @@ func Named() map[string]Lint {
 		ClaudeSize{},
 		ClaudeSubdir{},
 		TaskPriority{},
+		FlakeInputShadow{},
 	} {
 		out[l.Name()] = l
 	}

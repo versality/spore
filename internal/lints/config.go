@@ -25,6 +25,8 @@ type LintConfig struct {
 	RootLineLimit   int
 	RootCharLimit   int
 	SubdirLineLimit int
+	FlakePath       string
+	ScanDirs        []string
 }
 
 func LoadProjectConfig(root string) (Config, error) {
@@ -155,6 +157,16 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 		}
 		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
 		return v
+	case FlakeInputShadow:
+		if cfg.FlakePath != "" {
+			v.FlakePath = cfg.FlakePath
+		}
+		if len(cfg.ScanDirs) > 0 {
+			v.ScanDirs = cfg.ScanDirs
+		}
+		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
+		v.AllowInputs = append(v.AllowInputs, cfg.Allowlist...)
+		return v
 	default:
 		return l
 	}
@@ -193,6 +205,12 @@ func mergeLintConfig(base, over LintConfig) LintConfig {
 	}
 	if over.SubdirLineLimit > 0 {
 		base.SubdirLineLimit = over.SubdirLineLimit
+	}
+	if over.FlakePath != "" {
+		base.FlakePath = over.FlakePath
+	}
+	if len(over.ScanDirs) > 0 {
+		base.ScanDirs = over.ScanDirs
 	}
 	return base
 }
@@ -243,6 +261,12 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 			return fmt.Errorf("line %d: %s must be an integer", lineNum, key)
 		}
 		cfg.SubdirLineLimit = v
+	case "flake_path":
+		cfg.FlakePath = stripQuotes(raw)
+	case "scan_dirs":
+		v, err := parseStringList(raw)
+		cfg.ScanDirs = v
+		return errAt(lineNum, key, err)
 	default:
 		return fmt.Errorf("line %d: unknown key %q in [lint.*]", lineNum, key)
 	}
