@@ -44,10 +44,14 @@ let
     echo "spore-fleet-graceful: disabling kill-switch" >&2
     "$sporecli" fleet disable || true
 
+    # list_workers prints "session<TAB>slug" for every worker session
+    # in this project, regardless of name shape (current wt-emoji or
+    # legacy spore-prefixed). `spore fleet list-sessions` does the
+    # parsing - the shell never greps tmux names directly.
     list_workers() {
-      "$tmuxcli" list-sessions -F '#{session_name}' 2>/dev/null \
-        | ${pkgs.gnugrep}/bin/grep -E "^spore/$project/" \
-        | ${pkgs.gnugrep}/bin/grep -v "^spore/$project/coordinator$" || true
+      "$sporecli" fleet list-sessions --project "$project" --kind worker \
+        2>/dev/null \
+        | ${pkgs.gawk}/bin/awk -F'\t' '{ print $1 "\t" $3 }' || true
     }
 
     sessions="$(list_workers)"
@@ -56,8 +60,8 @@ let
       exit 0
     fi
 
-    while IFS= read -r s; do
-      slug="''${s##spore/$project/}"
+    while IFS=$'\t' read -r session slug; do
+      [ -z "$session" ] && continue
       echo "spore-fleet-graceful: signalling $slug" >&2
       "$sporecli" task tell "$slug" "$message" || true
     done <<< "$sessions"
@@ -73,9 +77,9 @@ let
     done
 
     echo "spore-fleet-graceful: timeout (''${timeout}s); killing remaining workers" >&2
-    list_workers | while IFS= read -r s; do
-      [ -z "$s" ] && continue
-      "$tmuxcli" kill-session -t "$s" || true
+    list_workers | while IFS=$'\t' read -r session _; do
+      [ -z "$session" ] && continue
+      "$tmuxcli" kill-session -t "$session" || true
     done
   '';
 

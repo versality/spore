@@ -78,9 +78,13 @@ spore fleet enable
 spore fleet reconcile
 ```
 
-Worker sessions live under tmux names like
-`spore/<project>/<slug>`. The coordinator session is
-`spore/<project>/coordinator`.
+Worker tmux sessions are named `<emoji> <project>/<slug>` with an
+optional ` [tag]` suffix encoding the agent and effort tier; older
+sessions may still appear as `spore/<project>/<slug>`. The coordinator
+session is `spore/<project>/coordinator`. Run
+`spore fleet list-sessions` for the parsed inventory; it prints one
+TSV row per session and is what the Nix graceful-deploy script
+consumes instead of grepping tmux output.
 
 Fresh-server install uses nixos-anywhere:
 
