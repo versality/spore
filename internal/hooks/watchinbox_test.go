@@ -16,9 +16,13 @@ type fakeWaiter struct {
 	closed       bool
 	afterWake    func()
 	afterTimeout func()
+	calls        int
+	timeoutMs    []int
 }
 
-func (f *fakeWaiter) Wait() (bool, error) {
+func (f *fakeWaiter) Wait(timeoutMs int) (bool, error) {
+	f.calls++
+	f.timeoutMs = append(f.timeoutMs, timeoutMs)
 	if f.woke && f.afterWake != nil {
 		f.afterWake()
 	}
@@ -185,6 +189,67 @@ func TestWatchInbox_SleepFallbackEmptyReturnsNil(t *testing.T) {
 	err := watchInbox(slug, &bytes.Buffer{}, &bytes.Buffer{}, opts)
 	if err != nil {
 		t.Fatalf("got err=%v, want nil", err)
+	}
+}
+
+func TestWatchInbox_DrainAfterInitCatchesRace(t *testing.T) {
+	// A file lands between the pre-init drain and inotify init.
+	// The watcher would not see the create event but the post-init
+	// drain must catch it before we block on Wait.
+	_, slug, inbox := setupInbox(t)
+	opts := watchOpts{
+		timeout: time.Second, settle: 0,
+		initWatcher: func(string) (inboxWaiter, error) {
+			writeTell(t, filepath.Join(inbox, "raced.json"),
+				`{"ts":"r","source":"s","body":"raced"}`)
+			return &fakeWaiter{woke: false}, nil
+		},
+		sleep: func(time.Duration) { t.Fatal("settle sleep should not fire when post-init drain catches the race") },
+	}
+	var stdout bytes.Buffer
+	err := watchInbox(slug, &stdout, &bytes.Buffer{}, opts)
+	if !errors.Is(err, ErrWake) {
+		t.Fatalf("got err=%v, want ErrWake", err)
+	}
+	if !strings.Contains(stdout.String(), "[r] s: raced") {
+		t.Errorf("stdout: %q", stdout.String())
+	}
+}
+
+func TestWatchInbox_PollLoopReDrainsAfterMissedEvent(t *testing.T) {
+	// Simulate inotify never firing while a file is dropped. With
+	// poll < timeout, the second iteration's post-Wait drain must
+	// catch the file even though no event was seen.
+	_, slug, inbox := setupInbox(t)
+	calls := 0
+	w := &fakeWaiter{
+		woke: false,
+		afterTimeout: func() {
+			calls++
+			if calls == 2 {
+				writeTell(t, filepath.Join(inbox, "missed.json"),
+					`{"ts":"m","source":"s","body":"missed"}`)
+			}
+		},
+	}
+	opts := watchOpts{
+		timeout: 60 * time.Second, settle: 0, poll: 10 * time.Second,
+		initWatcher: func(string) (inboxWaiter, error) { return w, nil },
+		sleep:       func(time.Duration) {},
+	}
+	var stdout bytes.Buffer
+	err := watchInbox(slug, &stdout, &bytes.Buffer{}, opts)
+	if !errors.Is(err, ErrWake) {
+		t.Fatalf("got err=%v, want ErrWake", err)
+	}
+	if !strings.Contains(stdout.String(), "[m] s: missed") {
+		t.Errorf("stdout: %q", stdout.String())
+	}
+	if w.calls != 2 {
+		t.Errorf("Wait called %d times, expected 2", w.calls)
+	}
+	if len(w.timeoutMs) >= 1 && w.timeoutMs[0] != 10000 {
+		t.Errorf("Wait timeoutMs[0] = %d, expected 10000", w.timeoutMs[0])
 	}
 }
 

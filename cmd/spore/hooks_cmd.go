@@ -15,6 +15,7 @@ import (
 	"github.com/versality/spore/internal/hooks/prfinish"
 	"github.com/versality/spore/internal/hooks/pushpending"
 	"github.com/versality/spore/internal/hooks/settings"
+	"github.com/versality/spore/internal/hooks/stopwatchdog"
 	"github.com/versality/spore/internal/hooks/workercontinue"
 	"github.com/versality/spore/internal/hooks/workerstopforceclosing"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
@@ -54,6 +55,10 @@ func runHooks(args []string) int {
 		return runHooksGateKind(rest)
 	case "watch-inbox":
 		return runHooksWatchInbox(rest)
+	case "stop-watchdog":
+		return runHooksStopWatchdog(rest)
+	case "stop-watchdog-tick":
+		return runHooksStopWatchdogTick(rest)
 	case "notify-coordinator":
 		return runHooksNotifyCoordinator(rest)
 	case "plan-ready-mechanical":
@@ -388,6 +393,26 @@ func runHooksRender(args []string) int {
 		fmt.Fprintln(os.Stderr, "spore hooks render: write", outPath+":", err)
 		return 1
 	}
+	return 0
+}
+
+func runHooksStopWatchdog(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks stop-watchdog: takes no args")
+		return 2
+	}
+	if err := stopwatchdog.Spawn(); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks stop-watchdog:", err)
+	}
+	return 0
+}
+
+func runHooksStopWatchdogTick(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks stop-watchdog-tick: takes no args")
+		return 2
+	}
+	_ = stopwatchdog.Tick(stopwatchdog.DefaultConfig())
 	return 0
 }
 

@@ -67,6 +67,38 @@ func TestPreToolUse_NonBashAllowed(t *testing.T) {
 	}
 }
 
+func TestPreToolUse_AskUserQuestionDeniedInWorktree(t *testing.T) {
+	cases := []struct {
+		name     string
+		cwd      string
+		wantDeny bool
+	}{
+		{"worker-worktree", "/home/sky/projects/spore/.worktrees/worker-stop-hook-wedge-2", true},
+		{"worker-worktree-nested", "/home/sky/projects/spore/.worktrees/foo/sub/dir", true},
+		{"non-worktree", "/home/sky/projects/spore", false},
+		{"empty-cwd", "", false},
+		{"unrelated-worktrees-suffix", "/tmp/worktrees/foo", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := Request{
+				HookEventName: "PreToolUse",
+				ToolName:      "AskUserQuestion",
+				CWD:           tc.cwd,
+				ToolInput:     json.RawMessage(`{"questions":[]}`),
+			}
+			resp := PreToolUse(req, DefaultForbidden())
+			isDeny := resp.HookSpecificOutput != nil && resp.HookSpecificOutput.PermissionDecision == Deny
+			if isDeny != tc.wantDeny {
+				t.Fatalf("cwd=%q: wantDeny=%v got=%+v", tc.cwd, tc.wantDeny, resp)
+			}
+			if tc.wantDeny && !strings.Contains(resp.HookSpecificOutput.PermissionDecisionReason, "autonomously") {
+				t.Fatalf("deny reason missing autonomy hint: %q", resp.HookSpecificOutput.PermissionDecisionReason)
+			}
+		})
+	}
+}
+
 func TestPreToolUse_MalformedInput(t *testing.T) {
 	req := Request{
 		HookEventName: "PreToolUse",

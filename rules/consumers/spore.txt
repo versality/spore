@@ -6,6 +6,7 @@ core/roles
 core/source-map
 core/tier-policy
 core/role
+core/worker-autonomy
 core/writing-style
 core/tldr-first
 core/commits

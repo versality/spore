@@ -59,6 +59,24 @@ func TestClassify(t *testing.T) {
 			wantState: "running",
 		},
 		{
+			name:      "claude stop-hook chain without mode line is idle",
+			agent:     "claude",
+			out:       "● Bash(go test ./...)\n  ⎿  ok\n\n• Running Stop hook: Checking fleet state\n\n• Running 5 Stop hooks\n",
+			wantState: "idle",
+		},
+		{
+			name:      "claude stop-hook chain with busy spinner stays running",
+			agent:     "claude",
+			out:       "• Running Stop hook: Checking fleet state\n✶ Cogitating… (3s · esc to interrupt)\n",
+			wantState: "running",
+		},
+		{
+			name:      "codex stop-hook chain without prompt is idle",
+			agent:     "codex",
+			out:       "• Ran true\n\n• Running Stop hook: Checking fleet state\n\n• Running 5 Stop hooks\n",
+			wantState: "idle",
+		},
+		{
 			name:      "codex working is running",
 			agent:     "codex",
 			out:       "• Working (1m 04s • esc to interrupt)\n\n› queued input\n",

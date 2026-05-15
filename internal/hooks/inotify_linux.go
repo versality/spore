@@ -26,20 +26,18 @@ func initPlatformWatcher(dir string) (inboxWaiter, error) {
 		_ = syscall.Close(epFd)
 		return nil, err
 	}
-	timeout := envDurationSeconds("WATCH_TIMEOUT", 604800)
-	return &inotifyWaiter{inFd: inFd, epFd: epFd, timeoutMs: int(timeout.Milliseconds())}, nil
+	return &inotifyWaiter{inFd: inFd, epFd: epFd}, nil
 }
 
 type inotifyWaiter struct {
-	inFd      int
-	epFd      int
-	timeoutMs int
+	inFd int
+	epFd int
 }
 
-func (w *inotifyWaiter) Wait() (bool, error) {
+func (w *inotifyWaiter) Wait(timeoutMs int) (bool, error) {
 	events := make([]syscall.EpollEvent, 1)
 	for {
-		n, err := syscall.EpollWait(w.epFd, events, w.timeoutMs)
+		n, err := syscall.EpollWait(w.epFd, events, timeoutMs)
 		if err == syscall.EINTR {
 			continue
 		}

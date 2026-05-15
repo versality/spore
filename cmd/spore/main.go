@@ -187,6 +187,17 @@ Subcommands:
                          as a wrapper around session-scoped hooks.
   watch-inbox [slug]          Stop-hook: block on inbox, exit 2 on message.
                               With no slug, reads $SPORE_TASK_INBOX.
+  stop-watchdog               Stop-hook: spawn a detached tick child and
+                              exit 0. Wire as the first Stop hook so the
+                              child gets a head start on the chain.
+  stop-watchdog-tick          Detached child of stop-watchdog. Sleeps
+                              $SPORE_STOP_WATCHDOG_SECONDS (default 5),
+                              classifies the agent's tmux pane, and on a
+                              still-running pane appends a slow-stop-chain
+                              row to worker-stop-errors.jsonl plus a force-
+                              release tell into $SPORE_TASK_INBOX. Intended
+                              for harness wiring only; do not invoke
+                              directly.
   notify-coordinator [project]
                               Write a poke to the coordinator's project inbox.
                               With no project, reads $WT_PROJECT.

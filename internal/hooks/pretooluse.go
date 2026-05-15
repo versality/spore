@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -44,11 +45,22 @@ func DefaultForbidden() []ForbiddenPattern {
 }
 
 // PreToolUse evaluates a PreToolUse request and returns the response
-// claude-code should receive. Non-Bash tools are always allowed (this
-// scaffold only knows about shell). Bash commands are checked against
-// the forbidden set; the first match denies with that pattern's
-// reason.
+// claude-code should receive. Bash commands are checked against the
+// forbidden set; the first match denies with that pattern's reason.
+// AskUserQuestion is denied unconditionally when the request's cwd
+// looks like a worker worktree (.worktrees/<slug>): there is no
+// operator on the other end of a worker turn, so the agent must act
+// on a stated assumption instead.
 func PreToolUse(req Request, forbidden []ForbiddenPattern) Response {
+	if req.ToolName == "AskUserQuestion" && isWorktreeCWD(req.CWD) {
+		return Response{
+			HookSpecificOutput: &HookSpecificOutput{
+				HookEventName:            "PreToolUse",
+				PermissionDecision:       Deny,
+				PermissionDecisionReason: "AskUserQuestion: workers run autonomously; no operator is reading. State your assumption in the task file's plan section and act on it. Flip the task to status=blocked only after exhausting alternatives.",
+			},
+		}
+	}
 	if req.ToolName != "Bash" {
 		return Response{}
 	}
@@ -72,4 +84,19 @@ func PreToolUse(req Request, forbidden []ForbiddenPattern) Response {
 		}
 	}
 	return Response{}
+}
+
+// isWorktreeCWD reports whether path sits inside a `.worktrees/`
+// directory, the layout `wt` uses for worker checkouts. An empty cwd
+// (older harnesses that did not forward it) returns false so the
+// AskUserQuestion block stays opt-in by location.
+func isWorktreeCWD(cwd string) bool {
+	if cwd == "" {
+		return false
+	}
+	clean := filepath.ToSlash(filepath.Clean(cwd))
+	if strings.Contains(clean, "/.worktrees/") {
+		return true
+	}
+	return strings.HasSuffix(clean, "/.worktrees") || clean == ".worktrees"
 }

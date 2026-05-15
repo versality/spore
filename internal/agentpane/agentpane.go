@@ -56,6 +56,9 @@ func Classify(capture CaptureFunc, target, agent string) (string, string) {
 			return "idle", ""
 		}
 	}
+	if stopHookChainVisible(joined) {
+		return "idle", ""
+	}
 	return "running", ""
 }
 
@@ -79,7 +82,31 @@ func classifyClaudePane(lines []string, joined string) (string, string) {
 	if claudeHasModeLine(lines) {
 		return "idle", ""
 	}
+	// Claude hides the mode line while its Stop-hook chain runs ("•
+	// Running Stop hook: ..." / "• Running N Stop hooks"). The agent's
+	// turn is logically over; the prompt returns once the chain ends.
+	// Treat the chain-visible tail as idle so fleet wake can re-mint
+	// instead of skipping the worker as busy.
+	if stopHookChainVisible(joined) {
+		return "idle", ""
+	}
 	return "running", ""
+}
+
+// stopHookChainVisible reports whether the captured tail shows a
+// Stop-hook chain bullet without any busy spinner alongside it. Both
+// "• Running Stop hook: ..." and "• Running N Stop hooks" qualify;
+// "esc to interrupt" anywhere in the tail keeps the agent in the
+// running state (the chain bullet may be old scrollback above a fresh
+// turn). Shared between claude and codex.
+func stopHookChainVisible(joined string) bool {
+	if strings.Contains(joined, "esc to interrupt") {
+		return false
+	}
+	if !strings.Contains(joined, "Stop hook") && !strings.Contains(joined, "Stop hooks") {
+		return false
+	}
+	return strings.Contains(joined, "• Running ")
 }
 
 func claudePaneBusy(joined string, lines []string) bool {
