@@ -54,6 +54,7 @@ func Default() []Lint {
 		ClaudeDrift{ConsumersDir: "rules/consumers", RulesDir: "rules"},
 		ClaudeTotalSize{},
 		AgentMirror{},
+		TaskBrief{},
 		TaskEvidence{TasksDir: "tasks"},
 		TaskStatus{},
 		TmuxSocketTest{},
@@ -77,7 +78,6 @@ func Named() map[string]Lint {
 		out[l.Name()] = l
 	}
 	for _, l := range []Lint{
-		TaskBrief{},
 		TodoPriority{},
 		NoCrossRepoTasks{
 			ForbiddenSlugs: map[string]string{
