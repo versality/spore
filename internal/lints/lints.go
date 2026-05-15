@@ -107,6 +107,7 @@ func Named() map[string]Lint {
 		TaskPriority{},
 		FlakeInputShadow{},
 		Agenix{},
+		AgentKillSwitches{},
 		TaskSchedulerContext{},
 		TaskNeeds{},
 		SkyhelmWrapNoTmuxKill{},
