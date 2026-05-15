@@ -247,25 +247,20 @@ func reapOne(mainRoot string, forcePublished bool, stdout, stderr io.Writer, e r
 		}
 	}
 
-	// Pass 2: orphan tmux sessions whose worktree is gone.
+	// Pass 2: orphan tmux sessions whose worktree is gone. Routes
+	// every shape (current wt-emoji, legacy spore/<project>/<slug>)
+	// through ParseSession; only worker kinds are candidates - the
+	// coordinator session has no worktree on purpose.
 	if sessions, lerr := e.tmuxRunner.listSessions(); lerr == nil {
-		marker := " " + project + "/"
 		for _, line := range strings.Split(strings.TrimRight(sessions, "\n"), "\n") {
-			if line == "" || !strings.Contains(line, marker) {
+			if line == "" {
 				continue
 			}
-			slash := strings.LastIndex(line, "/")
-			if slash < 0 {
+			p, ok := task.MatchProject(line, project)
+			if !ok || p.Kind != task.SessionKindWorker || p.Slug == "" {
 				continue
 			}
-			slug := line[slash+1:]
-			if i := strings.IndexByte(slug, ' '); i >= 0 {
-				slug = slug[:i]
-			}
-			if slug == "" {
-				continue
-			}
-			if dirExists(filepath.Join(mainRoot, ".worktrees", slug)) {
+			if dirExists(filepath.Join(mainRoot, ".worktrees", p.Slug)) {
 				continue
 			}
 			if e.tmuxRunner.killSession(line) == nil {

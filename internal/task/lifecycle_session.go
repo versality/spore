@@ -15,26 +15,18 @@ import (
 // SPORE_IDLE_REAP_SECS for tests / operator tuning.
 const IdleReapThreshold = 5 * time.Minute
 
-// matchingSlugSessions lists every tmux session whose name slot for
-// this slug matches, regardless of formula drift between spawn and
-// kill. Catches three shapes:
-//
-//   - spore-style "spore/<project>/<slug>"
-//   - wt-style "<icon> <project>/<slug>" or "<icon> <project>/<slug> [tag]"
-//   - any external spawner that recorded its own name in frontmatter
-//     and embedded "<project>/<slug>" in it
-//
-// Returns nil when tmux isn't running or no session matches. Pure
-// substring scan: the slug-end boundary is enforced by requiring the
-// next char to be end-of-string or a space (so slug "foo" doesn't
-// kill "foo-bar").
+// matchingSlugSessions lists every tmux session that belongs to
+// (project, slug), regardless of formula drift between spawn and
+// kill. Delegates shape recognition to MatchSlug; also includes the
+// frontmatter-recorded session when tmux confirms it is alive (so
+// external spawners that chose a non-kernel name still get reaped).
+// Returns nil when tmux isn't running or no session matches.
 func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
 	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil {
 		return nil
 	}
 	project := projectNameOrBase(projectRoot)
-	needle := project + "/" + slug
 	recorded := ""
 	if m, err := readTaskMeta(tasksDir, slug); err == nil {
 		recorded = m.Session
@@ -52,15 +44,9 @@ func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
 		if line == "" {
 			continue
 		}
-		i := strings.Index(line, needle)
-		if i < 0 {
-			continue
+		if MatchSlug(line, project, slug) {
+			add(line)
 		}
-		end := i + len(needle)
-		if end < len(line) && line[end] != ' ' {
-			continue
-		}
-		add(line)
 	}
 	if recorded != "" && hasSession(recorded) {
 		add(recorded)
