@@ -16,4 +16,5 @@ core/validation
 core/code-comments
 core/tmux-api
 core/worker-etiquette
+core/runner-autonomy
 ?align core/alignment-mode
