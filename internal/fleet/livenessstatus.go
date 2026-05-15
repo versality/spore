@@ -122,9 +122,8 @@ func realpathOrClean(p string) string {
 
 func matchingSessions(panes []paneInfo, project, slug string) []string {
 	var out []string
-	marker := " " + project + "/" + slug
 	for _, p := range panes {
-		if strings.Contains(p.session, marker) {
+		if task.MatchSlug(p.session, project, slug) {
 			out = appendUnique(out, p.session)
 		}
 	}
