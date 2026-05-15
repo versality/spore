@@ -109,6 +109,7 @@ func Named() map[string]Lint {
 		Agenix{},
 		TaskSchedulerContext{},
 		TaskNeeds{},
+		SkyhelmWrapNoTmuxKill{},
 	} {
 		out[l.Name()] = l
 	}
