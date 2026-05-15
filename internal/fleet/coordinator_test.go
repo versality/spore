@@ -271,6 +271,41 @@ func sessionCreated(name string) (string, error) {
 	return string(out), nil
 }
 
+func TestEnsureCoordinatorRendersCodexHooks(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	dir := t.TempDir()
+	configsDir := filepath.Join(dir, "configs", "codex")
+	if err := os.MkdirAll(configsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := `{"events":{"Stop":[{"command":"coord-only","kinds":["coordinator"]},{"command":"worker-only","kinds":["worker"]}]}}`
+	if err := os.WriteFile(filepath.Join(configsDir, "hooks-config.json"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPORE_COORDINATOR_AGENT", "sleep 30")
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", CoordinatorSessionName(dir)).Run()
+	})
+
+	if _, _, err := EnsureCoordinator(dir); err != nil {
+		t.Fatalf("EnsureCoordinator: %v", err)
+	}
+	out, err := os.ReadFile(filepath.Join(dir, ".codex/hooks.json"))
+	if err != nil {
+		t.Fatalf("coordinator spawn did not render .codex/hooks.json: %v", err)
+	}
+	body := string(out)
+	if !strings.Contains(body, "coord-only") {
+		t.Errorf("rendered .codex/hooks.json missing coord-only binding: %s", body)
+	}
+	if strings.Contains(body, "worker-only") {
+		t.Errorf("rendered .codex/hooks.json leaked worker-only into coordinator render: %s", body)
+	}
+}
+
 func TestEnsureCoordinatorSetsSessionKind(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skipf("tmux not available: %v", err)

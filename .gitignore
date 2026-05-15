@@ -20,3 +20,4 @@
 /tasks/
 /.wt/
 /bootstrap/flake/local.nix
+/.codex/hooks.json

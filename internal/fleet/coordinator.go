@@ -105,6 +105,9 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 	if _, _, err := inject.Inject(projectRoot, projectRoot, task.SessionKindCoordinator); err != nil {
 		return "", false, fmt.Errorf("inject settings: %w", err)
 	}
+	if _, _, err := inject.InjectCodex(projectRoot, projectRoot, task.SessionKindCoordinator); err != nil {
+		return "", false, fmt.Errorf("inject codex hooks: %w", err)
+	}
 
 	cmd := coordinatorShellCommand(agent, rolePath)
 	args := []string{

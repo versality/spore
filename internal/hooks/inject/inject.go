@@ -123,30 +123,8 @@ func InjectWithEnv(projectRoot, targetDir, kind string, getenv func(string) stri
 	if existing, err := os.ReadFile(target); err == nil && bytes.Equal(existing, merged) {
 		return target, false, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return "", false, fmt.Errorf("mkdir %s: %w", filepath.Dir(target), err)
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(target), ".settings.local.json.")
-	if err != nil {
-		return "", false, fmt.Errorf("tempfile: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(merged); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return "", false, fmt.Errorf("write temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return "", false, fmt.Errorf("close temp: %w", err)
-	}
-	if err := os.Chmod(tmpName, 0o644); err != nil {
-		os.Remove(tmpName)
-		return "", false, fmt.Errorf("chmod temp: %w", err)
-	}
-	if err := os.Rename(tmpName, target); err != nil {
-		os.Remove(tmpName)
-		return "", false, fmt.Errorf("rename to %s: %w", target, err)
+	if err := writeAtomic(target, merged); err != nil {
+		return "", false, err
 	}
 	return target, true, nil
 }

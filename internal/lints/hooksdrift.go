@@ -28,6 +28,11 @@ type HooksDrift struct {
 	// always pass). Empty Kind renders every binding (the default
 	// user-level lint shape).
 	Kind string
+	// Codex switches the renderer to hooks.CodexHooksForKind so the
+	// expected output uses the .codex/hooks.json shape (top-level
+	// `{"hooks": {...}}`, no $schema, no permissions). ExtrasPath is
+	// ignored when set - the codex format has no overlay layer.
+	Codex bool
 }
 
 func (HooksDrift) Name() string { return "hooks-drift" }
@@ -87,19 +92,26 @@ func (l HooksDrift) Run(root string) ([]Issue, error) {
 			})
 		}
 	}
-	rendered, err := hooks.SettingsForKind(events, l.Kind)
+	var rendered []byte
+	if l.Codex {
+		rendered, err = hooks.CodexHooksForKind(events, l.Kind)
+	} else {
+		rendered, err = hooks.SettingsForKind(events, l.Kind)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	extrasRaw, err := os.ReadFile(filepath.Join(root, extrasPath))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	merged, err := mergeJSONObjects(rendered, extrasRaw)
-	if err != nil {
-		return nil, fmt.Errorf("merge with %s: %w", extrasPath, err)
+	merged := rendered
+	if !l.Codex {
+		extrasRaw, err := os.ReadFile(filepath.Join(root, extrasPath))
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		merged, err = mergeJSONObjects(rendered, extrasRaw)
+		if err != nil {
+			return nil, fmt.Errorf("merge with %s: %w", extrasPath, err)
+		}
 	}
 
 	actual, err := os.ReadFile(filepath.Join(root, settingsPath))

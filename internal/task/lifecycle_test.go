@@ -230,6 +230,69 @@ func TestStartSpawnsWtStyleSessionForKnownProject(t *testing.T) {
 	}
 }
 
+func TestStartRendersCodexHooksIntoWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+
+	parent := t.TempDir()
+	repo := filepath.Join(parent, "spore")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+
+	configsDir := filepath.Join(repo, "configs", "codex")
+	if err := os.MkdirAll(configsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := `{"events":{"Stop":[{"command":"coord-only","kinds":["coordinator"]},{"command":"worker-only","kinds":["worker"]}]}}`
+	if err := os.WriteFile(filepath.Join(configsDir, "hooks-config.json"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slug := "codexrender"
+	body := "---\nstatus: draft\nslug: codexrender\ntitle: T\nagent: codex\neffort: high\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
+	session, err := Start(tasksDir, slug, nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
+	})
+
+	worktree := filepath.Join(repo, ".worktrees", slug)
+	out, err := os.ReadFile(filepath.Join(worktree, ".codex/hooks.json"))
+	if err != nil {
+		t.Fatalf("worker spawn did not render .codex/hooks.json: %v", err)
+	}
+	body2 := string(out)
+	if !strings.Contains(body2, "worker-only") {
+		t.Errorf("rendered .codex/hooks.json missing worker-only: %s", body2)
+	}
+	if strings.Contains(body2, "coord-only") {
+		t.Errorf("rendered .codex/hooks.json leaked coordinator binding into worker render: %s", body2)
+	}
+}
+
 func TestDoneKillsFrontmatterSession(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)

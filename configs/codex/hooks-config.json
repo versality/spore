@@ -1,0 +1,38 @@
+{
+  "events": {
+    "PreToolUse": [
+      {
+        "command": "spore hooks codex pre-tool-use",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "command": "spore coordinator token-monitor",
+        "timeout": 10,
+        "kinds": ["coordinator"]
+      },
+      {
+        "command": "spore worker token-monitor",
+        "timeout": 10,
+        "kinds": ["worker"]
+      },
+      {
+        "command": "spore fleet replenish-hook",
+        "timeout": 30,
+        "kinds": ["coordinator"]
+      },
+      {
+        "command": "spore hooks plan-ready-mechanical",
+        "timeout": 10,
+        "kinds": ["worker"]
+      },
+      {
+        "command": "spore hooks watch-inbox",
+        "timeout": 604800,
+        "asyncRewake": true,
+        "kinds": ["coordinator", "worker"]
+      }
+    ]
+  }
+}

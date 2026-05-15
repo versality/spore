@@ -328,7 +328,10 @@ Main extension points:
   external work sources (e.g. [linear](internal/matter/linear/)).
 - [internal/hooks/](internal/hooks/) emits and runs Claude Code and
   Codex hook bindings; both agents share the same JSON shape, wired
-  through `.claude/settings.json` and `.codex/hooks.json`.
+  through `.claude/settings.json` and `.codex/hooks.json`. Each spawned
+  coordinator and worker session gets a per-kind render of both files
+  (filtered by `WT_SESSION_KIND`), so operator-interactive shells stay
+  free of fleet-only Stop hooks.
 - [internal/lints/](internal/lints/) holds portable repo lints.
 - [internal/composer/](internal/composer/) renders instruction files
   from rule fragments in [rules/](rules/).

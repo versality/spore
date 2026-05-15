@@ -94,6 +94,62 @@ func TestHooksDrift_KindFilter(t *testing.T) {
 	}
 }
 
+func TestHooksDrift_CodexShape(t *testing.T) {
+	hooksConfig := []byte(`{"events":{"Stop":[` +
+		`{"command":"coord-only","kinds":["coordinator"]},` +
+		`{"command":"worker-only","kinds":["worker"]}` +
+		`]}}`)
+	rendered, err := hooks.CodexHooksForKind(map[string][]hooks.HookBin{
+		"Stop": {
+			{BinPath: "coord-only", Kinds: []string{"coordinator"}},
+			{BinPath: "worker-only", Kinds: []string{"worker"}},
+		},
+	}, "worker")
+	if err != nil {
+		t.Fatalf("CodexHooksForKind: %v", err)
+	}
+	root := newTestRepo(t, map[string]string{
+		"configs/codex/hooks-config.json": string(hooksConfig),
+		".codex/hooks.json":               string(rendered),
+	})
+	lint := HooksDrift{
+		HooksConfigPath: "configs/codex/hooks-config.json",
+		SettingsPath:    ".codex/hooks.json",
+		Kind:            "worker",
+		Codex:           true,
+	}
+	issues, err := lint.Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("expected no drift for matching codex render, got %v", issues)
+	}
+
+	// Swap kinds: an in-tree file rendered for the coordinator drifts
+	// vs. the worker-scoped lint pass.
+	coordRendered, err := hooks.CodexHooksForKind(map[string][]hooks.HookBin{
+		"Stop": {
+			{BinPath: "coord-only", Kinds: []string{"coordinator"}},
+			{BinPath: "worker-only", Kinds: []string{"worker"}},
+		},
+	}, "coordinator")
+	if err != nil {
+		t.Fatalf("CodexHooksForKind coord: %v", err)
+	}
+	root = newTestRepo(t, map[string]string{
+		"configs/codex/hooks-config.json": string(hooksConfig),
+		".codex/hooks.json":               string(coordRendered),
+	})
+	issues, err = lint.Run(root)
+	if err != nil {
+		t.Fatalf("Run drift case: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("expected drift for kind mismatch, got %v", issues)
+	}
+}
+
 func TestHooksDrift_NoConfig(t *testing.T) {
 	root := newTestRepo(t, map[string]string{"README.md": "x\n"})
 	issues, err := HooksDrift{}.Run(root)
