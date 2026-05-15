@@ -42,6 +42,7 @@ var leakGuardPathAllowlist = []string{
 	"internal/leakdict/leakdict.go",
 	"internal/leakdict/leakdict_test.go",
 	"internal/lints/leakguard*.go",
+	"internal/lints/skyhelmtmuxinputban*.go",
 	"internal/coordinator/boot/*.go",
 	"cmd/spore/coordinator_cmd.go",
 	"internal/hooks/install.go",

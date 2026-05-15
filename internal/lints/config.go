@@ -174,6 +174,9 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 		}
 		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
 		return v
+	case SkyhelmTmuxInputBan:
+		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
+		return v
 	case UserSkillsParity:
 		if len(cfg.Hosts) > 0 {
 			v.Hosts = cfg.Hosts

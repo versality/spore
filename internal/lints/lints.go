@@ -110,6 +110,7 @@ func Named() map[string]Lint {
 		TaskSchedulerContext{},
 		TaskNeeds{},
 		SkyhelmWrapNoTmuxKill{},
+		SkyhelmTmuxInputBan{},
 	} {
 		out[l.Name()] = l
 	}
