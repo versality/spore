@@ -146,17 +146,19 @@ func fakeBundled() fstest.MapFS {
 
 func fakeHandover() fstest.MapFS {
 	return fstest.MapFS{
-		"bootstrap/handover/spore-attach.sh":                       {Data: []byte("#!/bin/sh\n")},
-		"bootstrap/handover/greet-coordinator.sh":                  {Data: []byte("#!/bin/sh\n")},
-		"bootstrap/handover/greet-worker.sh":                       {Data: []byte("#!/bin/sh\n")},
-		"bootstrap/handover/spore-coordinator-launch.sh":           {Data: []byte("#!/bin/sh\n")},
-		"bootstrap/handover/spore-worker-brief.sh":                 {Data: []byte("#!/bin/sh\n")},
-		"bootstrap/handover/spore-fleet-tick.sh":                   {Data: []byte("#!/bin/sh\n")},
-		"bootstrap/handover/hooks/block-bg-bash.pl":                {Data: []byte("#!/usr/bin/env perl\n")},
-		"bootstrap/handover/hooks/load-state-md.pl":                {Data: []byte("#!/usr/bin/env perl\n")},
-		"bootstrap/handover/settings.json":                         {Data: []byte("{}\n")},
-		"bootstrap/handover/systemd/spore-fleet-reconcile.service": {Data: []byte("[Service]\n")},
-		"bootstrap/handover/systemd/spore-fleet-reconcile.timer":   {Data: []byte("[Timer]\n")},
+		"bootstrap/handover/spore-attach.sh":                        {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/greet-coordinator.sh":                   {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/greet-worker.sh":                        {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/spore-coordinator-launch.sh":            {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/spore-worker-brief.sh":                  {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/spore-fleet-tick.sh":                    {Data: []byte("#!/bin/sh\n")},
+		"bootstrap/handover/hooks/block-bg-bash.pl":                 {Data: []byte("#!/usr/bin/env perl\n")},
+		"bootstrap/handover/hooks/load-state-md.pl":                 {Data: []byte("#!/usr/bin/env perl\n")},
+		"bootstrap/handover/settings.json":                          {Data: []byte("{}\n")},
+		"bootstrap/handover/systemd/spore-fleet-reconcile.service":  {Data: []byte("[Service]\n")},
+		"bootstrap/handover/systemd/spore-fleet-reconcile.timer":    {Data: []byte("[Timer]\n")},
+		"bootstrap/handover/systemd/spore-fleet-evict-idle.service": {Data: []byte("[Service]\n")},
+		"bootstrap/handover/systemd/spore-fleet-evict-idle.timer":   {Data: []byte("[Timer]\n")},
 	}
 }
 

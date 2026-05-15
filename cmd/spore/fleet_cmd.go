@@ -29,6 +29,7 @@ Usage:
   spore fleet replenish-hook
   spore fleet wake [<slug>]
   spore fleet reap [--force-published]
+  spore fleet evict-idle [--idle-secs N] [--dry-run] [--all-projects]
   spore fleet auto-mint-cutover [flags]
   spore fleet enable
   spore fleet disable
@@ -54,6 +55,14 @@ Subcommands:
                   into the tmux input. Deduped by a 5-min wake-pending
                   marker (override via WT_WORKER_WAKE_PENDING_TTL).
                   When <slug> is given, only that slug is considered.
+  evict-idle      Flip status=active tasks to status=blocked /
+                  blocker=auto:idle-no-progress when all three idle
+                  signals hold for >threshold: tmux session inactive,
+                  inbox drained, no recent commit on wt/<slug>. Uses
+                  task.BlockAuto so reap semantics free the tmux
+                  session. Disabled via SPORE_EVICTOR=0|false|off|no.
+                  --all-projects sweeps every spore harness under
+                  $HOME (used by the systemd-user timer).
   reap            Walk every worktree under .worktrees/ and tear down
                   done / orphan tasks: kill the tmux session, run
                   ` + "`" + `git worktree remove --force` + "`" + `, and delete the wt/<slug>
@@ -153,6 +162,8 @@ func runFleet(args []string) error {
 		return runFleetWake(rest)
 	case "reap":
 		return runFleetReap(rest)
+	case "evict-idle":
+		return runFleetEvictIdle(rest)
 	case "auto-mint-cutover":
 		return runFleetAutoMintCutover(rest)
 	case "enable":

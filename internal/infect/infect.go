@@ -478,6 +478,8 @@ func InstallHandoverScript(c Config, projectBase, remoteTmp string) string {
 		"install -m 0644 " + shellSingleQuote(remoteTmp+"/settings.json") + " /home/spore/.claude/settings.json",
 		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-reconcile.service") + " /home/spore/.config/systemd/user/spore-fleet-reconcile.service",
 		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-reconcile.timer") + " /home/spore/.config/systemd/user/spore-fleet-reconcile.timer",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-evict-idle.service") + " /home/spore/.config/systemd/user/spore-fleet-evict-idle.service",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-evict-idle.timer") + " /home/spore/.config/systemd/user/spore-fleet-evict-idle.timer",
 		"cat > /etc/spore/coordinator.env <<'EOF'\n" + coordinatorEnv + "EOF",
 		"rm -rf " + shellSingleQuote(projectRoot),
 		"mv " + shellSingleQuote(rootCopy) + " " + shellSingleQuote(projectRoot),

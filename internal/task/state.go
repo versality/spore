@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/versality/spore/internal/coordinator"
 )
@@ -107,7 +109,14 @@ func ProjectName(projectRoot string) (string, error) {
 // top level of slug's inbox (unread). Returns 0 when the directory
 // does not exist. Mirrors wt-go internal/inbox.CountUnread.
 func CountUnreadInbox(slug string) (int, string, error) {
-	dir, err := InboxDir(slug)
+	return CountUnreadInboxForProject("", slug)
+}
+
+// CountUnreadInboxForProject is the project-rooted variant of
+// CountUnreadInbox. Used by the idle-evictor sweep, which iterates
+// across configured projects and cannot rely on cwd.
+func CountUnreadInboxForProject(projectRoot, slug string) (int, string, error) {
+	dir, err := InboxDirForProject(projectRoot, slug)
 	if err != nil {
 		return 0, "", err
 	}
@@ -130,6 +139,28 @@ func CountUnreadInbox(slug string) (int, string, error) {
 		n++
 	}
 	return n, dir, nil
+}
+
+// LastCommitTime returns the committer-date of the tip commit on
+// refs/heads/wt/<slug>. ok=false when the branch is missing or the
+// timestamp cannot be parsed; callers should treat ok=false as "no
+// commit on record" (the idle-evictor predicate counts a missing
+// branch as "no recent progress", since a worker that has never
+// committed has by definition not made progress).
+func LastCommitTime(projectRoot, slug string) (time.Time, bool) {
+	branch := "wt/" + slug
+	if gitCmd(projectRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run() != nil {
+		return time.Time{}, false
+	}
+	out, err := gitCmd(projectRoot, "log", "-1", "--format=%ct", "refs/heads/"+branch).Output()
+	if err != nil {
+		return time.Time{}, false
+	}
+	secs, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(secs, 0), true
 }
 
 // UnmergedCommits returns the count of commits reachable from

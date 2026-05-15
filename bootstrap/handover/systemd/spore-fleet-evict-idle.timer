@@ -1,0 +1,16 @@
+[Unit]
+Description=spore fleet evict-idle, every two minutes
+Documentation=https://github.com/versality/spore
+
+[Timer]
+# Two-minute cadence: an idle worker that has crossed the soak
+# window will be flipped within one tick. Reconcile runs every minute
+# so the slot frees within ~3min worst-case (this tick + the
+# following reconcile pass).
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=spore-fleet-evict-idle.service
+
+[Install]
+WantedBy=timers.target

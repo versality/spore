@@ -117,6 +117,20 @@ func sessionIdle(name string, now time.Time) (time.Duration, bool) {
 	return now.Sub(last), true
 }
 
+// SessionIdle wraps sessionIdle so callers outside this package
+// (e.g. the idle-evictor sweep) can read the tmux activity stamp
+// without forking the probe.
+func SessionIdle(name string, now time.Time) (time.Duration, bool) {
+	return sessionIdle(name, now)
+}
+
+// MatchingSlugSessions wraps matchingSlugSessions so external sweeps
+// can enumerate the tmux sessions belonging to (project, slug) via
+// the same matcher pause/reap uses.
+func MatchingSlugSessions(tasksDir, projectRoot, slug string) []string {
+	return matchingSlugSessions(tasksDir, projectRoot, slug)
+}
+
 func hasSession(name string) bool {
 	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
 }

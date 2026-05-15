@@ -1,0 +1,11 @@
+[Unit]
+Description=spore fleet evict-idle (auto-block idle workers)
+Documentation=https://github.com/versality/spore
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/spore fleet evict-idle --all-projects
+# A failed sweep must not propagate: the timer fires again on the
+# next tick. Independent from spore-fleet-reconcile.service so a
+# reconcile bug cannot mask eviction (and vice versa).
+SuccessExitStatus=0

@@ -254,6 +254,45 @@ in
       '';
     };
 
+    evictIdle = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Wire a sibling systemd-user timer (spore-fleet-evict-idle)
+          that periodically flips genuinely idle workers to
+          `status: blocked / blocker: auto:idle-no-progress`. Idle
+          means: tmux pane inactive for longer than `idleSeconds`,
+          inbox drained, and no commit on `wt/<slug>` within the same
+          window. Pairs with the reconcile unit but fails
+          independently (a broken sweep cannot mask reconcile).
+        '';
+      };
+
+      interval = lib.mkOption {
+        type = lib.types.str;
+        default = "2min";
+        description = ''
+          Timer interval between eviction sweeps. The sweep is
+          O(active tasks) and finishes in well under a second; a
+          slower cadence than reconcile is fine because the soak
+          window itself is much larger than the tick.
+        '';
+      };
+
+      idleSeconds = lib.mkOption {
+        type = lib.types.ints.unsigned;
+        default = 600;
+        description = ''
+          Soak window in seconds. A worker must be inactive for at
+          least this long across all three signals (tmux idle, no
+          unread inbox, no recent commit) before the evictor flips
+          it. Wired through `SPORE_EVICTOR_IDLE_SECS` so the same
+          override works for ad-hoc CLI invocations.
+        '';
+      };
+    };
+
     extraEnv = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -451,6 +490,46 @@ in
           OnUnitInactiveSec = cfg.interval;
           AccuracySec = "5s";
           Unit = "spore-fleet-reconcile.service";
+        };
+        Install.WantedBy = [ "timers.target" ];
+      };
+
+      systemd.user.services.spore-fleet-evict-idle = lib.mkIf cfg.evictIdle.enable {
+        Unit = {
+          Description = "spore fleet evict-idle (auto-block idle workers, host=${cfg.hostId})";
+        };
+        Service = {
+          Type = "oneshot";
+          WorkingDirectory = toString cfg.projectRoot;
+          ExecStart = "${cfg.package}/bin/spore fleet evict-idle";
+          Environment = lib.mapAttrsToList (n: v: "${n}=${v}") (
+            {
+              SPORE_HOST_ID = cfg.hostId;
+              SPORE_EVICTOR_IDLE_SECS = toString cfg.evictIdle.idleSeconds;
+              PATH = lib.makeBinPath [
+                cfg.package
+                pkgs.git
+                pkgs.tmux
+              ];
+            } // cfg.extraEnv
+          );
+          # No Restart= - a failed sweep must not propagate; the
+          # next timer tick will retry. Mirrors the
+          # SuccessExitStatus=0 contract on the bundled unit.
+          NoNewPrivileges = true;
+          LockPersonality = true;
+          RestrictSUIDSGID = true;
+          ReadWritePaths = [ (toString cfg.projectRoot) ];
+        };
+      };
+
+      systemd.user.timers.spore-fleet-evict-idle = lib.mkIf cfg.evictIdle.enable {
+        Unit.Description = "Periodic spore fleet evict-idle";
+        Timer = {
+          OnBootSec = "2min";
+          OnUnitInactiveSec = cfg.evictIdle.interval;
+          AccuracySec = "15s";
+          Unit = "spore-fleet-evict-idle.service";
         };
         Install.WantedBy = [ "timers.target" ];
       };
