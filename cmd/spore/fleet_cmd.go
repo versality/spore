@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/versality/spore/internal/budget"
 	"github.com/versality/spore/internal/fleet"
+	"github.com/versality/spore/internal/task"
 
 	// Linear is the first matter adapter; the side-effect import
 	// fires its init() so [matter.linear] in spore.toml (or
@@ -29,6 +33,7 @@ Usage:
   spore fleet enable
   spore fleet disable
   spore fleet status
+  spore fleet list-sessions [--project NAME] [--kind worker|coordinator|any]
 
 Subcommands:
   reconcile       Run a single reconcile pass: when [matter.linear] is
@@ -68,6 +73,12 @@ Subcommands:
                   spawning; running sessions are left alone).
   status          Print the kill-switch state plus the list of slugs whose
                   session is currently alive.
+  list-sessions   List tmux sessions belonging to a project, parsed
+                  by the canonical matcher. TSV columns:
+                  name<TAB>project<TAB>slug<TAB>kind<TAB>tag<TAB>shape
+                  Default project = current cwd's project; default kind
+                  = worker. Exits 0 with empty output when tmux is not
+                  running or nothing matches.
 
 Flags (reconcile):
   --max-workers N   Override concurrency cap. Beats spore.toml.
@@ -150,6 +161,8 @@ func runFleet(args []string) error {
 		return runFleetDisable(rest)
 	case "status":
 		return runFleetStatus(rest)
+	case "list-sessions":
+		return runFleetListSessions(rest)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\n%s", sub, fleetUsage)
 	}
@@ -318,6 +331,83 @@ func runFleetStatus(args []string) error {
 	}
 	if rc == 2 {
 		os.Exit(2)
+	}
+	return nil
+}
+
+// runFleetListSessions prints parsed tmux session inventory for a
+// project. Replaces the shell `tmux list-sessions | grep` patterns
+// in nixosModules/spore-fleet.nix and is the sanctioned API for
+// shell consumers that need worker-vs-coordinator awareness.
+//
+// Default project = task.ProjectName(cwd) with cwd's basename as
+// fallback (mirrors LegacySessionName resolution). Default kind =
+// worker.
+//
+// Exit codes:
+//
+//	0 always (no tmux server, no matching sessions, success).
+//	non-zero only on flag parse or project-name errors.
+func runFleetListSessions(args []string) error {
+	fs := flag.NewFlagSet("fleet list-sessions", flag.ContinueOnError)
+	projectFlag := fs.String("project", "", "project name (default: derived from cwd)")
+	kindFlag := fs.String("kind", "worker", "filter by kind: worker, coordinator, any")
+	help := fs.Bool("h", false, "show help")
+	helpLong := fs.Bool("help", false, "show help")
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if *help || *helpLong {
+		fmt.Print(fleetUsage)
+		return nil
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("fleet list-sessions: unexpected positional args: %v", fs.Args())
+	}
+	kind := *kindFlag
+	switch kind {
+	case "worker", "coordinator", "any":
+	default:
+		return fmt.Errorf("fleet list-sessions: --kind %q: want worker|coordinator|any", kind)
+	}
+	project := *projectFlag
+	if project == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		name, err := task.ProjectName(cwd)
+		if err != nil || name == "" {
+			project = filepath.Base(cwd)
+		} else {
+			project = name
+		}
+	}
+
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		// No tmux server / no sessions: nothing to print, exit 0.
+		return nil
+	}
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		p, ok := task.MatchProject(line, project)
+		if !ok {
+			continue
+		}
+		if kind != "any" && p.Kind != kind {
+			continue
+		}
+		shape := "current"
+		if p.Legacy {
+			shape = "legacy"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Project, p.Slug, p.Kind, p.Tag, shape)
 	}
 	return nil
 }
