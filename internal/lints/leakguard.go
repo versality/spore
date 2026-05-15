@@ -37,12 +37,15 @@ func (LeakGuard) Name() string { return "leak-guard" }
 // detect the terms), plus the coordinator boot package (kernel side
 // of the skyhelm consumer contract, so naming the consumer here is
 // part of the binding), plus the commit-msg hook in internal/hooks
-// (which exempts the consumer's wt-squash trailer literally).
+// (which exempts the consumer's wt-squash trailer literally), plus
+// consumer-shaped lints that exist to police a specific consumer's
+// invariants and therefore embed its terms in their patterns.
 var leakGuardPathAllowlist = []string{
 	"internal/leakdict/leakdict.go",
 	"internal/leakdict/leakdict_test.go",
 	"internal/lints/leakguard*.go",
 	"internal/lints/skyhelmtmuxinputban*.go",
+	"internal/lints/skyhelmwrapnotmuxkill*.go",
 	"internal/coordinator/boot/*.go",
 	"cmd/spore/coordinator_cmd.go",
 	"internal/hooks/install.go",
