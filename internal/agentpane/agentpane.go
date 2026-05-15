@@ -48,7 +48,7 @@ func Classify(capture CaptureFunc, target, agent string) (string, string) {
 	}
 	if strings.Contains(joined, "• Working (") ||
 		strings.Contains(joined, "• Waiting for background terminal") ||
-		strings.Contains(joined, "• Running ") {
+		strings.Contains(joined, "esc to interrupt") {
 		return "running", ""
 	}
 	for _, line := range lines {

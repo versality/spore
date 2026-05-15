@@ -71,6 +71,12 @@ func TestClassify(t *testing.T) {
 			wantState: "idle",
 		},
 		{
+			name:      "codex stop-hook log line is idle",
+			agent:     "codex",
+			out:       "• Running Stop hook: Checking fleet state\n\n• Running 5 Stop hooks\n\n› Improve documentation in @filename\n",
+			wantState: "idle",
+		},
+		{
 			name:       "codex interrupted is dead",
 			agent:      "codex",
 			out:        "■ Conversation interrupted - tell the model what to do differently.\n\n› Explain this codebase",
