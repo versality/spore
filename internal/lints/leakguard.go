@@ -46,6 +46,7 @@ var leakGuardPathAllowlist = []string{
 	"cmd/spore/coordinator_cmd.go",
 	"internal/hooks/install.go",
 	"internal/hooks/install_test.go",
+	"docs/todo/spore-duplication-audit.md",
 }
 
 // leakGuardTextExts is the set of file extensions whose content is
