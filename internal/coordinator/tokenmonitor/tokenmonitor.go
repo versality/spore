@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/transcript"
 )
 
@@ -61,15 +62,9 @@ func (c Config) Defaults() Config {
 	return c
 }
 
-// defaultStateDir resolves the coordinator state dir from the
-// SPORE_COORDINATOR_STATE_DIR env var, falling back to
-// $HOME/.local/state/spore/coordinator.
+// defaultStateDir delegates to the central resolver.
 func defaultStateDir() string {
-	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
-		return d
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "spore", "coordinator")
+	return coordinator.DefaultStateDir()
 }
 
 // IsCoordinator returns true if the inbox path is under the state

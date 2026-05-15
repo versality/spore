@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/transcript"
 )
 
@@ -67,11 +68,7 @@ func (c Config) Defaults() Config {
 }
 
 func defaultCoordinatorStateDir() string {
-	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
-		return d
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "spore", "coordinator")
+	return coordinator.StateDir()
 }
 
 // IsCoordinator returns true if the inbox is under the coordinator

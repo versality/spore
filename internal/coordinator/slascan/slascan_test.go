@@ -269,6 +269,7 @@ func TestScanFlushOnBlankLineEmitsBoth(t *testing.T) {
 
 func TestDefaultsHonorsEnv(t *testing.T) {
 	t.Setenv("SPORE_COORDINATOR_STATE_DIR", "/tmp/sporetest")
+	t.Setenv("WT_PROJECT", "")
 	t.Setenv("SPORE_COORDINATOR_STATE_FILE", "/tmp/sporetest/state.md")
 	t.Setenv("SPORE_SLA_AGE_SECONDS", "1800")
 	t.Setenv("SPORE_TASKS_DIR", "/tmp/sporetest/tasks")
@@ -284,6 +285,19 @@ func TestDefaultsHonorsEnv(t *testing.T) {
 	}
 	if c.TasksDir != "/tmp/sporetest/tasks" {
 		t.Errorf("TasksDir = %q", c.TasksDir)
+	}
+}
+
+func TestDefaultsScopesByProject(t *testing.T) {
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", "/tmp/sporetest")
+	t.Setenv("WT_PROJECT", "demo")
+	t.Setenv("SPORE_COORDINATOR_STATE_FILE", "")
+	c := Config{}.Defaults()
+	if c.StateDir != "/tmp/sporetest/demo" {
+		t.Errorf("StateDir = %q, want /tmp/sporetest/demo", c.StateDir)
+	}
+	if c.StateFile != "/tmp/sporetest/demo/state.md" {
+		t.Errorf("StateFile = %q, want /tmp/sporetest/demo/state.md", c.StateFile)
 	}
 }
 

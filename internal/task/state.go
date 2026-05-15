@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/versality/spore/internal/coordinator"
 )
 
 // StateDir returns "$XDG_STATE_HOME/spore/<project>" if XDG_STATE_HOME
@@ -43,31 +45,21 @@ func InboxDirForProject(projectRoot, slug string) (string, error) {
 	return filepath.Join(s, slug, "inbox"), nil
 }
 
-// CoordinatorStateDir returns the state root used by the singleton
-// coordinator inboxes.
+// CoordinatorStateDir returns the host-wide coordinator root. It
+// delegates to the central resolver in internal/coordinator so every
+// coordinator package agrees on one layout.
 func CoordinatorStateDir() (string, error) {
-	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
-		return d, nil
-	}
-	base, err := stateBaseDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, "spore", "coordinator"), nil
+	return coordinator.StateDir(), nil
 }
 
 // CoordinatorInboxDirForProject returns the singleton coordinator
-// inbox path for projectRoot.
+// inbox path for projectRoot. The layout is <CoordinatorStateDir>/<project>/inbox.
 func CoordinatorInboxDirForProject(projectRoot string) (string, error) {
 	project, err := ProjectName(projectRoot)
 	if err != nil {
 		return "", err
 	}
-	root, err := CoordinatorStateDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, project, "inbox"), nil
+	return coordinator.ProjectInbox(project), nil
 }
 
 func stateBaseDir() (string, error) {

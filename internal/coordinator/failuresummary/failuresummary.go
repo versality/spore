@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/fleet"
 )
 
@@ -42,11 +43,10 @@ const (
 	DefaultStuckSecs  = 1800
 	DefaultFloor      = 6
 
-	envCoordinatorStateDir = "SPORE_COORDINATOR_STATE_DIR"
-	envWorkerStateDir      = "WT_STATE"
-	envWindowSecs          = "SPORE_FAILURE_WINDOW_SECS"
-	envStuckSecs           = "SPORE_FAILURE_STUCK_SECS"
-	envFloor               = "SPORE_FLEET_FLOOR"
+	envWorkerStateDir = "WT_STATE"
+	envWindowSecs     = "SPORE_FAILURE_WINDOW_SECS"
+	envStuckSecs      = "SPORE_FAILURE_STUCK_SECS"
+	envFloor          = "SPORE_FLEET_FLOOR"
 )
 
 // Config is the runtime configuration for Summarize. Defaults() fills
@@ -70,11 +70,7 @@ type Config struct {
 // + stdlib defaults. Caller-supplied non-zero fields win.
 func (c Config) Defaults() Config {
 	if c.CoordinatorStateDir == "" {
-		c.CoordinatorStateDir = os.Getenv(envCoordinatorStateDir)
-	}
-	if c.CoordinatorStateDir == "" {
-		home, _ := os.UserHomeDir()
-		c.CoordinatorStateDir = filepath.Join(home, ".local", "state", "spore", "coordinator")
+		c.CoordinatorStateDir = coordinator.DefaultStateDir()
 	}
 	if c.WorkerStateDir == "" {
 		c.WorkerStateDir = os.Getenv(envWorkerStateDir)

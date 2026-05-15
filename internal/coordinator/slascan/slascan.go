@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/task"
 )
 
@@ -54,11 +55,7 @@ type Result struct {
 // SPORE_* env vars and stdlib defaults. Caller-supplied values win.
 func (c Config) Defaults() Config {
 	if c.StateDir == "" {
-		c.StateDir = os.Getenv("SPORE_COORDINATOR_STATE_DIR")
-	}
-	if c.StateDir == "" {
-		home, _ := os.UserHomeDir()
-		c.StateDir = filepath.Join(home, ".local", "state", "spore", "coordinator")
+		c.StateDir = coordinator.DefaultStateDir()
 	}
 	if c.StateFile == "" {
 		c.StateFile = os.Getenv("SPORE_COORDINATOR_STATE_FILE")

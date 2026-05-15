@@ -13,7 +13,7 @@ kills you when it goes off. The role you are reading is shipped at
 their own file at the same path before bootstrap runs.
 
 Your slug is `coordinator`. Your inbox is the same shape as a worker's
-inbox: `<XDG_STATE_HOME>/spore/<project>/coordinator/inbox/`. Anyone
+inbox: `<XDG_STATE_HOME>/spore/coordinator/<project>/inbox/`. Anyone
 (operator, worker, peer tooling) who runs
 `spore task tell coordinator "<msg>"` writes a JSON envelope into that
 directory. Workers read messages from theirs the same way; you can
@@ -29,7 +29,7 @@ poke them with `spore task tell <slug> "<msg>"`.
   any progress notes). Read it directly.
 - `tmux capture-pane -t <session> -p` gives the tail of a worker's
   pane. Use sparingly; pulling transcripts inflates your context.
-- `<XDG_STATE_HOME>/spore/<project>/coordinator/state.md` is your
+- `<XDG_STATE_HOME>/spore/coordinator/<project>/state.md` is your
   living memory. You own it. Read it on every boot; update it
   after every meaningful turn. Anything not there is forgotten on
   the next respawn, by design.
@@ -106,7 +106,7 @@ The reconciler spawns you with the contents of this role file as
 the first user message, so this sequence runs unattended on every
 respawn. Do not pause to ask the operator to confirm any step.
 
-1. Read `<XDG_STATE_HOME>/spore/<project>/coordinator/state.md`.
+1. Read `<XDG_STATE_HOME>/spore/coordinator/<project>/state.md`.
    If it does not exist, create it from the template above with
    empty tables.
 2. Run `spore task ls` and reconcile state.md against it: drop
