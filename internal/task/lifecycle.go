@@ -167,6 +167,26 @@ func Block(tasksDir, slug, blocker string) error {
 	return nil
 }
 
+// BlockAuto is the same status flip as Block, minus the inbox gate.
+// Used by the auto-eviction path: when a worker posts a question to
+// the coordinator via `spore task tell coordinator ...`, the same
+// call atomically flips the worker's own slug to blocked so the slot
+// is freed without the worker calling `spore task block` itself. The
+// coordinator-session gate still applies; the operator-bound "drain
+// your inbox before flipping" gate does not, because the worker has
+// just posted a question and may legitimately still hold unread
+// inbox items it wanted the coordinator to address.
+func BlockAuto(tasksDir, slug, blocker string) error {
+	if err := blockCoordinatorGate(); err != nil {
+		return err
+	}
+	if err := flipStatusWithBlocker(tasksDir, slug, StatusActive, StatusBlocked, blocker); err != nil {
+		return err
+	}
+	reapIdleSlugSessions(tasksDir, slug)
+	return nil
+}
+
 // Unblock flips a blocked task back to active and clears the blocker
 // reason. Used by scheduler scripts when their trigger condition is
 // met and by the operator. No coordinator gate: a coordinator may

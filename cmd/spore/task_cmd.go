@@ -452,7 +452,29 @@ func runTaskTell(args []string) error {
 	if len(args) != 2 {
 		return fmt.Errorf("usage: spore task tell <slug> <message>")
 	}
-	return task.Tell(args[0], args[1])
+	target, msg := args[0], args[1]
+	if err := task.Tell(target, msg); err != nil {
+		return err
+	}
+	if err := task.SelfBlockOnCoordinatorTell(resolveTasksDir(), target, callerSlugFromEnv()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// callerSlugFromEnv returns the slug of the worker session invoking
+// the command, sourced from WT_TASK_SLUG (the wt-task bash launcher)
+// or SPORE_TASK_SLUG (spore's Go launcher, lifecycle.go:550). Empty
+// when neither is set: operator-interactive shells, coordinator
+// sessions, ad-hoc scripts.
+func callerSlugFromEnv() string {
+	if s := os.Getenv("WT_TASK_SLUG"); s != "" {
+		return s
+	}
+	if s := os.Getenv("SPORE_TASK_SLUG"); s != "" {
+		return s
+	}
+	return ""
 }
 
 func runTaskVerify(args []string) error {
