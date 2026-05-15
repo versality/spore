@@ -76,7 +76,7 @@ func TestSelfBlockOnCoordinatorTellHappyPath(t *testing.T) {
 	t.Setenv(SessionKindEnv, SessionKindWorker)
 	dir := t.TempDir()
 	path := writeTaskFile(t, dir, "x", "active")
-	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, "x"); err != nil {
+	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, "I'm stuck", "x"); err != nil {
 		t.Fatalf("SelfBlockOnCoordinatorTell: %v", err)
 	}
 	if got := readStatus(t, path); got != "blocked" {
@@ -92,7 +92,7 @@ func TestSelfBlockOnCoordinatorTellNoopWhenTargetIsNotCoordinator(t *testing.T) 
 	t.Setenv(SessionKindEnv, SessionKindWorker)
 	dir := t.TempDir()
 	path := writeTaskFile(t, dir, "x", "active")
-	if err := SelfBlockOnCoordinatorTell(dir, "some-other-slug", "x"); err != nil {
+	if err := SelfBlockOnCoordinatorTell(dir, "some-other-slug", "hi", "x"); err != nil {
 		t.Fatalf("SelfBlockOnCoordinatorTell: %v", err)
 	}
 	if got := readStatus(t, path); got != "active" {
@@ -103,7 +103,7 @@ func TestSelfBlockOnCoordinatorTellNoopWhenTargetIsNotCoordinator(t *testing.T) 
 func TestSelfBlockOnCoordinatorTellNoopWhenNoCallerSlug(t *testing.T) {
 	t.Setenv(SessionKindEnv, SessionKindWorker)
 	dir := t.TempDir()
-	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, ""); err != nil {
+	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, "hi", ""); err != nil {
 		t.Fatalf("SelfBlockOnCoordinatorTell: %v", err)
 	}
 }
@@ -111,7 +111,7 @@ func TestSelfBlockOnCoordinatorTellNoopWhenNoCallerSlug(t *testing.T) {
 func TestSelfBlockOnCoordinatorTellNoopWhenCallerIsCoordinator(t *testing.T) {
 	t.Setenv(SessionKindEnv, SessionKindWorker)
 	dir := t.TempDir()
-	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, CoordinatorTellTarget); err != nil {
+	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, "hi", CoordinatorTellTarget); err != nil {
 		t.Fatalf("SelfBlockOnCoordinatorTell: %v", err)
 	}
 }
@@ -120,10 +120,55 @@ func TestSelfBlockOnCoordinatorTellTolerantWhenAlreadyBlocked(t *testing.T) {
 	t.Setenv(SessionKindEnv, SessionKindWorker)
 	dir := t.TempDir()
 	path := writeTaskFile(t, dir, "x", "blocked")
-	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, "x"); err != nil {
+	if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, "hi", "x"); err != nil {
 		t.Fatalf("SelfBlockOnCoordinatorTell on already-blocked should be no-op, got: %v", err)
 	}
 	if got := readStatus(t, path); got != "blocked" {
 		t.Errorf("status = %q, want blocked", got)
+	}
+}
+
+func TestSelfBlockOnCoordinatorTellBodyExempt(t *testing.T) {
+	t.Setenv(SessionKindEnv, SessionKindWorker)
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"plan ready basic", "plan ready: my-slug"},
+		{"plan ready leading space", "  plan ready: my-slug"},
+		{"plan ready no slug", "plan ready:"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := writeTaskFile(t, dir, "x", "active")
+			if err := SelfBlockOnCoordinatorTell(dir, CoordinatorTellTarget, c.body, "x"); err != nil {
+				t.Fatalf("SelfBlockOnCoordinatorTell: %v", err)
+			}
+			if got := readStatus(t, path); got != "active" {
+				t.Errorf("body %q: status = %q, want active (exempt)", c.body, got)
+			}
+		})
+	}
+}
+
+func TestBodyTriggersAutoBlock(t *testing.T) {
+	cases := []struct {
+		body string
+		want bool
+	}{
+		{"I'm stuck", true},
+		{"", true},
+		{"question about X", true},
+		{"plan-ready misspelled", true},
+		{"plan ready: foo", false},
+		{"plan ready:", false},
+		{" plan ready: foo", false},
+		{"\tplan ready: foo", false},
+	}
+	for _, c := range cases {
+		if got := bodyTriggersAutoBlock(c.body); got != c.want {
+			t.Errorf("bodyTriggersAutoBlock(%q) = %v, want %v", c.body, got, c.want)
+		}
 	}
 }

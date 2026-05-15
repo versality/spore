@@ -456,7 +456,7 @@ func runTaskTell(args []string) error {
 	if err := task.Tell(target, msg); err != nil {
 		return err
 	}
-	if err := task.SelfBlockOnCoordinatorTell(resolveTasksDir(), target, callerSlugFromEnv()); err != nil {
+	if err := task.SelfBlockOnCoordinatorTell(resolveTasksDir(), target, msg, callerSlugFromEnv()); err != nil {
 		return err
 	}
 	return nil
