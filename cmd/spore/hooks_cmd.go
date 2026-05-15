@@ -14,6 +14,7 @@ import (
 	"github.com/versality/spore/internal/hooks/contexttee"
 	"github.com/versality/spore/internal/hooks/prfinish"
 	"github.com/versality/spore/internal/hooks/pushpending"
+	"github.com/versality/spore/internal/hooks/settings"
 	"github.com/versality/spore/internal/hooks/workercontinue"
 	"github.com/versality/spore/internal/hooks/workerstopforceclosing"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
@@ -47,6 +48,8 @@ func runHooks(args []string) int {
 		return runHooksPRFinish()
 	case "settings":
 		return runHooksSettings(rest)
+	case "render":
+		return runHooksRender(rest)
 	case "gate-kind":
 		return runHooksGateKind(rest)
 	case "watch-inbox":
@@ -218,20 +221,6 @@ func writeHookResponse(resp hooks.Response) int {
 	return 0
 }
 
-// settingsInput is the JSON schema read from stdin by `spore hooks settings`.
-type settingsInput struct {
-	Events map[string][]settingsInputBin `json:"events"`
-}
-
-type settingsInputBin struct {
-	Command     string   `json:"command"`
-	Matcher     string   `json:"matcher,omitempty"`
-	Timeout     int      `json:"timeout,omitempty"`
-	Async       bool     `json:"async,omitempty"`
-	AsyncRewake bool     `json:"asyncRewake,omitempty"`
-	Kinds       []string `json:"kinds,omitempty"`
-}
-
 func runHooksGateKind(args []string) int {
 	err := hooks.GateKind(args, nil)
 	if err == nil {
@@ -281,30 +270,124 @@ func runHooksSettings(args []string) int {
 		fmt.Fprintln(os.Stderr, "spore hooks settings:", err)
 		return 1
 	}
-	var input settingsInput
-	if err := json.Unmarshal(body, &input); err != nil {
+	cfg, err := settings.Parse(body)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks settings: bad input:", err)
 		return 1
 	}
-	events := make(map[string][]hooks.HookBin, len(input.Events))
-	for name, bins := range input.Events {
-		for _, b := range bins {
-			events[name] = append(events[name], hooks.HookBin{
-				BinPath:     b.Command,
-				Matcher:     b.Matcher,
-				Timeout:     b.Timeout,
-				Async:       b.Async,
-				AsyncRewake: b.AsyncRewake,
-				Kinds:       b.Kinds,
-			})
-		}
-	}
-	out, err := hooks.SettingsForKind(events, kind)
+	out, err := hooks.SettingsForKind(cfg.HookBins(), kind)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks settings:", err)
 		return 1
 	}
 	os.Stdout.Write(out)
+	return 0
+}
+
+// runHooksRender is the full claude-code pipeline: read hooks-config.json,
+// render for --kind, merge settings-extras.json, write to --out. This is
+// the entry point bootstrap/scripts/hooks-render.sh calls so the shell
+// renderer and spawn-time inject share the same package.
+func runHooksRender(args []string) int {
+	var (
+		hooksConfigPath string
+		extrasPath      string
+		outPath         string
+		claudeDir       string
+		kind            = os.Getenv("SPORE_RENDER_KIND")
+	)
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		take := func() (string, bool) {
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "spore hooks render: %s needs a value\n", a)
+				return "", false
+			}
+			i++
+			return args[i], true
+		}
+		switch {
+		case a == "--kind":
+			v, ok := take()
+			if !ok {
+				return 2
+			}
+			kind = v
+		case strings.HasPrefix(a, "--kind="):
+			kind = strings.TrimPrefix(a, "--kind=")
+		case a == "--hooks-config":
+			v, ok := take()
+			if !ok {
+				return 2
+			}
+			hooksConfigPath = v
+		case strings.HasPrefix(a, "--hooks-config="):
+			hooksConfigPath = strings.TrimPrefix(a, "--hooks-config=")
+		case a == "--extras":
+			v, ok := take()
+			if !ok {
+				return 2
+			}
+			extrasPath = v
+		case strings.HasPrefix(a, "--extras="):
+			extrasPath = strings.TrimPrefix(a, "--extras=")
+		case a == "--out":
+			v, ok := take()
+			if !ok {
+				return 2
+			}
+			outPath = v
+		case strings.HasPrefix(a, "--out="):
+			outPath = strings.TrimPrefix(a, "--out=")
+		case a == "--claude-dir":
+			v, ok := take()
+			if !ok {
+				return 2
+			}
+			claudeDir = v
+		case strings.HasPrefix(a, "--claude-dir="):
+			claudeDir = strings.TrimPrefix(a, "--claude-dir=")
+		default:
+			fmt.Fprintln(os.Stderr, "spore hooks render: unexpected arg:", a)
+			return 2
+		}
+	}
+	if claudeDir != "" {
+		if hooksConfigPath == "" {
+			hooksConfigPath = claudeDir + "/hooks-config.json"
+		}
+		if extrasPath == "" {
+			extrasPath = claudeDir + "/settings-extras.json"
+		}
+		if outPath == "" {
+			outPath = claudeDir + "/settings.json"
+		}
+	}
+	if hooksConfigPath == "" {
+		fmt.Fprintln(os.Stderr, "spore hooks render: --hooks-config (or --claude-dir) is required")
+		return 2
+	}
+	if _, err := os.Stat(hooksConfigPath); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks render: missing", hooksConfigPath)
+		return 2
+	}
+	merged, ok, err := settings.RenderClaude(hooksConfigPath, extrasPath, kind)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks render:", err)
+		return 1
+	}
+	if !ok {
+		fmt.Fprintln(os.Stderr, "spore hooks render: hooks-config missing")
+		return 2
+	}
+	if outPath == "" {
+		os.Stdout.Write(merged)
+		return 0
+	}
+	if err := os.WriteFile(outPath, merged, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks render: write", outPath+":", err)
+		return 1
+	}
 	return 0
 }
 

@@ -11,13 +11,10 @@ package inject
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/hooks/settings"
 )
 
 // SkipEnv, when set to "1", suppresses the write entirely. Lets an
@@ -77,46 +74,17 @@ func InjectWithEnv(projectRoot, targetDir, kind string, getenv func(string) stri
 	if hooksPath == "" {
 		hooksPath = filepath.Join(projectRoot, defaultHooksConfigRel)
 	}
-	hooksRaw, err := os.ReadFile(hooksPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", false, nil
-		}
-		return "", false, fmt.Errorf("read hooks-config: %w", err)
-	}
-	var input hooksConfigInput
-	if err := json.Unmarshal(hooksRaw, &input); err != nil {
-		return "", false, fmt.Errorf("parse %s: %w", hooksPath, err)
-	}
-	events := make(map[string][]hooks.HookBin, len(input.Events))
-	for name, bins := range input.Events {
-		for _, b := range bins {
-			events[name] = append(events[name], hooks.HookBin{
-				BinPath:     b.Command,
-				Matcher:     b.Matcher,
-				Timeout:     b.Timeout,
-				Async:       b.Async,
-				AsyncRewake: b.AsyncRewake,
-				Kinds:       b.Kinds,
-			})
-		}
-	}
-	rendered, err := hooks.SettingsForKind(events, kind)
-	if err != nil {
-		return "", false, fmt.Errorf("render kind=%q: %w", kind, err)
-	}
-
 	extrasPath := getenv(SettingsExtrasEnv)
 	if extrasPath == "" {
 		extrasPath = filepath.Join(projectRoot, defaultExtrasRel)
 	}
-	extrasRaw, err := os.ReadFile(extrasPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", false, fmt.Errorf("read settings-extras: %w", err)
-	}
-	merged, err := mergeJSONObjects(rendered, extrasRaw)
+
+	merged, ok, err := settings.RenderClaude(hooksPath, extrasPath, kind)
 	if err != nil {
-		return "", false, fmt.Errorf("merge extras: %w", err)
+		return "", false, err
+	}
+	if !ok {
+		return "", false, nil
 	}
 
 	target := filepath.Join(targetDir, targetRel)
@@ -127,41 +95,4 @@ func InjectWithEnv(projectRoot, targetDir, kind string, getenv func(string) stri
 		return "", false, err
 	}
 	return target, true, nil
-}
-
-type hooksConfigInput struct {
-	Events map[string][]hooksConfigBin `json:"events"`
-}
-
-type hooksConfigBin struct {
-	Command     string   `json:"command"`
-	Matcher     string   `json:"matcher,omitempty"`
-	Timeout     int      `json:"timeout,omitempty"`
-	Async       bool     `json:"async,omitempty"`
-	AsyncRewake bool     `json:"asyncRewake,omitempty"`
-	Kinds       []string `json:"kinds,omitempty"`
-}
-
-// mergeJSONObjects shallowly merges b into a (b overrides a's top-level
-// keys). Empty b returns a unchanged. Mirrors lints.HooksDrift's merge
-// so a passing lint matches what spore injects at spawn-time.
-func mergeJSONObjects(a, b []byte) ([]byte, error) {
-	var ma map[string]any
-	if err := json.Unmarshal(a, &ma); err != nil {
-		return nil, err
-	}
-	if len(bytes.TrimSpace(b)) > 0 {
-		var mb map[string]any
-		if err := json.Unmarshal(b, &mb); err != nil {
-			return nil, err
-		}
-		for k, v := range mb {
-			ma[k] = v
-		}
-	}
-	out, err := json.MarshalIndent(ma, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(out, '\n'), nil
 }

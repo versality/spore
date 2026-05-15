@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/hooks/settings"
 )
 
 func renderHooksFixture(t *testing.T) ([]byte, []byte, []byte) {
@@ -16,7 +17,7 @@ func renderHooksFixture(t *testing.T) ([]byte, []byte, []byte) {
 	if err != nil {
 		t.Fatalf("Settings: %v", err)
 	}
-	merged, err := mergeJSONObjects(rendered, extras)
+	merged, err := settings.MergeExtras(rendered, extras)
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}

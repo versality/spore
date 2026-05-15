@@ -2,13 +2,11 @@ package inject
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/hooks/settings"
 )
 
 // CodexHooksConfigEnv overrides the path to the codex source
@@ -49,33 +47,12 @@ func InjectCodexWithEnv(projectRoot, targetDir, kind string, getenv func(string)
 	if hooksPath == "" {
 		hooksPath = filepath.Join(projectRoot, defaultCodexHooksConfigRel)
 	}
-	hooksRaw, err := os.ReadFile(hooksPath)
+	rendered, ok, err := settings.RenderCodex(hooksPath, kind)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", false, nil
-		}
-		return "", false, fmt.Errorf("read codex hooks-config: %w", err)
+		return "", false, err
 	}
-	var input hooksConfigInput
-	if err := json.Unmarshal(hooksRaw, &input); err != nil {
-		return "", false, fmt.Errorf("parse %s: %w", hooksPath, err)
-	}
-	events := make(map[string][]hooks.HookBin, len(input.Events))
-	for name, bins := range input.Events {
-		for _, b := range bins {
-			events[name] = append(events[name], hooks.HookBin{
-				BinPath:     b.Command,
-				Matcher:     b.Matcher,
-				Timeout:     b.Timeout,
-				Async:       b.Async,
-				AsyncRewake: b.AsyncRewake,
-				Kinds:       b.Kinds,
-			})
-		}
-	}
-	rendered, err := hooks.CodexHooksForKind(events, kind)
-	if err != nil {
-		return "", false, fmt.Errorf("render kind=%q: %w", kind, err)
+	if !ok {
+		return "", false, nil
 	}
 
 	target := filepath.Join(targetDir, codexTargetRel)
