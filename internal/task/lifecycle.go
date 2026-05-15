@@ -122,12 +122,12 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
-		slug, ok := slugFromSessionName(line, project)
-		if !ok || seen[slug] {
+		p, ok := ParseSession(line, project)
+		if !ok || p.Kind != SessionKindWorker || seen[p.Slug] {
 			continue
 		}
-		seen[slug] = true
-		slugs = append(slugs, slug)
+		seen[p.Slug] = true
+		slugs = append(slugs, p.Slug)
 	}
 	sort.Strings(slugs)
 	return slugs, nil
