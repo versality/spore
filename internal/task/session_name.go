@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/versality/spore/codexpolicy"
+	"github.com/versality/spore/internal/sessionkind"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -139,44 +140,104 @@ func modelTier(model, agent string) string {
 	}
 }
 
-func slugFromSessionName(name, project string) (string, bool) {
-	for _, prefix := range legacySessionPrefixes(project) {
-		if strings.HasPrefix(name, prefix) {
-			return cleanSessionSlug(strings.TrimPrefix(name, prefix))
-		}
-	}
-	needle := project + "/"
-	start := 0
-	for {
-		i := strings.Index(name[start:], needle)
-		if i < 0 {
-			return "", false
-		}
-		i += start
-		if i == 0 || name[i-1] == ' ' {
-			return cleanSessionSlug(name[i+len(needle):])
-		}
-		start = i + len(needle)
-	}
+// ParsedSession is the canonical decomposition of a tmux session
+// name. Name carries the raw input (including any tier-tag suffix).
+// Legacy is true for the spore-prefixed shapes; current wt-emoji
+// names have Legacy false. Kind is one of sessionkind.Worker,
+// sessionkind.Coordinator, or "" (other).
+type ParsedSession struct {
+	Name    string
+	Project string
+	Slug    string
+	Tag     string
+	Kind    string
+	Legacy  bool
 }
 
-func legacySessionPrefixes(project string) []string {
-	prefixes := []string{"spore/" + project + "/"}
-	if project == "spore" {
-		prefixes = append(prefixes, "spore/")
+// ParseSession decomposes a tmux session name relative to project.
+// Project is required: the legacy "spore/<slug>" shape collapses to
+// project=="spore"+slug only when the caller's project is "spore",
+// and the current wt-emoji shape needs project to find the
+// "<project>/<slug>" anchor.
+//
+// Accepted shapes (all project-scoped):
+//
+//	"<rune> <project>/<slug>"           current worker
+//	"<rune> <project>/<slug> [tag]"     current worker, tagged
+//	"spore/<project>/<slug>"            legacy worker
+//	"spore/<slug>" (project=="spore")   legacy worker, wrap==project
+//	"<project>/coordinator"             current coordinator
+//	"spore/<project>/coordinator"       legacy coordinator
+//	"spore/coordinator" (project=="spore") legacy coordinator
+//
+// Returns (zero, false) for anything else.
+func ParseSession(name, project string) (ParsedSession, bool) {
+	raw := name
+	tag := ""
+	if i := strings.LastIndex(name, " ["); i >= 0 && strings.HasSuffix(name, "]") {
+		tag = name[i+2 : len(name)-1]
+		name = name[:i]
 	}
-	return prefixes
+	mk := func(slug, kind string, legacy bool) (ParsedSession, bool) {
+		return ParsedSession{
+			Name:    raw,
+			Project: project,
+			Slug:    slug,
+			Tag:     tag,
+			Kind:    kind,
+			Legacy:  legacy,
+		}, true
+	}
+
+	if strings.HasPrefix(name, "spore/") {
+		rest := name[len("spore/"):]
+		if strings.HasPrefix(rest, project+"/") {
+			tail := rest[len(project)+1:]
+			if tail == sessionkind.Coordinator {
+				return mk("", sessionkind.Coordinator, true)
+			}
+			if tail != "" && !strings.Contains(tail, "/") {
+				return mk(tail, sessionkind.Worker, true)
+			}
+			return ParsedSession{}, false
+		}
+		if project == "spore" && rest != "" && !strings.Contains(rest, "/") {
+			if rest == sessionkind.Coordinator {
+				return mk("", sessionkind.Coordinator, true)
+			}
+			return mk(rest, sessionkind.Worker, true)
+		}
+		return ParsedSession{}, false
+	}
+
+	if name == project+"/"+sessionkind.Coordinator {
+		return mk("", sessionkind.Coordinator, false)
+	}
+
+	needle := " " + project + "/"
+	i := strings.Index(name, needle)
+	if i < 0 {
+		return ParsedSession{}, false
+	}
+	tail := name[i+len(needle):]
+	if tail == "" || strings.Contains(tail, "/") {
+		return ParsedSession{}, false
+	}
+	if tail == sessionkind.Coordinator {
+		return mk("", sessionkind.Coordinator, false)
+	}
+	return mk(tail, sessionkind.Worker, false)
 }
 
-func cleanSessionSlug(rest string) (string, bool) {
-	if rest == "" {
-		return "", false
-	}
-	if i := strings.IndexByte(rest, ' '); i >= 0 {
-		rest = rest[:i]
-	}
-	if rest == "" || strings.Contains(rest, "/") {
-		return "", false
-	}
-	return rest, true
+// MatchSlug reports whether name is a worker session for (project,
+// slug). Coordinator sessions never match.
+func MatchSlug(name, project, slug string) bool {
+	p, ok := ParseSession(name, project)
+	return ok && p.Kind == sessionkind.Worker && p.Slug == slug
+}
+
+// MatchProject is an alias for ParseSession kept for caller clarity
+// at sites that iterate all of a project's sessions.
+func MatchProject(name, project string) (ParsedSession, bool) {
+	return ParseSession(name, project)
 }
