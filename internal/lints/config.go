@@ -14,20 +14,24 @@ type Config struct {
 }
 
 type LintConfig struct {
-	Allowlist       []string
-	ConsumersDir    string
-	RulesDir        string
-	RenderCmd       string
-	ConsumersCmd    string
-	Limit           int
-	Ext             []string
-	SkipPath        []string
-	RootLineLimit   int
-	RootCharLimit   int
-	SubdirLineLimit int
-	FlakePath       string
-	ScanDirs        []string
-	Hosts           []string
+	Allowlist         []string
+	ConsumersDir      string
+	RulesDir          string
+	RenderCmd         string
+	ConsumersCmd      string
+	Limit             int
+	Ext               []string
+	SkipPath          []string
+	RootLineLimit     int
+	RootCharLimit     int
+	SubdirLineLimit   int
+	FlakePath         string
+	ScanDirs          []string
+	Hosts             []string
+	AgentSession      string
+	AgentService      string
+	AgentServiceAllow []string
+	AgentProcesses    []string
 }
 
 func LoadProjectConfig(root string) (Config, error) {
@@ -177,6 +181,24 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 	case SkyhelmTmuxInputBan:
 		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
 		return v
+	case AgentKillSwitches:
+		if len(cfg.ScanDirs) > 0 {
+			v.ScanDirs = cfg.ScanDirs
+		}
+		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
+		if cfg.AgentSession != "" {
+			v.AgentSession = cfg.AgentSession
+		}
+		if cfg.AgentService != "" {
+			v.AgentService = cfg.AgentService
+		}
+		if len(cfg.AgentServiceAllow) > 0 {
+			v.AgentServiceAllow = cfg.AgentServiceAllow
+		}
+		if len(cfg.AgentProcesses) > 0 {
+			v.AgentProcesses = cfg.AgentProcesses
+		}
+		return v
 	case UserSkillsParity:
 		if len(cfg.Hosts) > 0 {
 			v.Hosts = cfg.Hosts
@@ -229,6 +251,18 @@ func mergeLintConfig(base, over LintConfig) LintConfig {
 	}
 	if len(over.Hosts) > 0 {
 		base.Hosts = over.Hosts
+	}
+	if over.AgentSession != "" {
+		base.AgentSession = over.AgentSession
+	}
+	if over.AgentService != "" {
+		base.AgentService = over.AgentService
+	}
+	if len(over.AgentServiceAllow) > 0 {
+		base.AgentServiceAllow = over.AgentServiceAllow
+	}
+	if len(over.AgentProcesses) > 0 {
+		base.AgentProcesses = over.AgentProcesses
 	}
 	return base
 }
@@ -288,6 +322,18 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 	case "hosts":
 		v, err := parseStringList(raw)
 		cfg.Hosts = v
+		return errAt(lineNum, key, err)
+	case "agent_session":
+		cfg.AgentSession = stripQuotes(raw)
+	case "agent_service":
+		cfg.AgentService = stripQuotes(raw)
+	case "agent_service_allow":
+		v, err := parseStringList(raw)
+		cfg.AgentServiceAllow = v
+		return errAt(lineNum, key, err)
+	case "agent_processes":
+		v, err := parseStringList(raw)
+		cfg.AgentProcesses = v
 		return errAt(lineNum, key, err)
 	default:
 		return fmt.Errorf("line %d: unknown key %q in [lint.*]", lineNum, key)
