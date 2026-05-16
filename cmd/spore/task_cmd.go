@@ -64,6 +64,10 @@ Subcommands:
   verify <slug>                Print the evidence verdict for slug.
   waybar                       Print JSON chip for waybar custom module.
   drift                        Auto-commit task file changes.
+  auto-commit --repo <path> [--lock <path>]
+                               Safety-wrapped drift commit for systemd
+                               path units. Holds an flock, refuses when
+                               non-tasks/ paths are staged, then runs drift.
   migrate-priority [--dry-run] Backfill 'priority:' on tasks missing it.
   migrate-status <from> <to>   Rewrite every tasks/*.md status==<from> to <to>.
 
@@ -127,6 +131,8 @@ func runTask(args []string) error {
 		return runTaskWaybar(rest)
 	case "drift":
 		return runTaskDrift(rest)
+	case "auto-commit":
+		return runTaskAutoCommit(rest)
 	case "migrate-priority":
 		return runTaskMigratePriority(rest)
 	case "migrate-status":
@@ -286,6 +292,34 @@ func runTaskWaybar(_ []string) error {
 
 func runTaskDrift(_ []string) error {
 	return task.AutoCommitDrift("tasks")
+}
+
+func runTaskAutoCommit(args []string) error {
+	fs := flag.NewFlagSet("task auto-commit", flag.ContinueOnError)
+	repo := fs.String("repo", "", "repo root (required)")
+	lock := fs.String("lock", "", "flock path (default: $WT_STATE/merge-<basename>.lock)")
+	if err := fs.Parse(reorderFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("spore task auto-commit: unexpected positional args: %v", fs.Args())
+	}
+	if *repo == "" {
+		return fmt.Errorf("spore task auto-commit: --repo is required")
+	}
+	err := task.AutoCommit(task.AutoCommitOptions{Repo: *repo, Lock: *lock})
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, task.ErrAutoCommitLocked) {
+		return nil
+	}
+	var staged *task.AutoCommitStagedNonTasksError
+	if errors.As(err, &staged) {
+		fmt.Fprintln(os.Stderr, staged.Error())
+		os.Exit(2)
+	}
+	return err
 }
 
 func runTaskStart(args []string) error {

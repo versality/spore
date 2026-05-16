@@ -1,9 +1,11 @@
 package task
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -138,6 +140,129 @@ func TestAutoCommitDriftNotAGitRepo(t *testing.T) {
 	err := AutoCommitDrift(tasksDir)
 	if err == nil {
 		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestAutoCommitHappyPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: active\nslug: x\ntitle: X\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lock := filepath.Join(t.TempDir(), "merge.lock")
+	if err := AutoCommit(AutoCommitOptions{Repo: repo, Lock: lock}); err != nil {
+		t.Fatalf("AutoCommit: %v", err)
+	}
+	out, err := exec.Command("git", "-C", repo, "log", "--oneline").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if countLines(string(out)) != 2 {
+		t.Errorf("expected 2 commits, got:\n%s", out)
+	}
+}
+
+func TestAutoCommitNoTasksDirNoop(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	runGit(t, repo, "init", "-q", "-b", "main")
+	lock := filepath.Join(t.TempDir(), "merge.lock")
+	if err := AutoCommit(AutoCommitOptions{Repo: repo, Lock: lock}); err != nil {
+		t.Fatalf("AutoCommit: %v", err)
+	}
+}
+
+func TestAutoCommitMissingRepo(t *testing.T) {
+	err := AutoCommit(AutoCommitOptions{Repo: ""})
+	if err == nil {
+		t.Fatal("expected error for empty repo")
+	}
+}
+
+func TestAutoCommitNotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	err := AutoCommit(AutoCommitOptions{Repo: dir, Lock: filepath.Join(t.TempDir(), "l")})
+	if err == nil {
+		t.Fatal("expected error for non-git dir")
+	}
+}
+
+func TestAutoCommitRefusesStagedNonTasks(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+
+	if err := os.MkdirAll(filepath.Join(repo, "tasks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "tasks", "t.md"), []byte("body\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "other.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "other.txt")
+
+	err := AutoCommit(AutoCommitOptions{Repo: repo, Lock: filepath.Join(t.TempDir(), "l")})
+	var staged *AutoCommitStagedNonTasksError
+	if !errors.As(err, &staged) {
+		t.Fatalf("want AutoCommitStagedNonTasksError, got %v", err)
+	}
+	if len(staged.Paths) != 1 || staged.Paths[0] != "other.txt" {
+		t.Errorf("Paths = %v, want [other.txt]", staged.Paths)
+	}
+}
+
+func TestAutoCommitLockContentionReturnsErr(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	runGit(t, repo, "init", "-q", "-b", "main")
+	if err := os.MkdirAll(filepath.Join(repo, "tasks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	lock := filepath.Join(t.TempDir(), "merge.lock")
+	f, err := os.OpenFile(lock, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatalf("seed flock: %v", err)
+	}
+	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
+
+	// Use waitSeconds=0 indirectly: AutoCommit uses 30s, too long for a unit test.
+	// Call flockWait directly to assert the timeout path.
+	f2, err := os.OpenFile(lock, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+	err = flockWait(int(f2.Fd()), 0)
+	if !errors.Is(err, ErrAutoCommitLocked) {
+		t.Fatalf("want ErrAutoCommitLocked, got %v", err)
 	}
 }
 
