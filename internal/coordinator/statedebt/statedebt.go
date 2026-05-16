@@ -22,6 +22,10 @@ type Config struct {
 	StateDir  string
 	StateFile string
 	AgeDays   int
+	// Now overrides the reference time for the age threshold. Zero
+	// value means time.Now(). Tests inject a fixed clock so the
+	// classifier is deterministic.
+	Now time.Time
 }
 
 type Classification string
@@ -84,7 +88,11 @@ func Scan(cfg Config) (ScanResult, error) {
 		return ScanResult{}, err
 	}
 
-	threshold := time.Now().UTC().AddDate(0, 0, -cfg.AgeDays).Format("2006-01-02")
+	now := cfg.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	threshold := now.UTC().AddDate(0, 0, -cfg.AgeDays).Format("2006-01-02")
 
 	return scanContent(string(content), threshold), nil
 }

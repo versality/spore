@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+var fixedNow = time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
 
 const sampleState = `## Active tasks
 
@@ -35,7 +38,7 @@ func TestScanClassifications(t *testing.T) {
 	f := filepath.Join(dir, "state.md")
 	os.WriteFile(f, []byte(sampleState), 0o644)
 
-	result, err := Scan(Config{StateFile: f, AgeDays: 14})
+	result, err := Scan(Config{StateFile: f, AgeDays: 14, Now: fixedNow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +73,7 @@ func TestScanStaleCount(t *testing.T) {
 	f := filepath.Join(dir, "state.md")
 	os.WriteFile(f, []byte(sampleState), 0o644)
 
-	result, err := Scan(Config{StateFile: f, AgeDays: 14})
+	result, err := Scan(Config{StateFile: f, AgeDays: 14, Now: fixedNow})
 	if err != nil {
 		t.Fatal(err)
 	}
