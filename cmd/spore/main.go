@@ -31,6 +31,7 @@ Commands:
   version    Print the spore version.
   compose    Render agent instructions from a consumer's rule list.
   task       Manage tasks (new, ls, start, pause, park, block, done, tell).
+  todo       Maintenance on docs/todo/ specs (archive-aged-maybes).
   fleet      Run the worker fleet against the task queue (up/down/status).
   align      Track and exit the pilot-agent alignment period.
   bootstrap  Walk a fresh project through the stage gates.
@@ -287,6 +288,11 @@ func main() {
 	case "task":
 		if err := runTask(args); err != nil {
 			fmt.Fprintln(os.Stderr, "spore task:", err)
+			os.Exit(1)
+		}
+	case "todo":
+		if err := runTodo(args); err != nil {
+			fmt.Fprintln(os.Stderr, "spore todo:", err)
 			os.Exit(1)
 		}
 	case "fleet":
