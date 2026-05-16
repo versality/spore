@@ -50,6 +50,8 @@ Commands:
   secret     Manage age secrets (add via tmux popup; audit registration / consumers).
   signal     Record warning / error signals from a wrapped command.
   wt-check   Run the project's lint+test gate (nix develop -c just check).
+  audit-versions
+             Audit installed tools and flake inputs against versions.json.
 `
 
 const lintUsage = `spore lint - run portable lints over the working tree
@@ -340,6 +342,8 @@ func main() {
 		os.Exit(runSignal(args))
 	case "wt-check":
 		os.Exit(runWtCheck(args))
+	case "audit-versions":
+		os.Exit(runAuditVersions(args))
 	default:
 		fmt.Fprintf(os.Stderr, "spore: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
