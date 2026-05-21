@@ -163,7 +163,8 @@ func TestRunSmokeFromFreshToWorkerFleetReady(t *testing.T) {
 	// + readme sentinels, then assert Done at worker-fleet-ready.
 	root, stateDir := fixture(t)
 	writeFile(t, filepath.Join(root, "flake.nix"), []byte("# flake\n"))
-	writeFile(t, filepath.Join(root, "justfile"), []byte("check:\n\ttrue\n"))
+	writeFile(t, filepath.Join(root, "go.mod"), []byte("module smoke\n\ngo 1.22\n"))
+	writeFile(t, filepath.Join(root, "main.go"), []byte("package main\n"))
 	writeFile(t, filepath.Join(root, "README.md"), []byte("# project\n\nTo use: run `just check`.\n"))
 	writeFile(t, filepath.Join(root, "CLAUDE.md"), []byte("# CLAUDE\n\nSecrets live in `.envrc`.\n"))
 	writeFile(t, filepath.Join(root, ".envrc"), []byte("export FOO=bar\n"))

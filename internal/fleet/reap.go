@@ -337,14 +337,14 @@ func listWorktreesAt(git func(dir string, args ...string) (string, error), mainR
 		}
 		return nil, err
 	}
-	prefix := mainRoot + "/.worktrees/"
+	prefix := realpathOrClean(filepath.Join(mainRoot, ".worktrees")) + string(os.PathSeparator)
 	var out2 []string
 	for _, line := range strings.Split(out, "\n") {
 		if !strings.HasPrefix(line, "worktree ") {
 			continue
 		}
 		path := strings.TrimPrefix(line, "worktree ")
-		if strings.HasPrefix(path, prefix) {
+		if strings.HasPrefix(realpathOrClean(path), prefix) {
 			out2 = append(out2, path)
 		}
 	}

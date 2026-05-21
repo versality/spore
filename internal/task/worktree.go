@@ -68,11 +68,19 @@ func listWorktrees(projectRoot string) ([]worktreeEntry, error) {
 	return entries, nil
 }
 
-func classifyWorktree(projectRoot, worktree, branch string) (worktreeState, error) {
-	absWT, err := filepath.Abs(worktree)
+func canonicalWorktreePath(p string) string {
+	abs, err := filepath.Abs(p)
 	if err != nil {
-		return 0, err
+		abs = p
 	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	return abs
+}
+
+func classifyWorktree(projectRoot, worktree, branch string) (worktreeState, error) {
+	absWT := canonicalWorktreePath(worktree)
 	entries, err := listWorktrees(projectRoot)
 	if err != nil {
 		return 0, err
@@ -81,10 +89,7 @@ func classifyWorktree(projectRoot, worktree, branch string) (worktreeState, erro
 	var onBranch *worktreeEntry
 	for i := range entries {
 		e := &entries[i]
-		abs, err := filepath.Abs(e.path)
-		if err != nil {
-			abs = e.path
-		}
+		abs := canonicalWorktreePath(e.path)
 		if abs == absWT {
 			atPath = e
 		}
@@ -123,10 +128,9 @@ func worktreeConflictError(state worktreeState, worktree, branch, projectRoot st
 	case worktreeWrongBranch:
 		entries, _ := listWorktrees(projectRoot)
 		other := branch
+		absW := canonicalWorktreePath(worktree)
 		for _, e := range entries {
-			absE, _ := filepath.Abs(e.path)
-			absW, _ := filepath.Abs(worktree)
-			if absE == absW {
+			if canonicalWorktreePath(e.path) == absW {
 				other = e.branch
 				break
 			}
