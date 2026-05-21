@@ -16,7 +16,7 @@ func TestHostScopeExcludesDevShellAndServiceTools(t *testing.T) {
 	versions := `{
 		"inputs":{"spore":{"rev":"abc123"}},
 		"audit":{"tools":{
-			"host":{"skytower":{
+			"host":{"desktop-host":{
 				"opencode":{"bin":"opencode","expected":"1.14.29"},
 				"spore":{"bin":"spore","expected":"0.6.0"}
 			}},
@@ -24,8 +24,8 @@ func TestHostScopeExcludesDevShellAndServiceTools(t *testing.T) {
 				"go":{"bin":"go","expected":"1.26.2"},
 				"python":{"bin":"python3","expected":"3.13.12"}
 			},
-			"services":{"skywing":{
-				"skyler":{"bin":"skyler","expected":"0.1.0"},
+			"services":{"service-cluster":{
+				"service-helper":{"bin":"service-helper","expected":"0.1.0"},
 				"vault-writer":{"bin":"vault-writer","expected":"0.1.0"}
 			}}
 		}}
@@ -34,7 +34,7 @@ func TestHostScopeExcludesDevShellAndServiceTools(t *testing.T) {
 	var out bytes.Buffer
 	code, err := Run(Config{
 		BinRoot:      binRoot,
-		Host:         "skytower",
+		Host:         "desktop-host",
 		VersionsJSON: []byte(versions),
 		LockJSON:     []byte(testLockJSON),
 	}, &out, nil)
@@ -45,7 +45,7 @@ func TestHostScopeExcludesDevShellAndServiceTools(t *testing.T) {
 		t.Fatalf("code=%d\n%s", code, out.String())
 	}
 	got := out.String()
-	for _, absent := range []string{"name=go", "name=python", "name=skyler", "name=vault-writer"} {
+	for _, absent := range []string{"name=go", "name=python", "name=service-helper", "name=vault-writer"} {
 		if strings.Contains(got, absent) {
 			t.Fatalf("host audit included out-of-scope tool %s:\n%s", absent, got)
 		}
@@ -67,7 +67,7 @@ func TestDevShellScopeUsesPath(t *testing.T) {
 	versions := `{
 		"inputs":{"spore":{"rev":"abc123"}},
 		"audit":{"tools":{
-			"host":{"skytower":{}},
+			"host":{"desktop-host":{}},
 			"devShell":{
 				"go":{"bin":"go","expected":"1.26.2"},
 				"python":{"bin":"python3","expected":"3.13.12"}
@@ -78,7 +78,7 @@ func TestDevShellScopeUsesPath(t *testing.T) {
 	var out bytes.Buffer
 	code, err := Run(Config{
 		BinRoot:      t.TempDir(),
-		Host:         "skytower",
+		Host:         "desktop-host",
 		CheckDev:     true,
 		VersionsJSON: []byte(versions),
 		LockJSON:     []byte(testLockJSON),
