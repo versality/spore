@@ -561,7 +561,10 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if strings.HasPrefix(strings.TrimSpace(agent), "claude") && !strings.Contains(agent, "--dangerously-skip-permissions") {
 		agent = "claude --dangerously-skip-permissions" + strings.TrimPrefix(strings.TrimSpace(agent), "claude")
 	}
-	shellCmd := agent + ` ${SPORE_BRIEF_FILE:+-- "$(cat "$SPORE_BRIEF_FILE")"}`
+	shellCmd := agent
+	if os.Getenv(AgentBinaryEnv) == "" {
+		shellCmd += ` ${SPORE_BRIEF_FILE:+-- "$(cat "$SPORE_BRIEF_FILE")"}`
+	}
 	args := []string{
 		"new-session", "-d",
 		"-s", session,
