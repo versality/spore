@@ -33,7 +33,11 @@ func resolveMainRoot() (string, error) {
 	if !filepath.IsAbs(common) {
 		common = filepath.Join(cwd, common)
 	}
-	return filepath.Dir(common), nil
+	main := filepath.Dir(common)
+	if real, err := filepath.EvalSymlinks(main); err == nil {
+		return real, nil
+	}
+	return filepath.Clean(main), nil
 }
 
 const opencodeUsage = `spore opencode - opencode-driver lifecycle helpers
