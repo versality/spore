@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -672,11 +671,7 @@ func resolveTasksDir() string {
 	if v := os.Getenv("SPORE_TASKS_DIR"); v != "" {
 		return v
 	}
-	if out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output(); err == nil {
-		root := strings.TrimSpace(string(out))
-		if i := strings.Index(root, "/.worktrees/"); i >= 0 {
-			root = root[:i]
-		}
+	if root, err := resolveMainRoot(); err == nil {
 		return filepath.Join(root, "tasks")
 	}
 	if home, err := os.UserHomeDir(); err == nil {

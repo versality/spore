@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -154,5 +155,31 @@ func TestRunTaskNewPriorityRejectsBogus(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "critical|high|medium|low") {
 		t.Errorf("error %q should list valid values", err)
+	}
+}
+
+func TestResolveTasksDirFromLinkedWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	root := gitInitProject(t)
+	if err := os.Mkdir(filepath.Join(root, "tasks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	worktree := filepath.Join(root, ".worktrees", "demo")
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-q", "-b", "wt/demo", worktree).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v: %s", err, out)
+	}
+
+	t.Chdir(worktree)
+	got := resolveTasksDir()
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(realRoot, "tasks")
+	if got != want {
+		t.Fatalf("resolveTasksDir from worktree = %q, want main tasks %q", got, want)
 	}
 }
