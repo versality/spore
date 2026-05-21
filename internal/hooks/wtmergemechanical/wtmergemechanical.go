@@ -178,11 +178,15 @@ func mainCheckoutFromWorktree(worktree string) (string, bool) {
 		return "", false
 	}
 	gitDir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	// Expect <main>/.git/worktrees/<slug>; strip the last two segments
-	// to land on <main>/.git, then one more to land on <main>.
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(worktree, gitDir)
+	}
 	parent := filepath.Dir(filepath.Dir(filepath.Dir(gitDir)))
 	if parent == "" || parent == "/" {
 		return "", false
 	}
-	return parent, true
+	if real, err := filepath.EvalSymlinks(parent); err == nil {
+		return real, true
+	}
+	return filepath.Clean(parent), true
 }
