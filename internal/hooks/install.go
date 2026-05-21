@@ -205,11 +205,11 @@ func PreCommit(repoRoot string) error {
 	for path, name := range replacements {
 		msg = strings.ReplaceAll(msg, path, name)
 	}
-	if err != nil {
-		return fmt.Errorf("gofmt -d -l: %w\n%s", err, strings.TrimSpace(msg))
-	}
 	if strings.TrimSpace(msg) != "" {
 		return fmt.Errorf("gofmt needed:\n%s", strings.TrimSpace(msg))
+	}
+	if err != nil {
+		return fmt.Errorf("gofmt -d -l: %w\n%s", err, strings.TrimSpace(msg))
 	}
 	return nil
 }
