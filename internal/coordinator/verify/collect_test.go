@@ -2,6 +2,7 @@ package verify
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -147,6 +148,41 @@ func TestReadFrontmatterStatusMissing(t *testing.T) {
 	got := readFrontmatterStatus(dir, "ghost")
 	if got != "?" {
 		t.Errorf("missing file: got %q, want ?", got)
+	}
+}
+
+func TestResolveRepoRootFromLinkedWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	root := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+		{"commit", "-q", "--allow-empty", "-m", "init"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	worktree := filepath.Join(root, ".worktrees", "demo")
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-q", "-b", "wt/demo", worktree).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v: %s", err, out)
+	}
+
+	t.Chdir(worktree)
+	got := resolveRepoRoot()
+	want, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("resolveRepoRoot from worktree = %q, want main root %q", got, want)
 	}
 }
 

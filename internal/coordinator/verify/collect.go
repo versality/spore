@@ -11,16 +11,25 @@ import (
 )
 
 func resolveRepoRoot() string {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	out, err := exec.Command("git", "rev-parse", "--git-common-dir").Output()
 	if err != nil {
 		wd, _ := os.Getwd()
 		return wd
 	}
-	root := strings.TrimSpace(string(out))
-	if i := strings.Index(root, "/.worktrees/"); i >= 0 {
-		root = root[:i]
+	common := strings.TrimSpace(string(out))
+	if common == "" {
+		wd, _ := os.Getwd()
+		return wd
 	}
-	return root
+	if !filepath.IsAbs(common) {
+		wd, _ := os.Getwd()
+		common = filepath.Join(wd, common)
+	}
+	root := filepath.Dir(common)
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		return real
+	}
+	return filepath.Clean(root)
 }
 
 func resolveMainBranch(root string) string {
