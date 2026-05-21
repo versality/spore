@@ -399,6 +399,37 @@ func TestRunMergedNoClaims(t *testing.T) {
 	}
 }
 
+func TestMainCheckoutFromWorktreeRelativeGitDir(t *testing.T) {
+	main := filepath.Join(t.TempDir(), "project")
+	worktree := filepath.Join(main, ".worktrees", "demo")
+	gitDir := filepath.Join(main, ".git", "worktrees", "demo")
+	if err := os.MkdirAll(worktree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(worktree, gitDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: "+rel+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := mainCheckoutFromWorktree(worktree)
+	if !ok {
+		t.Fatal("mainCheckoutFromWorktree returned ok=false")
+	}
+	want, err := filepath.EvalSymlinks(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("mainCheckoutFromWorktree = %q, want %q", got, want)
+	}
+}
+
 func TestRunGHError(t *testing.T) {
 	fix := newRepoFixture(t, "demo")
 	deps := Deps{

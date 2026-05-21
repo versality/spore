@@ -437,9 +437,15 @@ func mainCheckoutFromWorktree(worktree string) (string, bool) {
 		return "", false
 	}
 	gd := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if !filepath.IsAbs(gd) {
+		gd = filepath.Join(worktree, gd)
+	}
 	parent := filepath.Dir(filepath.Dir(filepath.Dir(gd)))
 	if parent == "" || parent == "/" {
 		return "", false
 	}
-	return parent, true
+	if real, err := filepath.EvalSymlinks(parent); err == nil {
+		return real, true
+	}
+	return filepath.Clean(parent), true
 }
