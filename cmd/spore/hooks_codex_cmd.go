@@ -211,34 +211,19 @@ func runHooksCodexInboxWatcher(args []string) int {
 	if session == "" {
 		session = "coordinator"
 	}
-	paneCmds := []string{"codex-raw"}
-	if v := os.Getenv("SPORE_INBOX_WATCHER_PANE_CMDS"); v != "" {
-		paneCmds = paneCmds[:0]
-		for _, p := range strings.Split(v, ":") {
-			if p = strings.TrimSpace(p); p != "" {
-				paneCmds = append(paneCmds, p)
-			}
-		}
-	}
-	wakeArgv := splitShellArgs(os.Getenv("SPORE_INBOX_WATCHER_WAKE_CMD"))
-
 	driver := os.Getenv("SPORE_DRIVER")
 	if driver == "" {
 		driver = "codex"
 	}
 
 	cfg := &codex.InboxWatcherConfig{
-		StateDir:       stateDir,
-		Projects:       projects,
-		SessionName:    session,
-		PaneCmds:       paneCmds,
-		WakeArgv:       wakeArgv,
-		WakePendingTTL: time.Duration(envIntDefault("SPORE_INBOX_WATCHER_WAKE_TTL", 300)) * time.Second,
-		PollInterval:   time.Duration(envIntDefault("SPORE_INBOX_WATCHER_POLL_SEC", 5)) * time.Second,
-		StartupWait:    time.Duration(envIntDefault("SPORE_INBOX_WATCHER_STARTUP_WAIT", 30)) * time.Second,
-		Driver:         driver,
-		Once:           os.Getenv("SPORE_INBOX_WATCHER_ONCE") == "1",
+		StateDir:    stateDir,
+		Projects:    projects,
+		SessionName: session,
+		PaneCmds:    []string{"codex-raw"},
+		Driver:      driver,
 	}
+	cfg.ApplyEnv()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -281,54 +266,6 @@ func readProjectsFile(path, stateDir string) ([]codex.ProjectInbox, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-// splitShellArgs is a minimal whitespace-and-quote splitter for the
-// wake command env var. Single + double quotes group tokens; no
-// escape handling beyond that, which is plenty for typical wake
-// commands like `wt-task launch-coordinator`.
-func splitShellArgs(s string) []string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	var out []string
-	var cur strings.Builder
-	quote := byte(0)
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if quote != 0 {
-			if c == quote {
-				quote = 0
-				continue
-			}
-			cur.WriteByte(c)
-			continue
-		}
-		if c == '"' || c == '\'' {
-			quote = c
-			continue
-		}
-		if c == ' ' || c == '\t' {
-			if cur.Len() > 0 {
-				out = append(out, cur.String())
-				cur.Reset()
-			}
-			continue
-		}
-		cur.WriteByte(c)
-	}
-	if cur.Len() > 0 {
-		out = append(out, cur.String())
-	}
-	return out
-}
-
-func envIntDefault(name string, def int) int {
-	if v := envInt(name); v > 0 {
-		return v
-	}
-	return def
 }
 
 func wtStateDirEnv() string {
