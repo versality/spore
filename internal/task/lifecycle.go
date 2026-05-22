@@ -492,7 +492,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		// whose dir is already gone.
 		if state == worktreeStaleReg {
 			if out, err := gitCmd(projectRoot, "worktree", "prune").CombinedOutput(); err != nil {
-				return "", fmt.Errorf("git worktree prune: %v: %s", err, strings.TrimSpace(string(out)))
+				return "", fmt.Errorf("git worktree prune: %w: %s", err, strings.TrimSpace(string(out)))
 			}
 		}
 		args := []string{"worktree", "add", worktree}
@@ -503,7 +503,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		}
 		out, err := gitCmd(projectRoot, args...).CombinedOutput()
 		if err != nil {
-			return "", fmt.Errorf("git worktree add: %v: %s", err, strings.TrimSpace(string(out)))
+			return "", fmt.Errorf("git worktree add: %w: %s", err, strings.TrimSpace(string(out)))
 		}
 		// Source HEAD often has no committed brief; soft-fails so the
 		// worker falls back to interactive mode there.
@@ -591,14 +591,14 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	args = append(args, "sh", "-c", shellCmd)
 	out, err := exec.Command("tmux", args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("tmux new-session: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	// remain-on-exit keeps the pane alive after the agent exits, so the
 	// single-window session does not vanish on a clean claude exit. Without
 	// this every clean exit destroys the session and active frontmatter
 	// becomes a lie (tmux session missing in fleet status).
 	if out, err := exec.Command("tmux", "set-option", "-t", session, "remain-on-exit", "on").CombinedOutput(); err != nil {
-		return "", fmt.Errorf("tmux set-option remain-on-exit: %v: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("tmux set-option remain-on-exit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return session, nil
 }

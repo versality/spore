@@ -132,7 +132,7 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 	args = append(args, cmd)
 	out, err := exec.Command("tmux", args...).CombinedOutput()
 	if err != nil {
-		return "", false, fmt.Errorf("tmux new-session: %v: %s", err, strings.TrimSpace(string(out)))
+		return "", false, fmt.Errorf("tmux new-session: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	// tmux registers the session before the inner shell execs the
 	// agent. Wait briefly, then confirm the session survived; an

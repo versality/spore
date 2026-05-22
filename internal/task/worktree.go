@@ -42,7 +42,7 @@ type worktreeEntry struct {
 func listWorktrees(projectRoot string) ([]worktreeEntry, error) {
 	out, err := gitCmd(projectRoot, "worktree", "list", "--porcelain").CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("git worktree list: %v: %s", err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("git worktree list: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	var entries []worktreeEntry
 	var cur worktreeEntry

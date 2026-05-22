@@ -178,7 +178,7 @@ func WaitForDeath(session string, hookSlot int) error {
 		session, channel,
 	)
 	if out, err := exec.Command("tmux", "set-hook", "-g", hookIdx, hookCmd).CombinedOutput(); err != nil {
-		return fmt.Errorf("tmux set-hook: %v: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("tmux set-hook: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	defer unhook(hookSlot)
 	if !tmuxsess.Has(session) {
