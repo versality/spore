@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // ProjectInbox is one inbox the watcher polls per pass.
@@ -295,8 +297,7 @@ func sleepWithCtx(ctx context.Context, sleep func(time.Duration), d time.Duratio
 type execTmux struct{}
 
 func (execTmux) HasSession(name string) bool {
-	cmd := exec.Command("tmux", "has-session", "-t", name)
-	return cmd.Run() == nil
+	return tmuxsess.Has(name)
 }
 
 func (execTmux) ResolvePane(session string, paneCmds []string) (string, bool) {

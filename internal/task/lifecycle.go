@@ -16,6 +16,7 @@ import (
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/consumerclaim"
 	"github.com/versality/spore/internal/task/frontmatter"
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // EvidenceWarnOnlyEnv forces the evidence done-gate into warn-only
@@ -520,7 +521,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if meta.Session != "" {
 		session = meta.Session
 	}
-	if hasSession(session) {
+	if tmuxsess.Has(session) {
 		return session, nil
 	}
 	agent, err := workerAgentCommand(meta)

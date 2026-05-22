@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 func TestReconcileSpawnsCoordinatorSingleton(t *testing.T) {
@@ -25,7 +27,7 @@ func TestReconcileSpawnsCoordinatorSingleton(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Reconcile pass 1: %v", err)
 	}
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		t.Fatalf("expected coordinator session %q after first reconcile", session)
 	}
 
@@ -41,7 +43,7 @@ func TestReconcileSpawnsCoordinatorSingleton(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Reconcile pass 2: %v", err)
 	}
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		t.Fatalf("expected coordinator session %q after second reconcile", session)
 	}
 	ts2, err := sessionCreated(session)
@@ -70,7 +72,7 @@ func TestReconcileReapsCoordinatorOnDisable(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Reconcile (enable): %v", err)
 	}
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		t.Fatalf("expected coordinator session %q before disable", session)
 	}
 
@@ -87,7 +89,7 @@ func TestReconcileReapsCoordinatorOnDisable(t *testing.T) {
 	if !r.Disabled {
 		t.Errorf("expected Disabled=true after Disable(), got %+v", r)
 	}
-	if hasSession(session) {
+	if tmuxsess.Has(session) {
 		t.Errorf("expected coordinator session %q reaped on flag-disable, still alive", session)
 	}
 }
@@ -118,7 +120,7 @@ func TestReconcileCoordinatorDoesNotCountTowardCap(t *testing.T) {
 		t.Errorf("Skipped = %v, want []", r.Skipped)
 	}
 
-	if !hasSession(CoordinatorSessionName(dirs.project)) {
+	if !tmuxsess.Has(CoordinatorSessionName(dirs.project)) {
 		t.Errorf("expected coordinator session alive after reconcile")
 	}
 }
@@ -223,7 +225,7 @@ func TestEnsureCoordinatorDefersToExternalSession(t *testing.T) {
 	if got != external {
 		t.Errorf("EnsureCoordinator returned %q, want external %q", got, external)
 	}
-	if hasSession(CoordinatorSessionName(dir)) {
+	if tmuxsess.Has(CoordinatorSessionName(dir)) {
 		t.Errorf("kernel coordinator session %q was spawned despite external match", CoordinatorSessionName(dir))
 	}
 	if !CoordinatorAlive(dir) {

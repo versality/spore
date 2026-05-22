@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/versality/spore/internal/agentpane"
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // paneInfo is one row of `tmux list-panes -a -F "<session>\t<window>\t<dead>\t<dead_status>\t<command>\t<title>"`.
@@ -31,7 +32,7 @@ func (realTmux) capturePane(target string) (string, error) {
 }
 
 func (realTmux) hasSession(name string) bool {
-	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
+	return tmuxsess.Has(name)
 }
 
 func parsePanes(out string) []paneInfo {

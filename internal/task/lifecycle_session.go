@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // IdleReapThreshold is how long a tmux session must sit without
@@ -22,7 +24,7 @@ const IdleReapThreshold = 5 * time.Minute
 // external spawners that chose a non-kernel name still get reaped).
 // Returns nil when tmux isn't running or no session matches.
 func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	names, err := tmuxsess.List()
 	if err != nil {
 		return nil
 	}
@@ -40,15 +42,12 @@ func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
 		seen[name] = true
 		matches = append(matches, name)
 	}
-	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-		if line == "" {
-			continue
-		}
-		if MatchSlug(line, project, slug) {
-			add(line)
+	for _, name := range names {
+		if MatchSlug(name, project, slug) {
+			add(name)
 		}
 	}
-	if recorded != "" && hasSession(recorded) {
+	if recorded != "" && tmuxsess.Has(recorded) {
 		add(recorded)
 	}
 	return matches
@@ -60,7 +59,7 @@ func matchingSlugSessions(tasksDir, projectRoot, slug string) []string {
 // tmux isn't running or nothing matches.
 func killAllSlugSessions(tasksDir, projectRoot, slug string) {
 	for _, name := range matchingSlugSessions(tasksDir, projectRoot, slug) {
-		_ = exec.Command("tmux", "kill-session", "-t", name).Run()
+		tmuxsess.Kill(name)
 	}
 }
 
@@ -88,7 +87,7 @@ func reapIdleSlugSessions(tasksDir, slug string) {
 		if idle < threshold {
 			continue
 		}
-		_ = exec.Command("tmux", "kill-session", "-t", name).Run()
+		tmuxsess.Kill(name)
 	}
 }
 
@@ -129,10 +128,6 @@ func SessionIdle(name string, now time.Time) (time.Duration, bool) {
 // the same matcher pause/reap uses.
 func MatchingSlugSessions(tasksDir, projectRoot, slug string) []string {
 	return matchingSlugSessions(tasksDir, projectRoot, slug)
-}
-
-func hasSession(name string) bool {
-	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
 }
 
 func branchExists(projectRoot, branch string) bool {

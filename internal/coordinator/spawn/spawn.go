@@ -19,6 +19,7 @@ import (
 	"github.com/versality/spore/internal/budget"
 	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // HookSlot is the global session-closed hook index spawn uses to wait
@@ -103,7 +104,7 @@ func Run(opts Options) error {
 	select {
 	case sig := <-sigCh:
 		fmt.Fprintf(stderr, "[coordinator-spawn] %s; killing %s\n", sig, session)
-		killSession(session)
+		tmuxsess.Kill(session)
 		unhook(hookSlot)
 		<-deathCh
 		return nil
@@ -167,7 +168,7 @@ func enforceTier(driver string, lookup func() (string, error)) error {
 // gone before the hook resolves) so the hook must be global, filtered
 // by hook_session_name.
 func WaitForDeath(session string, hookSlot int) error {
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		return nil
 	}
 	channel := fmt.Sprintf("spore-coordinator-spawn-death-%d", os.Getpid())
@@ -180,7 +181,7 @@ func WaitForDeath(session string, hookSlot int) error {
 		return fmt.Errorf("tmux set-hook: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	defer unhook(hookSlot)
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		return nil
 	}
 	_ = exec.Command("tmux", "wait-for", channel).Run()
@@ -189,12 +190,4 @@ func WaitForDeath(session string, hookSlot int) error {
 
 func unhook(slot int) {
 	_ = exec.Command("tmux", "set-hook", "-gu", fmt.Sprintf("session-closed[%d]", slot)).Run()
-}
-
-func killSession(name string) {
-	_ = exec.Command("tmux", "kill-session", "-t", name).Run()
-}
-
-func hasSession(name string) bool {
-	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
 }

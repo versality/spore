@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/versality/spore/internal/tmuxsess"
+
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -207,10 +209,7 @@ func sessionNameExec(root, slug string) (string, error) {
 }
 
 func killSessionExec(session string) error {
-	cmd := exec.Command("tmux", "kill-session", "-t", session)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run()
+	return tmuxsess.KillErr(session)
 }
 
 func pgrepOpencode(user string) ([]int, error) {

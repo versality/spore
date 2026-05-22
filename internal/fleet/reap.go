@@ -10,6 +10,7 @@ import (
 
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // reapEnv carries the injection seams for tests; production uses
@@ -31,19 +32,19 @@ type reapTmuxRunner interface {
 type defaultReapTmux struct{}
 
 func (defaultReapTmux) listSessions() (string, error) {
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	names, err := tmuxsess.List()
 	if err != nil {
 		return "", err
 	}
-	return string(out), nil
+	return strings.Join(names, "\n"), nil
 }
 
 func (defaultReapTmux) hasSession(name string) bool {
-	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
+	return tmuxsess.Has(name)
 }
 
 func (defaultReapTmux) killSession(name string) error {
-	return exec.Command("tmux", "kill-session", "-t", name).Run()
+	return tmuxsess.KillErr(name)
 }
 
 func defaultReapEnv() reapEnv {

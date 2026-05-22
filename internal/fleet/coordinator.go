@@ -11,6 +11,7 @@ import (
 
 	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/tmuxsess"
 )
 
 // coordinatorSpawnSettleDelay is the wait between `tmux new-session -d`
@@ -77,7 +78,7 @@ func CoordinatorRolePath(projectRoot string) string {
 // happened.
 func EnsureCoordinator(projectRoot string) (string, bool, error) {
 	session := CoordinatorSessionName(projectRoot)
-	if hasSession(session) {
+	if tmuxsess.Has(session) {
 		return session, false, nil
 	}
 
@@ -138,7 +139,7 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 	// agent binary that fails to exec tears the session down within
 	// a few ms.
 	time.Sleep(coordinatorSpawnSettleDelay)
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		return "", false, fmt.Errorf(
 			"coordinator session %s died on spawn (agent=%q): the inner exec failed before the session could settle. Check that the agent binary is on PATH",
 			session, agent,
@@ -228,10 +229,10 @@ func shellSingleQuote(s string) string {
 // kill was attempted.
 func ReapCoordinator(projectRoot string) bool {
 	session := CoordinatorSessionName(projectRoot)
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		return false
 	}
-	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+	tmuxsess.Kill(session)
 	return true
 }
 
@@ -240,7 +241,7 @@ func ReapCoordinator(projectRoot string) bool {
 // counts as alive so the wait poll does not spin against an
 // operator-managed coordinator at a non-kernel session name.
 func CoordinatorAlive(projectRoot string) bool {
-	if hasSession(CoordinatorSessionName(projectRoot)) {
+	if tmuxsess.Has(CoordinatorSessionName(projectRoot)) {
 		return true
 	}
 	if cfg, err := LoadCoordinatorConfig(projectRoot); err == nil && cfg.ExternalSessionPattern != "" {
@@ -262,21 +263,14 @@ func externalCoordinatorSession(pattern string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	names, err := tmuxsess.List()
 	if err != nil {
 		return "", false
 	}
-	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if name == "" {
-			continue
-		}
+	for _, name := range names {
 		if re.MatchString(name) {
 			return name, true
 		}
 	}
 	return "", false
-}
-
-func hasSession(name string) bool {
-	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
 }
