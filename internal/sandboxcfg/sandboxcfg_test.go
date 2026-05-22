@@ -13,7 +13,7 @@ key = "ignored"
 
 [sandbox]
 allow_hosts = ["api.anthropic.com", "linear.app"]
-rw = ["/home/sky/.config/nvim"]
+rw = ["/home/user/.config/nvim"]
 ro = []
 `
 	got, err := LoadFromString(in)
@@ -22,7 +22,7 @@ ro = []
 	}
 	want := Config{
 		AllowHosts: []string{"api.anthropic.com", "linear.app"},
-		RW:         []string{"/home/sky/.config/nvim"},
+		RW:         []string{"/home/user/.config/nvim"},
 		RO:         nil,
 	}
 	if !reflect.DeepEqual(got, want) {

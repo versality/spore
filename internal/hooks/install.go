@@ -7,8 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/versality/spore/internal/leakdict"
 )
 
 // GitHook is one shell hook spore writes when `spore hooks install`
@@ -104,17 +102,8 @@ func setCoreHooksPath(repoRoot, hooksDir string) error {
 }
 
 // CommitMsg is the hook implementation for git's commit-msg event. It
-// reads msgPath, fails (returning a non-nil error) if the message
-// contains an em-dash, en-dash, or a leak-guard dictionary term.
-//
-// wt-go's auto-squash emits a fixed template that references the slug
-// in the subject and a "Task: <slug>" trailer, plus the literal banner
-// "Squashed rower branch for clean main history." When that banner is
-// present we extract the slug from the trailer and strip every
-// occurrence of the slug plus the banner before the leak scan. This
-// is a slug-scoped exception, not a blanket allow: a hand-written
-// message that contains "rower" outside the wt-squash shape still
-// trips the hook.
+// reads msgPath and fails (returning a non-nil error) if the message
+// contains an em-dash or en-dash.
 func CommitMsg(msgPath string) error {
 	body, err := os.ReadFile(msgPath)
 	if err != nil {
@@ -123,43 +112,7 @@ func CommitMsg(msgPath string) error {
 	if bytes.ContainsAny(body, "\u2014\u2013") {
 		return fmt.Errorf("commit message contains em-dash or en-dash; replace with a hyphen, colon, parentheses, or a new sentence")
 	}
-	scanBody := stripWtSquashTemplate(body)
-	if hit := leakdict.ScanMessage(string(scanBody), nil); hit != "" {
-		return fmt.Errorf("commit message contains consumer-private term %q; rephrase or rebase before retrying", hit)
-	}
 	return nil
-}
-
-const wtSquashBanner = "Squashed rower branch for clean main history.\n"
-
-// stripWtSquashTemplate removes the wt auto-squash banner and, when
-// the banner is present, the slug references that fan out from it
-// (the "<slug>: ..." subject prefix and the "Task: <slug>" trailer).
-// The slug is extracted from the trailer.
-func stripWtSquashTemplate(body []byte) []byte {
-	out := bytes.ReplaceAll(body, []byte(wtSquashBanner), nil)
-	if bytes.Equal(out, body) {
-		return out
-	}
-	slug := extractWtSquashSlug(out)
-	if slug == "" {
-		return out
-	}
-	return bytes.ReplaceAll(out, []byte(slug), nil)
-}
-
-func extractWtSquashSlug(body []byte) string {
-	for _, raw := range bytes.Split(body, []byte("\n")) {
-		line := strings.TrimSpace(string(raw))
-		if !strings.HasPrefix(line, "Task: ") {
-			continue
-		}
-		slug := strings.TrimSpace(strings.TrimPrefix(line, "Task: "))
-		if slug != "" {
-			return slug
-		}
-	}
-	return ""
 }
 
 func PreCommit(repoRoot string) error {

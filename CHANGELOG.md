@@ -42,8 +42,8 @@ A new `[sandbox]` section in `spore.toml` (with an optional user override at `~/
 ```toml
 [sandbox]
 allow_hosts = ["api.anthropic.com", "statsig.anthropic.com", "sentry.io"]
-rw          = ["/home/sky/.config/nvim"]
-ro          = ["/home/sky/notes"]
+rw          = ["/home/user/.config/nvim"]
+ro          = ["/home/user/notes"]
 ```
 
 Precedence, weakest to strongest:

@@ -11,7 +11,6 @@ import (
 
 	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/coordinator"
-	"github.com/versality/spore/internal/coordinator/boot"
 	"github.com/versality/spore/internal/coordinator/failuresummary"
 	"github.com/versality/spore/internal/coordinator/loopguard"
 	"github.com/versality/spore/internal/coordinator/reconcilehealth"
@@ -47,7 +46,6 @@ Subcommands:
   failure-summary Cross-ledger failure aggregator with recovery actions.
   worker-watch    Diff active-worker set against snapshot; emit transitions.
   sla-scan        Flag stale / done / orphan state.md entries.
-  boot            Run all skyhelm cold-boot probes in one call.
 `
 
 func runCoordinator(args []string) int {
@@ -88,8 +86,6 @@ func runCoordinator(args []string) int {
 		return runCoordinatorWorkerWatch(rest)
 	case "sla-scan":
 		return runCoordinatorSlaScan(rest)
-	case "boot":
-		return runCoordinatorBoot(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "spore coordinator: unknown subcommand %q\n\n%s", sub, coordinatorUsage)
 		return 2
@@ -683,50 +679,4 @@ func runCoordinatorSpawn(args []string) int {
 		return 1
 	}
 	return 0
-}
-
-func runCoordinatorBoot(args []string) int {
-	fs := flag.NewFlagSet("coordinator boot", flag.ContinueOnError)
-	stateDir := fs.String("state-dir", "", "skyhelm state dir (default $SKYHELM_STATE_DIR or ~/.local/state/skyhelm)")
-	root := fs.String("root", "", "harness root for opencode-worker-liveness.sh (default $SKYHELM_HARNESS_ROOT or cwd)")
-	lineCap := fs.Int("line-cap", 0, "state.md line cap (default 80, env SKYHELM_STATE_LINE_CAP)")
-	byteCap := fs.Int("byte-cap", 0, "state.md byte cap (default 8192, env SKYHELM_STATE_BYTE_CAP)")
-	slaCap := fs.Int("sla-cap", 0, "SLA stale-list cap (default 3, env SKYHELM_SLA_PRINT_CAP)")
-	help := fs.Bool("h", false, "show help")
-	helpLong := fs.Bool("help", false, "show help")
-	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, "spore coordinator boot:", err)
-		return 2
-	}
-	if *help || *helpLong {
-		fmt.Println("spore coordinator boot - run all skyhelm cold-boot probes in one call")
-		fmt.Println("  --state-dir PATH  skyhelm state dir")
-		fmt.Println("  --root PATH       harness root (resolves harness/opencode-worker-liveness.sh)")
-		fmt.Println("  --line-cap N      state.md line cap (default 80)")
-		fmt.Println("  --byte-cap N      state.md byte cap (default 8192)")
-		fmt.Println("  --sla-cap N       SLA stale-list cap (default 3)")
-		fmt.Println("")
-		fmt.Println("Emits one structured summary covering state.md (header + inline body),")
-		fmt.Println("wt task ls (diff vs prior boot), wt task fleet status, agents flag,")
-		fmt.Println("skyhelm-budget, skyhelm-sla-scanner, opencode liveness,")
-		fmt.Println("spore coordinator monitor + state-debt, idle-watchdog, worker stop")
-		fmt.Println("errors, and comm-feedback. Exit code is min(2, max(probe rcs)).")
-		return 0
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: spore coordinator boot [flags]")
-		return 2
-	}
-
-	cfg := boot.Config{
-		StateDir: *stateDir,
-		Root:     *root,
-		LineCap:  *lineCap,
-		ByteCap:  *byteCap,
-		SLACap:   *slaCap,
-	}
-	result := boot.Run(cfg)
-	fmt.Print(result.Body)
-	return result.WorstRC
 }

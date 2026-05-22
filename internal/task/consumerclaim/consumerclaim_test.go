@@ -51,7 +51,7 @@ func TestResolveRepoPath(t *testing.T) {
 			}
 			return "", false
 		},
-		HomeDir: func() (string, error) { return "/home/sky", nil },
+		HomeDir: func() (string, error) { return "/home/user", nil },
 	}
 	got, err := ResolveRepoPath("nix-config", deps)
 	if err != nil {
@@ -64,13 +64,13 @@ func TestResolveRepoPath(t *testing.T) {
 	// Fallback to ~/projects/<repo>.
 	deps2 := Deps{
 		LookupEnv: func(string) (string, bool) { return "", false },
-		HomeDir:   func() (string, error) { return "/home/sky", nil },
+		HomeDir:   func() (string, error) { return "/home/user", nil },
 	}
 	got, err = ResolveRepoPath("nix-config", deps2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "/home/sky/projects/nix-config" {
+	if got != "/home/user/projects/nix-config" {
 		t.Errorf("fallback path wrong: %q", got)
 	}
 }

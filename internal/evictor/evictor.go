@@ -260,7 +260,7 @@ func evaluate(cfg Config, m frontmatter.Meta, now time.Time) Decision {
 		return dec
 	}
 	if err := cfg.Block(cfg.TasksDir, m.Slug, BlockerKey); err != nil {
-		// "Already blocked" is a tolerable race: skyhelm could
+		// "Already blocked" is a tolerable race: another actor could
 		// have blocked the worker between the read and the flip.
 		// Same shape as SelfBlockOnCoordinatorTell.
 		if isAlreadyBlocked(err) {

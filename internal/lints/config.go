@@ -178,9 +178,6 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 		}
 		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
 		return v
-	case SkyhelmTmuxInputBan:
-		v.SkipPath = append(v.SkipPath, cfg.SkipPath...)
-		return v
 	case AgentKillSwitches:
 		if len(cfg.ScanDirs) > 0 {
 			v.ScanDirs = cfg.ScanDirs

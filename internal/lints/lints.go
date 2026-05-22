@@ -58,7 +58,6 @@ func Default() []Lint {
 		TaskEvidence{TasksDir: "tasks"},
 		TaskStatus{},
 		TmuxSocketTest{},
-		LeakGuard{},
 	}
 }
 
@@ -86,10 +85,10 @@ func Named() map[string]Lint {
 			},
 			ForbiddenPaths: map[string]string{
 				"~/projects/spore":              "~/projects/spore",
-				"/home/sky/projects/spore":      "~/projects/spore",
+				"/home/user/projects/spore":     "~/projects/spore",
 				"github.com/versality/spore":    "~/projects/spore",
 				"~/projects/marketer":           "~/projects/marketer",
-				"/home/sky/projects/marketer":   "~/projects/marketer",
+				"/home/user/projects/marketer":  "~/projects/marketer",
 				"github.com/versality/marketer": "~/projects/marketer",
 			},
 		},
@@ -110,8 +109,6 @@ func Named() map[string]Lint {
 		AgentKillSwitches{},
 		TaskSchedulerContext{},
 		TaskNeeds{},
-		SkyhelmWrapNoTmuxKill{},
-		SkyhelmTmuxInputBan{},
 	} {
 		out[l.Name()] = l
 	}

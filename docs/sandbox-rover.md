@@ -37,20 +37,20 @@ launch:
 
 - **Worktree** - the one directory the rover may write to. Becomes
   the cwd inside the sandbox. Example: `-worktree
-  /home/sky/projects/spore/.worktrees/sandbox-followups`. Required;
+  /home/user/projects/spore/.worktrees/sandbox-followups`. Required;
   must exist on the host.
 - **Home** - the path the sandbox exposes as `$HOME`, masked by a
   tmpfs so anything the operator left in their real `$HOME` is
   invisible. Defaults to the operator's `$HOME`. Example:
-  `-home /home/sky`. The target's per-target state paths (claude:
+  `-home /home/user`. The target's per-target state paths (claude:
   `~/.claude` and `~/.claude.json`) are bound rw on top of the
   tmpfs so the binary can read its credentials and write session
   state.
 - **RW[]** - extra rw bind mounts beyond the worktree. Repeatable.
-  Example: `-rw /home/sky/.config/some-tool`. Use sparingly; every
+  Example: `-rw /home/user/.config/some-tool`. Use sparingly; every
   rw bind is a tooth-mark in the sandbox.
 - **RO[]** - extra ro bind mounts. Repeatable. Example: `-ro
-  /home/sky/.config/nvim`. Useful for read-only references the
+  /home/user/.config/nvim`. Useful for read-only references the
   agent should consult but never modify.
 - **AllowHost[]** - HTTPS CONNECT hostname allowlist (exact SNI
   match, case-insensitive). Repeatable. Setting any value flips
@@ -78,8 +78,8 @@ The schema is three list keys, all optional:
 ```toml
 [sandbox]
 allow_hosts = ["api.anthropic.com", "statsig.anthropic.com", "sentry.io"]
-rw          = ["/home/sky/.config/nvim"]
-ro          = ["/home/sky/notes"]
+rw          = ["/home/user/.config/nvim"]
+ro          = ["/home/user/notes"]
 ```
 
 To let the rover reach a new host, add it to `allow_hosts` and

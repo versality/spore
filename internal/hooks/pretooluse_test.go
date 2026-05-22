@@ -73,9 +73,9 @@ func TestPreToolUse_AskUserQuestionDeniedInWorktree(t *testing.T) {
 		cwd      string
 		wantDeny bool
 	}{
-		{"worker-worktree", "/home/sky/projects/spore/.worktrees/worker-stop-hook-wedge-2", true},
-		{"worker-worktree-nested", "/home/sky/projects/spore/.worktrees/foo/sub/dir", true},
-		{"non-worktree", "/home/sky/projects/spore", false},
+		{"worker-worktree", "/home/user/projects/spore/.worktrees/worker-stop-hook-wedge-2", true},
+		{"worker-worktree-nested", "/home/user/projects/spore/.worktrees/foo/sub/dir", true},
+		{"non-worktree", "/home/user/projects/spore", false},
 		{"empty-cwd", "", false},
 		{"unrelated-worktrees-suffix", "/tmp/worktrees/foo", false},
 	}

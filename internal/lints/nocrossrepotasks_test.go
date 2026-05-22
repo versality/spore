@@ -13,10 +13,10 @@ func ncrtFixture() (map[string]string, NoCrossRepoTasks) {
 		},
 		ForbiddenPaths: map[string]string{
 			"~/projects/spore":              "~/projects/spore",
-			"/home/sky/projects/spore":      "~/projects/spore",
+			"/home/user/projects/spore":     "~/projects/spore",
 			"github.com/versality/spore":    "~/projects/spore",
 			"~/projects/marketer":           "~/projects/marketer",
-			"/home/sky/projects/marketer":   "~/projects/marketer",
+			"/home/user/projects/marketer":  "~/projects/marketer",
 			"github.com/versality/marketer": "~/projects/marketer",
 		},
 		SlugAllowlist: map[string]bool{
@@ -36,8 +36,8 @@ func TestNoCrossRepoTasks_WriteTargets(t *testing.T) {
 		"tasks/cross-repo-write.md":    writeNCRTTask("cross-repo-write", "active", "# Files\n\n- ~/projects/spore/foo.txt\n"),
 		"tasks/cross-repo-readonly.md": writeNCRTTask("cross-repo-readonly", "active", "# Files\n\n- READ-ONLY: `~/projects/spore/foo.txt` (auditing only)\n"),
 		"tasks/cross-repo-gh.md":       writeNCRTTask("cross-repo-gh", "active", "# Files\n\n- `github.com/versality/spore/dispatcher/foo.go` (extend)\n"),
-		"tasks/cross-repo-backtick.md": writeNCRTTask("cross-repo-backtick", "active", "# Files\n\n- `/home/sky/projects/spore/runner/main.go` (rewrite)\n"),
-		"tasks/marketer-write-task.md": writeNCRTTask("marketer-write-task", "active", "# Files\n\n- `/home/sky/projects/marketer/app.js` (rewrite)\n"),
+		"tasks/cross-repo-backtick.md": writeNCRTTask("cross-repo-backtick", "active", "# Files\n\n- `/home/user/projects/spore/runner/main.go` (rewrite)\n"),
+		"tasks/marketer-write-task.md": writeNCRTTask("marketer-write-task", "active", "# Files\n\n- `/home/user/projects/marketer/app.js` (rewrite)\n"),
 		"tasks/cross-repo-done.md":     writeNCRTTask("cross-repo-done", "done", "# Files\n\n- ~/projects/spore/foo.txt\n"),
 		"tasks/cross-repo-paused.md":   writeNCRTTask("cross-repo-paused", "paused", "# Files\n\n- ~/projects/spore/foo.txt\n"),
 		"tasks/cross-repo-blocked.md":  writeNCRTTask("cross-repo-blocked", "blocked", "# Files\n\n- ~/projects/spore/foo.txt\n"),

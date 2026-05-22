@@ -98,59 +98,6 @@ func TestCommitMsg_BlocksEmDash(t *testing.T) {
 	}
 }
 
-func TestCommitMsg_AllowsWtSquashTrailer(t *testing.T) {
-	dir := t.TempDir()
-	msg := filepath.Join(dir, "msg")
-	body := "subject: ship clean change\n\nSquashed rower branch for clean main history.\n\nTask: foo\n"
-	if err := os.WriteFile(msg, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := CommitMsg(msg); err != nil {
-		t.Fatalf("wt squash trailer must be exempt: %v", err)
-	}
-
-	leaky := filepath.Join(dir, "leaky")
-	if err := os.WriteFile(leaky, []byte("subject\n\nrower work continues\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := CommitMsg(leaky); err == nil {
-		t.Fatalf("non-trailer rower mention must still error")
-	}
-}
-
-func TestCommitMsg_AllowsWtSquashWithLeakySlug(t *testing.T) {
-	// wt's squash template uses the task slug in both the subject
-	// prefix ("<slug>: <title>") and the trailer ("Task: <slug>").
-	// When the slug itself contains a consumer-private term (e.g.
-	// the kernel's worker is named "rower" in the downstream
-	// consumer), the leak guard would otherwise reject the wt-squashed
-	// commit. The exemption strips the slug references that fan out
-	// from the wt-squash banner.
-	dir := t.TempDir()
-	msg := filepath.Join(dir, "msg")
-	body := "rower-stop-hook-wedge: ship classifier + watchinbox fix\n\n" +
-		"Body has clean prose with no consumer terms.\n\n" +
-		"Squashed rower branch for clean main history.\n\n" +
-		"Task: rower-stop-hook-wedge\nAgent: claude\n"
-	if err := os.WriteFile(msg, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := CommitMsg(msg); err != nil {
-		t.Fatalf("wt squash with leaky slug must pass: %v", err)
-	}
-
-	// Without the wt-squash banner, the same subject must still fail
-	// (the leaky term is real, not slug-bound).
-	noBanner := filepath.Join(dir, "no-banner")
-	noBannerBody := "rower-stop-hook-wedge: ship classifier + watchinbox fix\n\nBody only.\n"
-	if err := os.WriteFile(noBanner, []byte(noBannerBody), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := CommitMsg(noBanner); err == nil {
-		t.Fatalf("leaky slug without wt-squash banner must still error")
-	}
-}
-
 func TestPreCommitChecksStagedGoFiles(t *testing.T) {
 	if _, err := exec.LookPath("gofmt"); err != nil {
 		t.Skip("gofmt not on PATH")
