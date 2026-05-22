@@ -292,10 +292,11 @@ func runExec(args []string) {
 // buildLaunchCmd renders the shell command tmuxNewWindow runs in the
 // sandbox's pane.
 //
-// Pane-lifecycle invariant: when allowHost is non-empty bwrap runs
-// with --unshare-net, so the CONNECT proxy must live on the
-// host side and be reachable via a unix socket that bwrap binds into
-// the sandbox. The shell here owns three lifetimes:
+// Pane-lifecycle invariant: bwrap always runs with --unshare-net (set
+// in policy.bwrapArgs), so when allowHost is non-empty the CONNECT
+// proxy must live on the host side and be reachable via a unix socket
+// that bwrap binds into the sandbox. The shell here owns three
+// lifetimes:
 //
 //  1. start the host proxy in the background so it is listening
 //     before bwrap re-execs --inside;
@@ -336,7 +337,6 @@ func buildLaunchCmd(bw string, bwrapArgv, target, allowHost []string, windowName
 	// inside the sandbox after the tmpfs layers wipe out /tmp and
 	// /home. Without this the --inside re-exec fails with ENOENT.
 	argv := append(bwrapArgv,
-		"--unshare-net",
 		"--bind", sockDir, sockDir,
 		"--ro-bind", selfPath, selfPath,
 		"--",

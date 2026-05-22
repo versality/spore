@@ -12,17 +12,24 @@ worker launch path so every sandboxed worker is sandboxed by default.
 
 ## Threat model
 
-Three points. Anything outside this list is out of scope.
+Four points. Anything outside this list is out of scope.
 
 1. **FS write-allowlist.** The sandbox restricts writes to the agent worktree
    and the small RW set listed in the policy. Operator dotfiles
    (`~/.ssh`, `~/.bashrc`, sibling worktrees) are inaccessible.
 2. **FS read-deny.** `/etc/shadow`, `~/.ssh`, `/root`, and similar
    are not readable.
-3. **Network egress allowlist.** When `-allow` is set, bwrap runs
-   the target with `--unshare-net` and the only network the agent
-   sees is a loopback HTTPS CONNECT proxy that lets through the
-   named SNIs (e.g. `api.anthropic.com`).
+3. **Network egress allowlist.** bwrap always runs the target with
+   `--unshare-net`; the only network the agent sees is a loopback
+   HTTPS CONNECT proxy that lets through the SNIs in `-allow` (e.g.
+   `api.anthropic.com`). Without any `-allow`, no network at all.
+4. **Process / IPC isolation.** Bwrap also runs with `--unshare-pid`,
+   `--unshare-ipc`, `--unshare-uts`, `--unshare-cgroup-try`,
+   `--unshare-user-try`, `--new-session`, and `--die-with-parent`.
+   The sandboxed agent cannot `ps`/`kill` host processes, cannot
+   read `/proc/<pid>/environ` of operator processes, cannot post to
+   host POSIX shm, and cannot TIOCSTI-inject keystrokes into the
+   parent pane on older kernels without `legacy_tiocsti=0`.
 
 Out of scope: username masking, mountinfo path scrubbing,
 kernel-grade containment, seccomp / Landlock, per-sandbox credential
@@ -53,12 +60,13 @@ launch:
   /home/user/.config/nvim`. Useful for read-only references the
   agent should consult but never modify.
 - **AllowHost[]** - HTTPS CONNECT hostname allowlist (exact SNI
-  match, case-insensitive). Repeatable. Setting any value flips
-  the sandbox into `--unshare-net` mode and routes egress through
-  the loopback proxy. Example: `-allow api.anthropic.com -allow
-  statsig.anthropic.com -allow sentry.io`. Without any `-allow`,
-  the sandbox keeps the host's network namespace and reaches the
-  open internet.
+  match, case-insensitive). Repeatable. The sandbox always runs
+  with `--unshare-net`; with any `-allow` set, the loopback proxy
+  is started and routes egress for the named SNIs. Example:
+  `-allow api.anthropic.com -allow statsig.anthropic.com -allow
+  sentry.io`. Without any `-allow`, the sandbox has no network at
+  all - the empty netns has only loopback, and there is no proxy
+  process to bridge anywhere.
 
 ## Configuring the policy
 
@@ -97,7 +105,8 @@ deny CONNECT linear.app:443 (not in allowlist; add to
 ## Launch pipeline
 
 When `-allow` is set, three processes cooperate around one tmux
-pane:
+pane (without `-allow`, the launch collapses to a single bwrap
+exec with no network bridge):
 
 ```
   host                                      sandbox (--unshare-net)

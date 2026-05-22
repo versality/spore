@@ -34,12 +34,31 @@ func (p Policy) bwrapArgs() ([]string, error) {
 		return nil, fmt.Errorf("policy.Home must be absolute, got %q", home)
 	}
 
-	// Order matters. ro-bind first to lay down the host filesystem,
-	// then tmpfs overlays at the world-writable mount points to mask
-	// whatever the operator left there (sibling worktrees in /tmp,
-	// dotfiles in $HOME, etc.). Worktree and RW binds come last so
-	// they punch through the tmpfs layers.
+	// Namespace isolation first. Without these the sandbox shares the
+	// host's pid/ipc/uts/net/user namespaces and can ps/kill operator
+	// processes, read /proc/<pid>/environ for every host process, and
+	// post to host POSIX shm. --new-session detaches the controlling
+	// tty so a hostile child cannot TIOCSTI-inject keystrokes into the
+	// parent tmux pane on kernels without legacy_tiocsti=0.
+	// --die-with-parent guarantees cleanup if bwrap or the launcher
+	// dies abnormally. --unshare-user-try is best-effort: on a setuid
+	// bwrap install it is a no-op, on a non-setuid install it activates
+	// the user namespace.
+	//
+	// Then ro-bind to lay down the host filesystem, tmpfs overlays at
+	// the world-writable mount points to mask whatever the operator
+	// left there (sibling worktrees in /tmp, dotfiles in $HOME, etc.).
+	// Worktree and RW binds come last so they punch through the tmpfs
+	// layers.
 	args := []string{
+		"--unshare-pid",
+		"--unshare-ipc",
+		"--unshare-uts",
+		"--unshare-cgroup-try",
+		"--unshare-net",
+		"--unshare-user-try",
+		"--new-session",
+		"--die-with-parent",
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
 		"--proc", "/proc",
