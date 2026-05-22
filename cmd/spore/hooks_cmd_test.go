@@ -31,11 +31,14 @@ func TestHooksNotifyCoordinatorNoArgsUsesEnv(t *testing.T) {
 	}
 }
 
-func TestHooksWatchInboxNoArgsRequiresEnv(t *testing.T) {
+func TestHooksWatchInboxNoArgsBareClaudeIsNoop(t *testing.T) {
+	// A bare `claude` session in a project that ships watch-inbox in its
+	// Stop hook has no task inbox to watch. The hook must exit 0 so it
+	// does not block the operator's interactive session every turn.
 	t.Setenv("SPORE_TASK_INBOX", "")
 
-	if code := runHooksWatchInbox(nil); code != 2 {
-		t.Fatalf("runHooksWatchInbox(nil) = %d, want 2 without SPORE_TASK_INBOX", code)
+	if code := runHooksWatchInbox(nil); code != 0 {
+		t.Fatalf("runHooksWatchInbox(nil) = %d, want 0 without SPORE_TASK_INBOX", code)
 	}
 }
 

@@ -49,7 +49,7 @@
           },
           {
             "asyncRewake": true,
-            "command": "spore hooks watch-inbox",
+            "command": "bash -c 'if [ -n \"$SPORE_TASK_INBOX\" ]; then exec spore hooks watch-inbox; fi'",
             "timeout": 604800,
             "type": "command"
           }

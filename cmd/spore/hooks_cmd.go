@@ -422,8 +422,10 @@ func runHooksWatchInbox(args []string) int {
 	case 0:
 		inbox := os.Getenv("SPORE_TASK_INBOX")
 		if inbox == "" {
-			fmt.Fprintln(os.Stderr, "spore hooks watch-inbox: SPORE_TASK_INBOX is required when slug is omitted")
-			return 2
+			// Bare claude (no task context) loads the project settings.json
+			// but has no inbox to watch. Exit 0 so the Stop hook does not
+			// block the operator's interactive session.
+			return 0
 		}
 		err = hooks.WatchInboxAt(inbox)
 	case 1:
