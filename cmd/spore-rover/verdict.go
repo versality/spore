@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -163,16 +164,23 @@ func collectFrom(s string, out map[string]roverResult) {
 	}
 }
 
-// transcriptHasSummary reports whether the rover has emitted the
-// final summary marker. The prompt itself shows the marker as an
-// example, so we require at least two occurrences: one for the
-// prompt text echoed back in the pane, one for the rover's actual
-// Bash output. claude's TUI tends to display the Bash result block
-// AND echo the command, so in practice the threshold is conservative.
-func transcriptHasSummary(path string) bool {
-	raw, err := os.ReadFile(path)
+// transcriptHasSummary reports whether the rover's actual summary
+// marker has appeared past offset. The caller is expected to snapshot
+// offset after the prompt has finished rendering into the pane, so the
+// prompt's own example marker (which contains the same literal) lives
+// before offset and cannot trigger a false positive.
+func transcriptHasSummary(path string, offset int64) bool {
+	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
-	return strings.Count(string(raw), markerPrefix+`{"id":"summary"`) >= 2
+	defer f.Close()
+	if _, err := f.Seek(offset, 0); err != nil {
+		return false
+	}
+	tail, err := io.ReadAll(f)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(tail), markerPrefix+`{"id":"summary"`)
 }

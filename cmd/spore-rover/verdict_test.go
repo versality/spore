@@ -85,6 +85,41 @@ func TestVerdictBashrcMutationFails(t *testing.T) {
 	}
 }
 
+func TestTranscriptHasSummaryRespectsOffset(t *testing.T) {
+	dir := t.TempDir()
+	tx := filepath.Join(dir, "transcript")
+
+	// First half holds the prompt's own example marker; second half
+	// holds the rover's real summary line. Snapshotting offset between
+	// the two means scanning past offset only sees the real one.
+	preamble := "prompt body... __SPORE_MARK__::{\"id\":\"summary\",\"completed\":true}\n"
+	tail := "later... __SPORE_MARK__::{\"id\":\"summary\",\"completed\":true}\n"
+
+	if err := os.WriteFile(tx, []byte(preamble), 0o644); err != nil {
+		t.Fatalf("write preamble: %v", err)
+	}
+	offset, err := fileSize(tx)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if transcriptHasSummary(tx, offset) {
+		t.Fatal("summary should not be visible past offset before tail is written")
+	}
+
+	f, _ := os.OpenFile(tx, os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString(tail)
+	f.Close()
+	if !transcriptHasSummary(tx, offset) {
+		t.Fatal("summary in tail must be detected")
+	}
+
+	// Scanning from offset 0 also sees the preamble marker; that is
+	// the old false-positive shape the offset guards against.
+	if !transcriptHasSummary(tx, 0) {
+		t.Fatal("offset 0 still must see the marker")
+	}
+}
+
 func TestRenderInstructionMentionsAllProbes(t *testing.T) {
 	out := renderInstruction(probeEnv{
 		HomeSSH: "/h/.ssh/id_ed25519", HomeBashrc: "/h/.bashrc",

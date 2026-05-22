@@ -65,6 +65,17 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 		return false, fmt.Errorf("paste prompt: %w", err)
 	}
 
+	// Snapshot where the transcript ends after the pasted prompt has
+	// finished rendering into the pane. Anything past this offset is
+	// the rover's actual output; the prompt's own example marker
+	// lives before it and cannot be mistaken for the summary line.
+	// The 3s settle is empirical: claude's TUI typically renders the
+	// user message within ~1s of Enter; the real summary marker can
+	// only appear minutes later, after all 12 probes have run, so
+	// erring long here is free.
+	time.Sleep(3 * time.Second)
+	promptOffset, _ := fileSize(transcript)
+
 	deadline := time.After(timeout)
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
@@ -75,7 +86,7 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 			fmt.Fprintln(os.Stderr, "spore-rover redteam: timeout waiting for summary marker")
 			done = true
 		case <-tick.C:
-			if transcriptHasSummary(transcript) {
+			if transcriptHasSummary(transcript, promptOffset) {
 				done = true
 			}
 		}
@@ -124,6 +135,14 @@ func pasteIntoPane(window, text string) error {
 		return fmt.Errorf("send-keys Enter: %w: %s", err, out)
 	}
 	return nil
+}
+
+func fileSize(path string) (int64, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return st.Size(), nil
 }
 
 func fileHash(path string) (string, error) {
