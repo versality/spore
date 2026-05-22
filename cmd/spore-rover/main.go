@@ -47,6 +47,7 @@ func runLaunch(args []string) {
 		worktree       string
 		windowName     string
 		shell          bool
+		targetName     string
 		homeBase       string
 		extraRW        multiFlag
 		extraRO        multiFlag
@@ -57,7 +58,8 @@ func runLaunch(args []string) {
 	)
 	fs.StringVar(&worktree, "worktree", ".", "directory the rover may write to (becomes cwd inside sandbox)")
 	fs.StringVar(&windowName, "window", "", "tmux window name (default: rover-<worktree-base>)")
-	fs.BoolVar(&shell, "shell", false, "drop into bash instead of launching claude")
+	fs.BoolVar(&shell, "shell", false, "drop into bash instead of launching the target binary")
+	fs.StringVar(&targetName, "target", "claude", "registered target to launch (see target.go)")
 	fs.StringVar(&homeBase, "home", os.Getenv("HOME"), "path the sandbox exposes as $HOME (tmpfs-backed; must exist on host)")
 	fs.Var(&extraRW, "rw", "additional rw bind (repeatable; host path)")
 	fs.Var(&extraRO, "ro", "additional ro bind (repeatable; host path)")
@@ -81,13 +83,18 @@ func runLaunch(args []string) {
 		windowName = "rover-" + filepath.Base(wtAbs)
 	}
 
+	var tgt target
+	if !shell {
+		var ok bool
+		tgt, ok = targets[targetName]
+		if !ok {
+			fatal("unknown -target %q (known: %s)", targetName, knownTargets())
+		}
+	}
+
 	rw := append([]string(nil), extraRW...)
 	if !shell {
-		// claude needs to read its credentials and write session
-		// state. Bind the operator's claude config rw. Caveat: this
-		// exposes ~/.claude/.credentials.json to the rover. Per-rover
-		// credential isolation is a separate phase.
-		for _, p := range claudeStatePaths() {
+		for _, p := range tgt.StatePaths() {
 			rw = append(rw, p)
 		}
 	}
@@ -109,18 +116,18 @@ func runLaunch(args []string) {
 		fatal("build policy: %v", err)
 	}
 
-	var target []string
+	var targetArgv []string
 	if shell {
-		target = []string{"bash"}
+		targetArgv = []string{"bash"}
 	} else {
-		claude, err := exec.LookPath("claude")
+		bin, err := exec.LookPath(tgt.Bin)
 		if err != nil {
-			fatal("claude not on PATH: %v", err)
+			fatal("%s not on PATH: %v", tgt.Bin, err)
 		}
-		target = []string{claude}
+		targetArgv = []string{bin}
 	}
 
-	launchCmd, sockDir, err := buildLaunchCmd(bw, bwrapArgv, target, allowHost, windowName, dryRun)
+	launchCmd, sockDir, err := buildLaunchCmd(bw, bwrapArgv, targetArgv, allowHost, windowName, dryRun)
 	if err != nil {
 		fatal("build launch: %v", err)
 	}
@@ -250,24 +257,6 @@ func shellQuote(s string) string {
 		}
 	}
 	return s
-}
-
-// claudeStatePaths returns the host paths claude needs rw access to
-// in order to start. Missing paths are skipped silently; absExisting
-// in the policy stage will surface anything mandatory.
-func claudeStatePaths() []string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, rel := range []string{".claude", ".claude.json"} {
-		p := filepath.Join(home, rel)
-		if _, err := os.Stat(p); err == nil {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 type multiFlag []string
