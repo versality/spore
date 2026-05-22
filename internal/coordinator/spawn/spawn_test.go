@@ -156,7 +156,9 @@ func TestWaitForDeathUnblocksOnKill(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- WaitForDeath(session, 51) }()
-	time.Sleep(150 * time.Millisecond)
+	if !waitForSessionClosedHook(t, 51, 2*time.Second) {
+		t.Fatalf("WaitForDeath did not install session-closed[51] hook")
+	}
 	mustTmux(t, "kill-session", "-t", session)
 
 	select {
@@ -287,7 +289,9 @@ func TestRunAdoptsExistingSession(t *testing.T) {
 			Signals:     []os.Signal{},
 		})
 	}()
-	time.Sleep(200 * time.Millisecond)
+	if !waitForSpawnMarker(&buf, 3*time.Second) {
+		t.Fatalf("adopt marker not written: %s", buf.String())
+	}
 	created2, err := sessionCreated(session)
 	if err != nil {
 		t.Fatalf("sessionCreated #2: %v", err)
@@ -323,6 +327,25 @@ func setupProject(t *testing.T, driver string) (string, func()) {
 	t.Setenv("SPORE_COORDINATOR_AGENT", "sh -c 'sleep 60'")
 	cleanup := func() { killCoordinator(root) }
 	return root, cleanup
+}
+
+// waitForSessionClosedHook polls `tmux show-hooks -g` until the
+// session-closed hook for the given slot is registered. WaitForDeath
+// installs that hook synchronously before blocking on tmux wait-for;
+// once it shows up we know any subsequent kill-session will trigger
+// the hook, not race ahead of it.
+func waitForSessionClosedHook(t *testing.T, slot int, timeout time.Duration) bool {
+	t.Helper()
+	needle := fmt.Sprintf("session-closed[%d]", slot)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		out, _ := exec.Command("tmux", "-L", testTmuxSocket, "show-hooks", "-g").Output()
+		if strings.Contains(string(out), needle) {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
 }
 
 // waitForSpawnMarker blocks until the spawn stderr buffer contains the
