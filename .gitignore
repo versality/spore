@@ -21,6 +21,7 @@
 /.wt/
 /bootstrap/flake/local.nix
 /.codex/hooks.json
+/docs/todo/audit-cleanup.md
 
 # spore-sandbox redteam scratch
 .spore-sandbox-redteam.transcript
