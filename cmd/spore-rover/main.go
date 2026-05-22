@@ -109,9 +109,9 @@ func preparePolicy(worktree, homeBase, targetName string, shell bool, extraRW, e
 	if shell {
 		targetArgv = []string{"bash"}
 	} else {
-		bin, err := exec.LookPath(tgt.Bin)
+		bin, err := resolveBinary(tgt.Bin)
 		if err != nil {
-			return launchOptions{}, fmt.Errorf("%s not on PATH: %w", tgt.Bin, err)
+			return launchOptions{}, err
 		}
 		targetArgv = []string{bin}
 	}
@@ -246,6 +246,16 @@ func runExec(args []string) {
 		fatal("--exec: missing -- <argv>; pass the command to run inside the sandbox after a -- separator")
 	}
 
+	// Resolve argv[0] on the host before the sandbox tmpfs-masks
+	// $HOME and any PATH entries that resolve through it (e.g.
+	// ~/.nix-profile/bin/<bin>). Without this a Nix-user-profile-only
+	// binary like opencode disappears inside the sandbox.
+	resolved, err := resolveBinary(rest[0])
+	if err != nil {
+		fatal("%v", err)
+	}
+	rest[0] = resolved
+
 	opts, err := preparePolicy(worktree, homeBase, targetName, false, extraRW, extraRO, allowHost)
 	if err != nil {
 		fatal("%v", err)
@@ -343,6 +353,25 @@ func buildLaunchCmd(bw string, bwrapArgv, target, allowHost []string, windowName
 		proxyCmd, shellQuote(sockDir), bwrapCmd,
 	)
 	return launchCmd, sockDir, nil
+}
+
+// resolveBinary turns argv[0] into a path the sandbox can exec. It
+// does PATH lookup AND EvalSymlinks: PATH on this host frequently
+// resolves a binary through ~/.nix-profile/bin/<name> which is a
+// symlink under $HOME. Once $HOME is tmpfs'd inside the sandbox, the
+// symlink is gone. The /nix/store/<hash>/bin/<name> target stays
+// reachable via the read-only root bind, so chase the symlink to
+// that.
+func resolveBinary(name string) (string, error) {
+	bin, err := exec.LookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("%s not on PATH: %w", name, err)
+	}
+	abs, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", bin, err)
+	}
+	return abs, nil
 }
 
 func fatal(format string, args ...any) {

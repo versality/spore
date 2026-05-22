@@ -1,10 +1,10 @@
 # spore-rover (sandboxed rover launcher)
 
-`spore-rover` runs an LLM coding agent (today: claude) inside a
-bubblewrap sandbox in a tmux window the operator can watch. It is
-the primitive that lets a worker rover act on a worktree without
-exposing the operator's dotfiles, sibling worktrees, or open
-internet to a misbehaving prompt.
+`spore-rover` runs an LLM coding agent (claude, codex, or opencode)
+inside a bubblewrap sandbox in a tmux window the operator can watch.
+It is the primitive that lets a worker rover act on a worktree
+without exposing the operator's dotfiles, sibling worktrees, or
+open internet to a misbehaving prompt.
 
 The sandbox primitive is opt-in today: `cmd/spore-rover/` builds to a
 standalone `spore-rover` binary. A later phase soaks it into the
@@ -210,6 +210,44 @@ the target attempts a real CONNECT.
   minutes; long agents may need more. Pass `-redteam-timeout
   10m` if a slower model is in the pane.
 
+## Supported targets
+
+`-target <name>` (default `claude`) selects which agent the launcher
+runs and which host paths to bind rw for that agent's session state
+and credentials. The three registered targets:
+
+- **`claude`** - binary `claude`; binds `~/.claude` (session state)
+  and `~/.claude.json` (credentials).
+- **`codex`** - binary `codex`; binds `~/.codex` (auth.json,
+  sessions, history, hooks, SQLite logs, scratch). One directory
+  covers everything codex writes.
+- **`opencode`** - binary `opencode`; binds three XDG dirs:
+  `~/.config/opencode` (opencode.json + the launcher's npm deps),
+  `~/.local/share/opencode` (auth.json + opencode.db SQLite +
+  snapshot storage), and `~/.cache/opencode` (downloaded native
+  runtime binaries, models.json). All three are rw because
+  opencode mutates the SQLite during a session and may unpack new
+  runtime binaries on demand.
+
+A target whose state paths do not exist on the host is still
+launchable: missing paths are skipped, so a fresh box without a
+prior codex login still gets a sandboxed codex up; codex itself
+will then walk the operator through its first-time login flow.
+
+The binary lookup follows symlinks via `filepath.EvalSymlinks`
+before passing the path to bwrap. This matters on Nix: PATH
+typically resolves a binary through `~/.nix-profile/bin/<name>`,
+and `~/.nix-profile` is a symlink under `$HOME`. The sandbox's
+tmpfs masks `$HOME`, so the symlink itself disappears inside; the
+launcher chases it to the `/nix/store/<hash>/bin/<name>` target,
+which stays reachable via the read-only root bind.
+
+To add a new target, register an entry in
+`cmd/spore-rover/target.go` with the binary name and its state
+paths (see `homePaths` for the helper). Run a smoke test from
+`--exec`: `spore-rover --exec -target <name> -- <bin> --version`
+must succeed.
+
 ## Two subcommands
 
 The launcher binary exposes two ways to drop into the sandbox:
@@ -222,11 +260,13 @@ The launcher binary exposes two ways to drop into the sandbox:
 - **`spore-rover --exec ... -- <argv>`.** Wraps the given argv in
   the same bwrap+proxy sandbox but does NOT spawn its own tmux
   window. stdin/stdout/stderr pass through and the exit code
-  mirrors the child. This is the primitive the worker spawn path
-  will call to soak the sandbox into every minted rover: the
-  worker's existing `tmux new-session sh -c "<agent>"` becomes
-  `tmux new-session sh -c "spore-rover --exec -worktree <wt> --
-  <agent>"`.
+  mirrors the child. The leading argv element is PATH-resolved and
+  symlink-chased on the host before exec, so a user-profile-only
+  binary (typical on Nix) survives the tmpfs `$HOME` mask. This is
+  the primitive the worker spawn path will call to soak the
+  sandbox into every minted rover: the worker's existing `tmux
+  new-session sh -c "<agent>"` becomes `tmux new-session sh -c
+  "spore-rover --exec -worktree <wt> -target <agent> -- <agent>"`.
 
 Both subcommands share the same policy + config merge (`[sandbox]`
 in spore.toml, user override at `~/.config/spore/sandbox.toml`,

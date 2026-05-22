@@ -32,6 +32,36 @@ var targets = map[string]target{
 		// phase.
 		StatePaths: func() []string { return homePaths(".claude", ".claude.json") },
 	},
+	"codex": {
+		Name: "codex",
+		Bin:  "codex",
+		// codex puts everything under ~/.codex: auth.json (OpenAI
+		// API token), sessions/, history.jsonl, hooks.json,
+		// state_*.sqlite, logs_*.sqlite, models_cache.json, plus
+		// tmp/ scratch. One rw bind covers the lot.
+		StatePaths: func() []string { return homePaths(".codex") },
+	},
+	"opencode": {
+		Name: "opencode",
+		Bin:  "opencode",
+		// opencode splits its state across three XDG dirs:
+		//   ~/.config/opencode   -> opencode.json config + npm deps
+		//                           the launcher pulls in
+		//   ~/.local/share/opencode -> auth.json (anthropic/openai
+		//                              tokens) + opencode.db SQLite
+		//                              + storage/ snapshots
+		//   ~/.cache/opencode    -> bin/ with downloaded native
+		//                           runtimes, models.json
+		// All three need rw: opencode mutates the SQLite during a
+		// session and may unpack new runtime binaries on demand.
+		StatePaths: func() []string {
+			return homePaths(
+				filepath.Join(".config", "opencode"),
+				filepath.Join(".local", "share", "opencode"),
+				filepath.Join(".cache", "opencode"),
+			)
+		},
+	},
 }
 
 func knownTargets() string {
