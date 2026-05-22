@@ -131,7 +131,7 @@ code and stderr.
 Spore's stop-hook does not gate on an orchestrator-identity env: the
 consumer wires the hook into their settings.json only for the agents
 they want monitored. Any orchestrator-shape gating (e.g. firing only
-for dispatcher turns, not runner turns) belongs in the consumer's
+for coordinator turns, not worker turns) belongs in the consumer's
 hook config, not in this binary.
 
 ### Marker semantics
@@ -155,7 +155,7 @@ entry. Drop a marker by hand to re-arm the reminder for a window.
 
 ```
 AGENT BUDGET (tighten): short=82% (resets in 1h12m), long=18%.
-Defer non-urgent runner starts. Route lightweight turns through a cheaper
+Defer non-urgent worker starts. Route lightweight turns through a cheaper
 model. Reserve top-tier models for tool-use loops and code edits.
 ```
 

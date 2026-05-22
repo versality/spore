@@ -245,7 +245,7 @@ func Refresh() error {
 
 // usageMinInterval is the minimum gap between successive /usage hits.
 // The Stop hook fires per consumer turn (could be many per minute);
-// dispatcher band decisions tolerate ~minute-old data, and Anthropic
+// coordinator band decisions tolerate ~minute-old data, and Anthropic
 // rate-limits /usage with multi-minute retry-after (observed 429s with
 // retry-after ~280s). Tunable via $AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC
 // for test or operator override.
@@ -666,7 +666,7 @@ func createMarker(path string) (bool, error) {
 
 func reminderTextFor(s *state, band string) string {
 	tail := map[string]string{
-		"tighten": "Defer non-urgent runner starts. Route lightweight turns through a cheaper model. Reserve top-tier models for tool-use loops and code edits.",
+		"tighten": "Defer non-urgent worker starts. Route lightweight turns through a cheaper model. Reserve top-tier models for tool-use loops and code edits.",
 	}
 	short := windowFragment("short", s.Short, shortWindow, band, tightenShortFrac)
 	long := windowFragment("long", s.Long, longWindow, band, tightenLongFrac)

@@ -6,9 +6,20 @@ spore is a drop-in harness template for LLM-coding agents.
 
 ## Roles
 
-spore uses `dispatcher` (coordinator) and `runner` (worker) internally.
-Downstream projects pick their own names during bootstrap; the kernel
-parameterizes both. When working in this repo, use the internal names.
+spore's kernel uses two role names:
+
+- `coordinator` - the long-lived agent that pilots a project, owns the
+  task queue, and routes worker output back to the operator.
+- `worker` - a short-lived agent spawned against a single task slug in
+  a `.worktrees/<slug>` checkout. Workers run autonomously between
+  handovers and report through the task file, commits, and the inbox.
+
+`rover` is a separate concept: the bubblewrap sandbox launcher
+(`cmd/spore-rover/`) that wraps a worker's agent command. It is not a
+synonym for worker.
+
+Downstream projects can rename `coordinator` and `worker` at bootstrap
+time. When working inside this repo, always use the kernel names.
 
 ## Source map
 
@@ -116,7 +127,7 @@ For known file URLs, prefer a direct fetch over `WebFetch`:
 
 When stating a fact about live state - a binary's version, a service's status, whether a fix landed, what's at a path, what a config currently says - run the command that returns that fact in the SAME turn and quote the output. Never report from intent, recent activity, or "should be the case". Examples: `spore --version` before claiming a version; `systemctl status X` before claiming a service runs; `git log --oneline main -1` before claiming a commit landed.
 
-Stating intent ("I'm minting a runner to do X") is fine; stating outcome ("X is now Y") requires the verifying tool call in the same turn.
+Stating intent ("I'm minting a worker to do X") is fine; stating outcome ("X is now Y") requires the verifying tool call in the same turn.
 
 ## Validation
 
@@ -151,22 +162,23 @@ tmux capture-pane -t <name> -p   # read recent output
 
 - Source edits stay inside the spore tree. Do not leak into a consumer
   project's working copy, even when dogfooding the bootstrap flow.
-- Do not rename `dispatcher` or `runner` without updating the
-  composer plus its tests in the same commit. The names are
-  kernel-internal contract; silent drift breaks downstream rendering.
+- Do not rename `coordinator` or `worker` without sweeping the rule
+  pool, the composer tests, and the consumer rule lists in the same
+  commit. The names are kernel-internal contract; silent drift breaks
+  downstream rendering.
 - Opensource-bound. Mind the leak surface: no internal hostnames, no
   operator-machine paths, no personal email beyond what
   `git config user.email` resolves to.
 - Decide-and-ship default. Reversible technical and design calls are
   yours; escalate only on operator-bound questions. See the
-  Runner autonomy rule below for the full shape of `tell dispatcher`
+  Worker escalation rule below for the full shape of `tell coordinator`
   vs `spore task block`.
 
-# Runner autonomy
+# Worker escalation
 
-You are a runner: a worker that owns a single task slug end to end. The
-default path is to decide and ship. Blocking and escalating are
-exception paths with narrow shapes.
+You are a worker: you own a single task slug end to end. The default
+path is to decide and ship. Blocking and escalating are exception
+paths with narrow shapes.
 
 ## Default decide
 
@@ -188,8 +200,8 @@ resolve from your worktree: a scheduler trigger that has not fired,
 a credential the operator has to mint, hardware not present, an
 upstream service down. A posed question with options is not a block.
 
-When you need dispatcher or operator input, send
-`spore task tell dispatcher "<question + 2 to 4 options + recommended
+When you need coordinator or operator input, send
+`spore task tell coordinator "<question + 2 to 4 options + recommended
 pick + one-line why>"` and keep working on any independent sub-task.
 Block only when no parallel work remains AND the external dependency
 has a name.
@@ -211,12 +223,12 @@ has a name.
 - Missing acknowledgment on a plan. Post the plan, keep working on
   independent sub-tasks, do not idle the slot.
 - An inbox poke that has not arrived yet. Not arrived is not blocked.
-- "I have a question." Questions go through `tell dispatcher` with
+- "I have a question." Questions go through `tell coordinator` with
   options and a recommended pick, not through `block`.
 
 ## Recommended-pick pattern
 
-Every `tell dispatcher` carries options and the pick you would make
+Every `tell coordinator` carries options and the pick you would make
 absent reply. Shape:
 
 ```
@@ -228,7 +240,7 @@ options:
 recommended: <a|b|c> - <one-line why>
 ```
 
-The dispatcher's default is then "approve recommended"; only the
+The coordinator's default is then "approve recommended"; only the
 genuinely operator-bound questions surface to the operator. This
 keeps round trips off the critical path.
 

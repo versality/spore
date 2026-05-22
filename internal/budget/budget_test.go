@@ -323,8 +323,8 @@ func TestReminderTextBindingHints(t *testing.T) {
 	if !strings.Contains(got, "long=18%") {
 		t.Errorf("missing long pct: %q", got)
 	}
-	if !strings.Contains(got, "runner") {
-		t.Errorf("missing tighten advice tail (runner mention): %q", got)
+	if !strings.Contains(got, "worker") {
+		t.Errorf("missing tighten advice tail (worker mention): %q", got)
 	}
 
 	highShort := windowState{Frac: 0.92, OldestEventAt: ptrTime(now.Add(-4*time.Hour - 22*time.Minute))}

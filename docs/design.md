@@ -123,15 +123,17 @@ in your tree".
 
 ## Naming: coordinator and worker
 
-Spore's internal defaults are `dispatcher` (coordinator) and `runner`
-(worker), used in spore's own repo, docs, and tests.
+Spore's kernel names the two roles `coordinator` and `worker`. The
+names are used uniformly across spore's own code, docs, tests, and
+rule pool.
 
 When spore initiates in a downstream project, the bootstrap flow
-**prompts the operator of that project** for the two role names
-during the `repo-mapped` stage, before any kernel files are written.
-Defaults are `dispatcher` / `runner`; the operator can accept the
-defaults or pick anything (`foreman` / `crew`, `pilot` / `cell`,
-`captain` / `hand`, or anything fitting the project's voice).
+**prompts the operator of that project** for role names during the
+`repo-mapped` stage, before any kernel files are written. The
+defaults are `coordinator` / `worker`; the operator can accept them
+or pick anything (`dispatcher` / `runner`, `foreman` / `crew`,
+`pilot` / `cell`, `captain` / `hand`, or anything fitting the
+project's voice).
 
 The picked names get baked into the project's instruction files, the task
 driver's CLI, and the rendered hook plumbing. Renaming after the
