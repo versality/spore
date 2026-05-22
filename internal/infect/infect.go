@@ -53,6 +53,27 @@ type Config struct {
 	CoordinatorAgent  string
 	CoordinatorModel  string
 	CoordinatorEffort string
+	Layout            LayoutSpec
+}
+
+// LayoutSpec names the deploy user and paths owned by it on the
+// target box. The bundled NixOS flake at bootstrap/flake/ declares
+// User="spore" with Home="/home/spore"; downstream forks that change
+// the flake user can override here so InstallHandoverScript stays in
+// sync.
+type LayoutSpec struct {
+	User  string // unix user owning all spore state on the box
+	Group string // primary group of User
+	Home  string // login home directory of User
+}
+
+// DefaultLayout returns the layout the bundled flake declares.
+func DefaultLayout() LayoutSpec {
+	return LayoutSpec{
+		User:  "spore",
+		Group: "users",
+		Home:  "/home/spore",
+	}
 }
 
 // Validate checks required fields and that the SSH key file exists.
@@ -103,6 +124,16 @@ func (c *Config) applyDefaults() {
 	}
 	if c.CoordinatorEffort == "" {
 		c.CoordinatorEffort = DefaultCoordinatorEffort
+	}
+	d := DefaultLayout()
+	if c.Layout.User == "" {
+		c.Layout.User = d.User
+	}
+	if c.Layout.Group == "" {
+		c.Layout.Group = d.Group
+	}
+	if c.Layout.Home == "" {
+		c.Layout.Home = d.Home
 	}
 }
 
@@ -444,8 +475,18 @@ func DefaultRepoExcludes() [][]string {
 }
 
 func InstallHandoverScript(c Config, projectBase, remoteTmp string) string {
-	projectRoot := "/home/spore/" + projectBase
+	c.applyDefaults()
+	home := c.Layout.Home
+	user := c.Layout.User
+	group := c.Layout.Group
+	ownerArgs := "-o " + user + " -g " + group
+	projectRoot := home + "/" + projectBase
 	rootCopy := "/root/" + projectBase
+	claudeDir := home + "/.claude"
+	hooksDir := claudeDir + "/hooks"
+	systemdUserDir := home + "/.config/systemd/user"
+	stateDir := home + "/.local/state/spore"
+	bashrc := home + "/.bashrc"
 	coordinatorEnv := strings.Join([]string{
 		"SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch",
 		"SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief",
@@ -454,7 +495,7 @@ func InstallHandoverScript(c Config, projectBase, remoteTmp string) string {
 		"SPORE_COORDINATOR_EFFORT=" + normalizeEffort(c.CoordinatorEffort),
 	}, "\n") + "\n"
 	firstReconcileEnv := shellEnvArgs([]string{
-		"HOME=/home/spore",
+		"HOME=" + home,
 		"PATH=/usr/local/bin:/run/current-system/sw/bin:/run/wrappers/bin",
 		"SPORE_COORDINATOR_AGENT=/usr/local/bin/spore-coordinator-launch",
 		"SPORE_AGENT_BINARY=/usr/local/bin/spore-worker-brief",
@@ -472,22 +513,22 @@ func InstallHandoverScript(c Config, projectBase, remoteTmp string) string {
 		"install -m 0755 " + shellSingleQuote(remoteTmp+"/spore-coordinator-launch.sh") + " /usr/local/bin/spore-coordinator-launch",
 		"install -m 0755 " + shellSingleQuote(remoteTmp+"/spore-worker-brief.sh") + " /usr/local/bin/spore-worker-brief",
 		"install -m 0755 " + shellSingleQuote(remoteTmp+"/spore-fleet-tick.sh") + " /usr/local/bin/spore-fleet-tick",
-		"install -d -o spore -g users -m 0755 /home/spore/.claude/hooks /home/spore/.config/systemd/user /home/spore/.local/state/spore",
-		"install -m 0755 " + shellSingleQuote(remoteTmp+"/hooks/block-bg-bash.pl") + " /home/spore/.claude/hooks/block-bg-bash.pl",
-		"install -m 0755 " + shellSingleQuote(remoteTmp+"/hooks/load-state-md.pl") + " /home/spore/.claude/hooks/load-state-md.pl",
-		"install -m 0644 " + shellSingleQuote(remoteTmp+"/settings.json") + " /home/spore/.claude/settings.json",
-		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-reconcile.service") + " /home/spore/.config/systemd/user/spore-fleet-reconcile.service",
-		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-reconcile.timer") + " /home/spore/.config/systemd/user/spore-fleet-reconcile.timer",
-		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-evict-idle.service") + " /home/spore/.config/systemd/user/spore-fleet-evict-idle.service",
-		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-evict-idle.timer") + " /home/spore/.config/systemd/user/spore-fleet-evict-idle.timer",
+		"install -d " + ownerArgs + " -m 0755 " + hooksDir + " " + systemdUserDir + " " + stateDir,
+		"install -m 0755 " + shellSingleQuote(remoteTmp+"/hooks/block-bg-bash.pl") + " " + hooksDir + "/block-bg-bash.pl",
+		"install -m 0755 " + shellSingleQuote(remoteTmp+"/hooks/load-state-md.pl") + " " + hooksDir + "/load-state-md.pl",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/settings.json") + " " + claudeDir + "/settings.json",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-reconcile.service") + " " + systemdUserDir + "/spore-fleet-reconcile.service",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-reconcile.timer") + " " + systemdUserDir + "/spore-fleet-reconcile.timer",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-evict-idle.service") + " " + systemdUserDir + "/spore-fleet-evict-idle.service",
+		"install -m 0644 " + shellSingleQuote(remoteTmp+"/systemd/spore-fleet-evict-idle.timer") + " " + systemdUserDir + "/spore-fleet-evict-idle.timer",
 		"cat > /etc/spore/coordinator.env <<'EOF'\n" + coordinatorEnv + "EOF",
 		"rm -rf " + shellSingleQuote(projectRoot),
 		"mv " + shellSingleQuote(rootCopy) + " " + shellSingleQuote(projectRoot),
-		"install -d -o spore -g users -m 0755 " + shellSingleQuote(projectRoot+"/tasks"),
-		"cat > /home/spore/.bashrc <<'EOF'\nexport PATH=/usr/local/bin:/run/current-system/sw/bin:/run/wrappers/bin:$PATH\nif [ -r /etc/spore/coordinator.env ]; then\n  set -a\n  . /etc/spore/coordinator.env\n  set +a\nfi\nEOF",
-		"chown -R spore:users " + shellSingleQuote(projectRoot) + " /home/spore/.claude /home/spore/.config /home/spore/.local /home/spore/.bashrc",
-		"loginctl enable-linger spore",
-		"runuser -u spore -- env " + firstReconcileEnv + " bash -lc " + shellSingleQuote("cd "+shellSingleQuote(projectRoot)+" && spore fleet enable && spore fleet reconcile"),
+		"install -d " + ownerArgs + " -m 0755 " + shellSingleQuote(projectRoot+"/tasks"),
+		"cat > " + bashrc + " <<'EOF'\nexport PATH=/usr/local/bin:/run/current-system/sw/bin:/run/wrappers/bin:$PATH\nif [ -r /etc/spore/coordinator.env ]; then\n  set -a\n  . /etc/spore/coordinator.env\n  set +a\nfi\nEOF",
+		"chown -R " + user + ":" + group + " " + shellSingleQuote(projectRoot) + " " + claudeDir + " " + home + "/.config " + home + "/.local " + bashrc,
+		"loginctl enable-linger " + user,
+		"runuser -u " + user + " -- env " + firstReconcileEnv + " bash -lc " + shellSingleQuote("cd "+shellSingleQuote(projectRoot)+" && spore fleet enable && spore fleet reconcile"),
 		"systemctl daemon-reload",
 		"systemctl restart spore-coordinator.timer",
 		"systemctl restart spore-coordinator.service",

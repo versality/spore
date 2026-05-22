@@ -376,6 +376,28 @@ func TestRunWithRepoRunsHandoff(t *testing.T) {
 	}
 }
 
+func TestInstallHandoverScriptHonorsLayoutOverride(t *testing.T) {
+	script := InstallHandoverScript(Config{
+		Layout: LayoutSpec{User: "agent", Group: "agent", Home: "/srv/agent"},
+	}, "demo", "/tmp/spore-handover")
+	for _, want := range []string{
+		"install -d -o agent -g agent -m 0755 /srv/agent/.claude/hooks /srv/agent/.config/systemd/user /srv/agent/.local/state/spore",
+		"mv '/root/demo' '/srv/agent/demo'",
+		"install -d -o agent -g agent -m 0755 '/srv/agent/demo/tasks'",
+		"chown -R agent:agent '/srv/agent/demo' /srv/agent/.claude /srv/agent/.config /srv/agent/.local /srv/agent/.bashrc",
+		"loginctl enable-linger agent",
+		"runuser -u agent --",
+		"HOME=/srv/agent",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("handover script missing %q:\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, "/home/spore") || strings.Contains(script, "-o spore -g users") {
+		t.Fatalf("layout override leaked default /home/spore or spore:users:\n%s", script)
+	}
+}
+
 func argAfter(argv []string, key string) string {
 	for i := 0; i < len(argv)-1; i++ {
 		if argv[i] == key {
