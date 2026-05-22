@@ -315,7 +315,13 @@ func notifyMatterDone(projectRoot, slug string, m frontmatter.Meta, warnOut io.W
 	if len(matters) == 0 {
 		return
 	}
-	if err := matters[0].OnDone(context.Background(), slug, copyExtra(m.Extra)); err != nil {
+	// Per-backend timeout so a hung matter backend (Linear, GitHub)
+	// does not stall `spore task done` indefinitely. Same 30s budget
+	// as fleet.Reconcile's per-Sync wrap; the worker is mid-flip and
+	// the operator is waiting on stdout.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := matters[0].OnDone(ctx, slug, copyExtra(m.Extra)); err != nil {
 		fmt.Fprintf(warnOut, "spore task done %s: matter %s OnDone: %v\n", slug, name, err)
 	}
 }

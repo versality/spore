@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task"
@@ -277,13 +278,20 @@ func syncMatters(projectRoot string) []MatterResult {
 		return nil
 	}
 	out := make([]MatterResult, 0, len(matters))
-	ctx := context.Background()
+	// Per-backend timeout so a hung Linear / GitHub call does not
+	// stall the whole reconcile pass. 30s is generous for normal
+	// API latency and short enough that a wedged backend still gets
+	// re-tried on the next reconcile.
 	for _, m := range matters {
+		ctx, cancel := context.WithTimeout(context.Background(), matterSyncTimeout)
 		c, u, err := m.Sync(ctx, projectRoot)
+		cancel()
 		out = append(out, MatterResult{Name: m.Name(), Created: c, Updated: u, Err: err})
 	}
 	return out
 }
+
+const matterSyncTimeout = 30 * time.Second
 
 // LoadMaxWorkers reads `[fleet] max_workers = N` from a spore.toml
 // at projectRoot, falling back to DefaultMaxWorkers when missing.
