@@ -1,8 +1,62 @@
-**Status**: planned
+**Status**: in-progress (buckets 1-3 landed; bucket 4 partially)
 **Priority**: high
-**Branch**: TBD (work on main or a feature branch)
+**Branch**: main
 **Predecessor**: commits de00256..a0174de (the sandbox primitive ships,
 this brief hardens, soaks, and opens it up for extension)
+
+## Progress
+
+Landed on main (commits a0174de..HEAD):
+
+- Bucket 1, tech-debt sweep:
+  - 91c708b: split main into dispatch + runLaunch + buildLaunchCmd;
+    `-redteam-timeout` flag.
+  - c159d65: target registry replaces hardcoded claudeStatePaths.
+  - a715025: offset-capture summary detection (drops the >=2 echo
+    heuristic).
+  - 8fdb42e: forwardSignals helper.
+- Bucket 2, documentation:
+  - f4b92ed: docs/sandbox-rover.md (threat model, policy fields,
+    pipeline diagram, redteam interpretation rules including the
+    T1.d/T4.a LEAKED-inside reconciliation, gotchas).
+  - source-map fragment lists cmd/spore-rover/.
+- Bucket 3, extension ergonomics:
+  - ced3fad: internal/sandboxcfg parses [sandbox] in spore.toml +
+    ~/.config/spore/sandbox.toml; precedence defaults < user <
+    project < CLI; proxy.log deny line hints at the config key.
+- Bucket 4, harness soak (partial):
+  - e21dd64: `spore-rover --exec` primitive (bwrap+proxy without
+    tmux orchestration). The pieces the soak needs are in place;
+    the actual wire-up into internal/task/lifecycle.go is the
+    remaining work below.
+
+Redteam validator was rerun on every commit and stayed PASS 12/12
+against api.anthropic.com + statsig.anthropic.com + sentry.io.
+
+## Remaining
+
+Bucket 4, harness soak, the actual wire-up:
+
+- internal/task/lifecycle.go around line ~526 (`workerAgentCommand`
+  / the tmux `new-session sh -c <agent>` builder) is where the agent
+  command is currently set. Wrap `shellCmd` in `spore-rover --exec
+  -worktree <wt> -- <agent>` when sandbox-on.
+- Decide opt-in vs opt-out default. The brief calls for sandboxed
+  by default with per-task `sandbox: false` opt-out via frontmatter.
+  Investigate first: does claude inside the sandbox have rw on the
+  git worktree's `.git` indirection (which is a file pointing at
+  the main repo's `.git/worktrees/<slug>/`)? The worktree bind
+  covers the worktree dir but the main repo's
+  `.git/worktrees/<slug>/` lives outside it. Without rw on that
+  path, `git commit` from inside the sandbox fails.
+- Add a default RW path: the main repo's `.git/worktrees/<slug>/`
+  resolved from `git rev-parse --git-dir` inside the worktree.
+- Per-task frontmatter: `sandbox: false` (or `sandbox: { allow_hosts:
+  [...] }` for the override-allow case) lands in `Meta.Extra` already;
+  read it from `lifecycle.go`.
+- Existing internal/task/ tests must keep passing. The smoke that
+  matters: `spore task new <slug>` mints a worker whose claude
+  reaches `api.anthropic.com` and can commit inside the worktree.
 
 # Sandbox rover follow-ups
 
