@@ -15,6 +15,7 @@ parameterizes both. When working in this repo, use the internal names.
 ```
 spore/
 |-- cmd/spore/        CLI entry point (Go).
+|-- cmd/spore-rover/  bwrap+proxy sandbox launcher for the rover agent.
 |-- internal/         Go internal packages, kernel implementation.
 |   |-- align/        Pilot-agent alignment-mode tracker.
 |   |-- bootstrap/    Stage-gate driver + per-stage detectors.
