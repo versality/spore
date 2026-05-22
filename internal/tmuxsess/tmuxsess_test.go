@@ -8,9 +8,17 @@ import (
 	"testing"
 )
 
+// testTmuxSocket is the -L socket name every direct tmux invocation
+// in this _test.go file passes. The literal "default" matches the
+// basename tmux would otherwise pick when -L is omitted, so production
+// code under tmuxsess.go (which calls plain "tmux ...") lands on the
+// same socket file. Per-test-process isolation comes from the
+// TMUX_TMPDIR override in TestMain.
+const testTmuxSocket = "default"
+
 // TestMain isolates the tmux server to a per-process socket so the
 // tests never touch the operator's live tmux. The pattern mirrors
-// internal/task/tmuxsocket_test.go: set TMUX_TMPDIR to a tempdir AND
+// internal/task/tmuxsocket_test.go: TMUX_TMPDIR to a tempdir, AND
 // unset TMUX / TMUX_PANE so child tmux invocations do not inherit
 // the operator's socket path. A keepalive session keeps the server
 // from shutting down between tests.
@@ -29,21 +37,21 @@ func TestMain(m *testing.M) {
 	}
 	_ = os.Unsetenv("TMUX")
 	_ = os.Unsetenv("TMUX_PANE")
-	_ = exec.Command("tmux", "new-session", "-d", "-s", "keepalive", "sleep 86400").Run()
+	_ = exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", "keepalive", "sleep 86400").Run()
 	code := m.Run()
-	_ = exec.Command("tmux", "kill-server").Run()
+	_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-server").Run()
 	_ = os.RemoveAll(tmpdir)
 	os.Exit(code)
 }
 
 func spawn(t *testing.T, name string) {
 	t.Helper()
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", name, "sleep", "60")
+	cmd := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", name, "sleep", "60")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("spawn %s: %v\n%s", name, err, out)
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "kill-session", "-t", name).Run()
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", name).Run()
 	})
 }
 

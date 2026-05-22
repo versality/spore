@@ -23,6 +23,7 @@ import (
 
 	"github.com/versality/spore/internal/agentpane"
 	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/hooks/wtgit"
 	"github.com/versality/spore/internal/task"
 )
 
@@ -53,11 +54,11 @@ func Run(req hooks.Request, deps Deps) Result {
 
 	projectRoot, _ := deps.LookupEnv("SPORE_PROJECT_ROOT")
 	if projectRoot == "" {
-		root, err := topLevel(req.CWD)
+		root, err := wtgit.TopLevel(req.CWD)
 		if err != nil {
 			return Result{}
 		}
-		if main, ok := mainCheckoutFromWorktree(root); ok {
+		if main, ok := wtgit.MainCheckoutFromWorktree(root); ok {
 			projectRoot = main
 		} else {
 			projectRoot = root
@@ -73,10 +74,10 @@ func Run(req hooks.Request, deps Deps) Result {
 		return Result{}
 	}
 
-	if !workingTreeClean(worktree) {
+	if !wtgit.WorkingTreeClean(worktree) {
 		return Result{}
 	}
-	if midMergeOrRebase(worktree) {
+	if wtgit.MidMergeOrRebase(worktree) {
 		return Result{}
 	}
 
@@ -146,76 +147,4 @@ func UnpushedMainCommits(projectRoot string) (int, error) {
 		n = n*10 + int(c-'0')
 	}
 	return n, nil
-}
-
-func workingTreeClean(worktree string) bool {
-	cmd := exec.Command("git", "-C", worktree, "status", "--porcelain")
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(out)) == ""
-}
-
-func midMergeOrRebase(worktree string) bool {
-	gitDir, err := gitDir(worktree)
-	if err != nil {
-		return false
-	}
-	for _, name := range []string{"MERGE_HEAD", "rebase-merge", "rebase-apply"} {
-		if _, err := os.Stat(filepath.Join(gitDir, name)); err == nil {
-			return true
-		}
-	}
-	return false
-}
-
-func gitDir(worktree string) (string, error) {
-	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-dir").Output()
-	if err != nil {
-		return "", err
-	}
-	dir := strings.TrimSpace(string(out))
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(worktree, dir)
-	}
-	return dir, nil
-}
-
-func topLevel(dir string) (string, error) {
-	if dir == "" {
-		return "", fmt.Errorf("empty cwd")
-	}
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// mainCheckoutFromWorktree resolves a worktree path to its main
-// checkout by parsing the worktree's `.git` pointer file. Returns
-// ("", false) when the input is the main checkout (a real .git dir).
-func mainCheckoutFromWorktree(worktree string) (string, bool) {
-	b, err := os.ReadFile(filepath.Join(worktree, ".git"))
-	if err != nil {
-		return "", false
-	}
-	line := strings.TrimSpace(string(b))
-	const prefix = "gitdir: "
-	if !strings.HasPrefix(line, prefix) {
-		return "", false
-	}
-	gd := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	if !filepath.IsAbs(gd) {
-		gd = filepath.Join(worktree, gd)
-	}
-	parent := filepath.Dir(filepath.Dir(filepath.Dir(gd)))
-	if parent == "" || parent == "/" {
-		return "", false
-	}
-	if real, err := filepath.EvalSymlinks(parent); err == nil {
-		return real, true
-	}
-	return filepath.Clean(parent), true
 }

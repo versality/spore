@@ -66,7 +66,7 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", err
 	}
 
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +242,7 @@ func Done(tasksDir, slug string, force bool) error {
 		}
 	}
 
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return err
 	}
@@ -470,7 +470,7 @@ func metaToAny(m frontmatter.Meta) map[string]any {
 // wt-style form. extraEnv lands on tmux new-session as `-e KEY=VAL`
 // repeats.
 func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return "", err
 	}
@@ -682,7 +682,12 @@ func blockCoordinatorGate() error {
 	return nil
 }
 
-func projectRootFromTasksDir(tasksDir string) (string, error) {
+// ProjectRootFromTasksDir returns the project root that contains
+// tasksDir as its `tasks/` subdirectory. The caller passes the tasks
+// directory (e.g. ".worktrees/foo/tasks" or "/abs/proj/tasks") and
+// gets back its parent ("/abs/proj"). Used everywhere the worker /
+// coordinator needs a project root and only has a tasks-dir handle.
+func ProjectRootFromTasksDir(tasksDir string) (string, error) {
 	abs, err := filepath.Abs(tasksDir)
 	if err != nil {
 		return "", err

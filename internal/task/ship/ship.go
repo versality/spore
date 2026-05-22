@@ -95,7 +95,7 @@ func Run(opts Options, deps Deps) error {
 		return fmt.Errorf("ship: tasksDir required")
 	}
 
-	projectRoot, err := projectRootFromTasksDir(opts.TasksDir)
+	projectRoot, err := task.ProjectRootFromTasksDir(opts.TasksDir)
 	if err != nil {
 		return err
 	}
@@ -364,12 +364,4 @@ func realRunJustCheck(dir string) error {
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-func projectRootFromTasksDir(tasksDir string) (string, error) {
-	abs, err := filepath.Abs(tasksDir)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(abs), nil
 }

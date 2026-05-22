@@ -14,7 +14,7 @@ import (
 // tasksDir to the current branch. Idempotent: no-ops when the tree
 // is clean. Returns nil when there is nothing to commit.
 func AutoCommitDrift(tasksDir string) error {
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return err
 	}

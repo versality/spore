@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/versality/spore/internal/gh"
+	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/consumerclaim"
 	"github.com/versality/spore/internal/task/cutover"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -448,7 +449,7 @@ func TestRunSkipsMalformedClaim(t *testing.T) {
 }
 
 func TestProjectRootFromTasksDir(t *testing.T) {
-	root, err := projectRootFromTasksDir("/abs/proj/tasks")
+	root, err := task.ProjectRootFromTasksDir("/abs/proj/tasks")
 	if err != nil {
 		t.Fatal(err)
 	}

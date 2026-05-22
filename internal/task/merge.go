@@ -53,7 +53,7 @@ func Merge(tasksDir, slug string) error {
 // Pass MergeOptions{ForceMergeRed: reason} to bypass and log the
 // override.
 func MergeWithOptions(tasksDir, slug string, opts MergeOptions) error {
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func closeMergedTask(tasksDir, slug string) error {
 		return err
 	}
 
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return err
 	}

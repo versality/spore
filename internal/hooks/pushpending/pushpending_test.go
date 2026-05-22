@@ -10,6 +10,7 @@ import (
 
 	"github.com/versality/spore/internal/agentpane"
 	"github.com/versality/spore/internal/hooks"
+	"github.com/versality/spore/internal/hooks/wtgit"
 )
 
 type repoFixture struct {
@@ -181,7 +182,7 @@ func TestRun(t *testing.T) {
 				}
 			}
 			if tc.midMerge != "" {
-				gd, err := gitDir(fix.worktree)
+				gd, err := wtgit.GitDir(fix.worktree)
 				if err != nil {
 					t.Fatalf("gitDir: %v", err)
 				}
@@ -291,7 +292,7 @@ func TestMainCheckoutFromWorktreeRelativeGitDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, ok := mainCheckoutFromWorktree(worktree)
+	got, ok := wtgit.MainCheckoutFromWorktree(worktree)
 	if !ok {
 		t.Fatal("mainCheckoutFromWorktree returned ok=false")
 	}

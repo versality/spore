@@ -68,7 +68,7 @@ func killAllSlugSessions(tasksDir, projectRoot, slug string) {
 // keep mid-run sessions alive). projectRoot is derived from tasksDir;
 // any read or parse failure leaves the session alone.
 func reapIdleSlugSessions(tasksDir, slug string) {
-	projectRoot, err := projectRootFromTasksDir(tasksDir)
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
 	if err != nil {
 		return
 	}
