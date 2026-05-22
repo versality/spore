@@ -120,7 +120,8 @@ func Dispatch(opts DispatchOptions) (DispatchResult, error) {
 
 // extractBody returns the text the regex is matched against. The
 // envelope schema is convention-driven: spore tells write {"msg":...},
-// older harness writers (mcom helm-tell) write {"body":...}. We pull
+// older harness writers (e.g. pre-spore tell scripts) write
+// {"body":...}. We pull
 // the first non-empty of msg/body; if neither parses or is set, we
 // fall back to the raw file content so a regex over the JSON itself
 // still works (this lets callers match against arbitrary fields

@@ -200,7 +200,7 @@ func TestCoordinatorStatusShowsTOML(t *testing.T) {
 	chdirToRoot(t, root)
 
 	if err := os.WriteFile(filepath.Join(root, "spore.toml"),
-		[]byte("[coordinator]\ndriver = \"claude\"\nmodel = \"opus\"\nbrief = \"docs/helm.md\"\n"),
+		[]byte("[coordinator]\ndriver = \"claude\"\nmodel = \"opus\"\nbrief = \"docs/brief.md\"\n"),
 		0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestCoordinatorStatusShowsTOML(t *testing.T) {
 	if code != 3 {
 		t.Fatalf("expected 3 (down), got %d; stdout=%q", code, out)
 	}
-	for _, want := range []string{"driver: claude", "model:  opus", "brief:  docs/helm.md"} {
+	for _, want := range []string{"driver: claude", "model:  opus", "brief:  docs/brief.md"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q:\n%s", want, out)
 		}

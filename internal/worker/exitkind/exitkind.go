@@ -17,8 +17,8 @@
 //     bailed: agent crash, OOM, exec failure). The rc suffix is grep
 //     signal; the operator should be able to `grep kind=crash-rc137`
 //     to find OOMs without re-deriving from a separate rc field.
-//   - early-exit: rc=0 with no marker (budget-block, helm-tell preamble
-//     paths, etc.).
+//   - early-exit: rc=0 with no marker (budget-block, coordinator-tell
+//     preamble paths, etc.).
 package exitkind
 
 import (

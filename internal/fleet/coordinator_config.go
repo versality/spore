@@ -33,7 +33,7 @@ type CoordinatorConfig struct {
 	// session names. When set and a live session matches, EnsureCoordinator
 	// treats the coordinator role as externally provided and skips the
 	// kernel spawn. Use this when an operator-side process owns the
-	// coordinator under a non-spore session name (for example a helm-*
+	// coordinator under a non-spore session name (for example a pilot-*
 	// session running outside the kernel's spore/<project>/coordinator
 	// slot). Empty disables the check and the kernel spawns its own.
 	ExternalSessionPattern string
