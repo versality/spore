@@ -147,7 +147,6 @@ func TestProxyRejectsNonConnect(t *testing.T) {
 // takes when HTTPS_PROXY is set. The upstream serves real TLS so the
 // tunnel must carry encrypted bytes end to end.
 func TestProxyViaHTTPSClient(t *testing.T) {
-	// Real TLS upstream
 	tlsCert, err := generateCert()
 	if err != nil {
 		t.Fatalf("gen cert: %v", err)

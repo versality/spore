@@ -122,7 +122,15 @@ func main() {
 			}
 		}
 		sock := filepath.Join(sockDir, "proxy.sock")
-		argv = append(argv, "--unshare-net", "--bind", sockDir, sockDir)
+		// Ensure the host path of the rover binary is reachable
+		// inside the sandbox after the tmpfs layers wipe out /tmp
+		// and /home. Without this the --inside re-exec fails with
+		// ENOENT.
+		argv = append(argv,
+			"--unshare-net",
+			"--bind", sockDir, sockDir,
+			"--ro-bind", selfPath, selfPath,
+		)
 		insideArgs := []string{selfPath, "--inside", "-sock", sock}
 		insideArgs = append(insideArgs, target...)
 		argv = append(argv, "--")

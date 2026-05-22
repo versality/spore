@@ -34,11 +34,19 @@ func (p Policy) bwrapArgs() ([]string, error) {
 		return nil, fmt.Errorf("policy.Home must be absolute, got %q", home)
 	}
 
+	// Order matters. ro-bind first to lay down the host filesystem,
+	// then tmpfs overlays at the world-writable mount points to mask
+	// whatever the operator left there (sibling worktrees in /tmp,
+	// dotfiles in $HOME, etc.). Worktree and RW binds come last so
+	// they punch through the tmpfs layers.
 	args := []string{
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
 		"--proc", "/proc",
 		"--tmpfs", home,
+		"--tmpfs", "/tmp",
+		"--tmpfs", "/var/tmp",
+		"--tmpfs", "/run/user",
 		"--bind", wt, wt,
 		"--chdir", wt,
 		"--setenv", "HOME", home,
