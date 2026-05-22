@@ -79,10 +79,8 @@ var versionPattern = regexp.MustCompile(`[0-9]+([.][0-9]+){1,3}([+._-][A-Za-z0-9
 // Run audits inputs and tools per cfg, writing one line per finding
 // plus a summary line to stdout. Returns the process exit code (1 in
 // strict mode when any drift / failure showed up, 0 otherwise) plus
-// a non-nil err on hard load failures. stderr is reserved for future
-// diagnostic output; Run does not write to it today.
-func Run(cfg Config, stdout, stderr io.Writer) (int, error) {
-	_ = stderr
+// a non-nil err on hard load failures.
+func Run(cfg Config, stdout io.Writer) (int, error) {
 	versions, err := loadVersions(cfg)
 	if err != nil {
 		return 1, err

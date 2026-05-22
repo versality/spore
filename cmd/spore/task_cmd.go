@@ -539,7 +539,6 @@ func runTaskNew(args []string) error {
 	bodyStdin := fs.Bool("body-stdin", false, "read body from stdin")
 	bodyText := fs.String("body", "", "inline body text")
 	startFlag := fs.Bool("start", false, "set status=active and launch agent")
-	_ = fs.Bool("draft", true, "set status=draft (default)")
 	editFlag := fs.Bool("edit", false, "force editor open")
 	noEdit := fs.Bool("no-edit", false, "suppress editor")
 	priority := fs.String("priority", task.DefaultPriority, "critical|high|medium|low")

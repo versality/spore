@@ -100,7 +100,7 @@ func runAuditVersions(args []string) int {
 		LockJSON:     []byte(os.Getenv("AUDIT_VERSIONS_LOCK_JSON")),
 	}
 
-	code, err := auditversions.Run(cfg, os.Stdout, os.Stderr)
+	code, err := auditversions.Run(cfg, os.Stdout)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore audit-versions:", err)
 		return 1

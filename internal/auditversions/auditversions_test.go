@@ -37,7 +37,7 @@ func TestHostScopeExcludesDevShellAndServiceTools(t *testing.T) {
 		Host:         "desktop-host",
 		VersionsJSON: []byte(versions),
 		LockJSON:     []byte(testLockJSON),
-	}, &out, nil)
+	}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestDevShellScopeUsesPath(t *testing.T) {
 		CheckDev:     true,
 		VersionsJSON: []byte(versions),
 		LockJSON:     []byte(testLockJSON),
-	}, &out, nil)
+	}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
