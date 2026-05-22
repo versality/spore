@@ -104,7 +104,7 @@ func (p *proxy) handle(client net.Conn) {
 	}
 	host = strings.ToLower(host)
 	if _, ok := p.allow[host]; !ok {
-		p.logf("deny CONNECT %s:%s (not in allowlist)", host, port)
+		p.logf("deny CONNECT %s:%s (not in allowlist; add to [sandbox].allow_hosts in spore.toml or pass -allow %s)", host, port, host)
 		writeStatus(client, http.StatusForbidden, "Host not in rover allowlist")
 		return
 	}

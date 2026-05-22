@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/versality/spore/internal/sandboxcfg"
 )
 
 // subcommands routes os.Args[1] to its handler. Each subcommand owns
@@ -92,7 +94,22 @@ func runLaunch(args []string) {
 		}
 	}
 
-	rw := append([]string(nil), extraRW...)
+	// Project [sandbox] (and user-level override) merge with CLI
+	// flags. Precedence weakest-to-strongest: defaults < user <
+	// project < CLI. Merge appends with dedupe, so CLI items always
+	// end up last. The project root is the worktree dir.
+	fileCfg, err := sandboxcfg.LoadForProject(wtAbs)
+	if err != nil {
+		fatal("load sandbox config: %v", err)
+	}
+	cliCfg := sandboxcfg.Config{
+		AllowHosts: allowHost,
+		RW:         extraRW,
+		RO:         extraRO,
+	}
+	merged := sandboxcfg.Merge(fileCfg, cliCfg)
+
+	rw := append([]string(nil), merged.RW...)
 	if !shell {
 		for _, p := range tgt.StatePaths() {
 			rw = append(rw, p)
@@ -103,8 +120,8 @@ func runLaunch(args []string) {
 		Worktree:  wtAbs,
 		Home:      homeBase,
 		RW:        rw,
-		RO:        extraRO,
-		AllowHost: allowHost,
+		RO:        merged.RO,
+		AllowHost: merged.AllowHosts,
 	}
 
 	bw, err := exec.LookPath("bwrap")
@@ -127,7 +144,7 @@ func runLaunch(args []string) {
 		targetArgv = []string{bin}
 	}
 
-	launchCmd, sockDir, err := buildLaunchCmd(bw, bwrapArgv, targetArgv, allowHost, windowName, dryRun)
+	launchCmd, sockDir, err := buildLaunchCmd(bw, bwrapArgv, targetArgv, merged.AllowHosts, windowName, dryRun)
 	if err != nil {
 		fatal("build launch: %v", err)
 	}

@@ -60,6 +60,40 @@ launch:
   the rover keeps the host's network namespace and reaches the
   open internet.
 
+## Configuring the policy
+
+Three layers feed into the policy at launch. Weakest first, strongest
+last:
+
+1. Compiled-in defaults (currently empty).
+2. `~/.config/spore/sandbox.toml` (user override, optional).
+3. `<project>/spore.toml` `[sandbox]` section (project, optional).
+4. CLI flags (`-allow`, `-rw`, `-ro`) on the rover invocation.
+
+Each layer merges with union-dedupe; a stronger layer adds to,
+rather than replaces, the lists.
+
+The schema is three list keys, all optional:
+
+```toml
+[sandbox]
+allow_hosts = ["api.anthropic.com", "statsig.anthropic.com", "sentry.io"]
+rw          = ["/home/sky/.config/nvim"]
+ro          = ["/home/sky/notes"]
+```
+
+To let the rover reach a new host, add it to `allow_hosts` and
+re-launch. To grant rw on a new path, add it to `rw`. Unknown keys
+under `[sandbox]` are an error (typo-loud, not silent).
+
+A denied host shows up in the per-rover `proxy.log` with a hint
+pointing at the config key, e.g.
+
+```
+deny CONNECT linear.app:443 (not in allowlist; add to
+[sandbox].allow_hosts in spore.toml or pass -allow linear.app)
+```
+
 ## Launch pipeline
 
 When `-allow` is set, three processes cooperate around one tmux
