@@ -63,14 +63,17 @@ func Default() []Lint {
 
 // Named returns every named lint spore knows about, including those
 // not in Default(). The map keys are stable Lint.Name() values; the
-// values carry default configuration suitable for the nix-config
-// layout (overridable by callers wiring their own struct).
+// values are zero-valued structs that consumers configure via
+// spore.toml [lint.<name>] or by wiring their own struct in Go.
 //
 // Lints not in Default() are project-policy-shaped: they assume a
 // specific layout (docs/todo, harness/tech-debt-rulings.md, the
-// configs/claude/ hooks render pipeline, the nix-config nix eval
-// surfaces, ...). Consumers invoke them by name via
-// `spore lint <name>` after their own opt-in.
+// configs/claude/ hooks render pipeline, ...). Consumers invoke them
+// by name via `spore lint <name>` after their own opt-in.
+//
+// no-cross-repo-tasks in particular ships with empty maps; the
+// kernel does not carry consumer-specific paths or slug prefixes.
+// Configure via [lint.no-cross-repo-tasks] in spore.toml.
 func Named() map[string]Lint {
 	out := map[string]Lint{}
 	for _, l := range Default() {
@@ -78,20 +81,7 @@ func Named() map[string]Lint {
 	}
 	for _, l := range []Lint{
 		TodoPriority{},
-		NoCrossRepoTasks{
-			ForbiddenSlugs: map[string]string{
-				"spore-":    "~/projects/spore",
-				"marketer-": "~/projects/marketer",
-			},
-			ForbiddenPaths: map[string]string{
-				"~/projects/spore":              "~/projects/spore",
-				"/home/user/projects/spore":     "~/projects/spore",
-				"github.com/versality/spore":    "~/projects/spore",
-				"~/projects/marketer":           "~/projects/marketer",
-				"/home/user/projects/marketer":  "~/projects/marketer",
-				"github.com/versality/marketer": "~/projects/marketer",
-			},
-		},
+		NoCrossRepoTasks{},
 		Orphans{},
 		OverviewDrift{},
 		PlanFirstRequired{},

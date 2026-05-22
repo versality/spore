@@ -32,6 +32,9 @@ type LintConfig struct {
 	AgentService      string
 	AgentServiceAllow []string
 	AgentProcesses    []string
+	ForbiddenSlugs    map[string]string
+	ForbiddenPaths    map[string]string
+	SlugAllowlist     []string
 }
 
 func LoadProjectConfig(root string) (Config, error) {
@@ -201,9 +204,35 @@ func applyLintConfig(l Lint, cfg LintConfig) Lint {
 			v.Hosts = cfg.Hosts
 		}
 		return v
+	case NoCrossRepoTasks:
+		if len(cfg.ForbiddenSlugs) > 0 {
+			v.ForbiddenSlugs = mergeStringMap(v.ForbiddenSlugs, cfg.ForbiddenSlugs)
+		}
+		if len(cfg.ForbiddenPaths) > 0 {
+			v.ForbiddenPaths = mergeStringMap(v.ForbiddenPaths, cfg.ForbiddenPaths)
+		}
+		if len(cfg.SlugAllowlist) > 0 {
+			if v.SlugAllowlist == nil {
+				v.SlugAllowlist = map[string]bool{}
+			}
+			for _, s := range cfg.SlugAllowlist {
+				v.SlugAllowlist[s] = true
+			}
+		}
+		return v
 	default:
 		return l
 	}
+}
+
+func mergeStringMap(base, over map[string]string) map[string]string {
+	if base == nil {
+		base = map[string]string{}
+	}
+	for k, v := range over {
+		base[k] = v
+	}
+	return base
 }
 
 func mergeLintConfig(base, over LintConfig) LintConfig {
@@ -260,6 +289,15 @@ func mergeLintConfig(base, over LintConfig) LintConfig {
 	}
 	if len(over.AgentProcesses) > 0 {
 		base.AgentProcesses = over.AgentProcesses
+	}
+	if len(over.ForbiddenSlugs) > 0 {
+		base.ForbiddenSlugs = over.ForbiddenSlugs
+	}
+	if len(over.ForbiddenPaths) > 0 {
+		base.ForbiddenPaths = over.ForbiddenPaths
+	}
+	if len(over.SlugAllowlist) > 0 {
+		base.SlugAllowlist = over.SlugAllowlist
 	}
 	return base
 }
@@ -332,10 +370,50 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 		v, err := parseStringList(raw)
 		cfg.AgentProcesses = v
 		return errAt(lineNum, key, err)
+	case "forbidden_slugs":
+		m, err := parseStringMap(raw)
+		cfg.ForbiddenSlugs = m
+		return errAt(lineNum, key, err)
+	case "forbidden_paths":
+		m, err := parseStringMap(raw)
+		cfg.ForbiddenPaths = m
+		return errAt(lineNum, key, err)
+	case "slug_allowlist":
+		v, err := parseStringList(raw)
+		cfg.SlugAllowlist = v
+		return errAt(lineNum, key, err)
 	default:
 		return fmt.Errorf("line %d: unknown key %q in [lint.*]", lineNum, key)
 	}
 	return nil
+}
+
+// parseStringMap parses a TOML-ish list of "key=value" pairs into a
+// map. Each element is split on the first '=', both sides trimmed.
+// Used for lint configs that need labelled maps (e.g. slug-prefix to
+// target-project) without a real TOML table parser.
+func parseStringMap(raw string) (map[string]string, error) {
+	list, err := parseStringList(raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) == 0 {
+		return nil, nil
+	}
+	out := map[string]string{}
+	for _, entry := range list {
+		eq := strings.IndexByte(entry, '=')
+		if eq < 0 {
+			return nil, fmt.Errorf("expected key=value, got %q", entry)
+		}
+		key := strings.TrimSpace(entry[:eq])
+		val := strings.TrimSpace(entry[eq+1:])
+		if key == "" {
+			return nil, fmt.Errorf("empty key in %q", entry)
+		}
+		out[key] = val
+	}
+	return out, nil
 }
 
 func errAt(lineNum int, key string, err error) error {

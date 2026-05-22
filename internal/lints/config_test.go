@@ -131,6 +131,36 @@ skip_path = ["templates/"]
 	}
 }
 
+func TestLintConfig_NoCrossRepoTasks(t *testing.T) {
+	root := newTestRepo(t, map[string]string{
+		"spore.toml": `[lint.no-cross-repo-tasks]
+forbidden_slugs = ["spore-=spore project"]
+forbidden_paths = ["~/projects/spore=spore project"]
+slug_allowlist = ["spore-allowed"]
+`,
+		"tasks/spore-bad.md":     writeNCRTTask("spore-bad", "active", "# Files\n\n- harness/x.sh\n"),
+		"tasks/spore-allowed.md": writeNCRTTask("spore-allowed", "active", "# Files\n\n- harness/x.sh\n"),
+		"tasks/path-bad.md":      writeNCRTTask("path-bad", "active", "# Files\n\n- ~/projects/spore/foo.go\n"),
+	})
+	issues, err := configuredLint(t, root, NoCrossRepoTasks{}).Run(root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	paths := map[string]bool{}
+	for _, i := range issues {
+		paths[i.Path] = true
+	}
+	if !paths["tasks/spore-bad.md"] {
+		t.Errorf("expected slug hit on spore-bad, got %v", paths)
+	}
+	if !paths["tasks/path-bad.md"] {
+		t.Errorf("expected path hit on path-bad, got %v", paths)
+	}
+	if paths["tasks/spore-allowed.md"] {
+		t.Errorf("allowlisted slug should be skipped, got %v", paths)
+	}
+}
+
 func TestLintConfig_DecorationExtAndSkipPath(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
 		"spore.toml": `[lint.decoration]
