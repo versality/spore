@@ -11,7 +11,7 @@ import (
 // seconds after the command exits, so a fast crash is visible to the
 // operator instead of vanishing.
 func tmuxNewWindow(name, command string, postExitHold int) error {
-	wrapped := fmt.Sprintf("%s; rc=$?; printf '\\n[rover exit %%d]\\n' $rc; sleep %d", command, postExitHold)
+	wrapped := fmt.Sprintf("%s; rc=$?; printf '\\n[sandbox exit %%d]\\n' $rc; sleep %d", command, postExitHold)
 	cmd := exec.Command("tmux", "new-window", "-d", "-n", name, wrapped)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

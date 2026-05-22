@@ -143,11 +143,11 @@ func TestCoordinatorSessionNameUsesMainRepoFromWorktree(t *testing.T) {
 			t.Fatalf("git %v: %v: %s", args, err, out)
 		}
 	}
-	worktree := filepath.Join(main, ".worktrees", "wt-rover-slug")
+	worktree := filepath.Join(main, ".worktrees", "wt-sandbox-slug")
 	if err := os.MkdirAll(filepath.Dir(worktree), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("git", "-C", main, "worktree", "add", "-q", worktree, "-b", "wt/rover").CombinedOutput()
+	out, err := exec.Command("git", "-C", main, "worktree", "add", "-q", worktree, "-b", "wt/sandbox").CombinedOutput()
 	if err != nil {
 		t.Fatalf("git worktree add: %v: %s", err, out)
 	}

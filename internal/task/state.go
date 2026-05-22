@@ -84,7 +84,7 @@ func stateBaseDir() (string, error) {
 // this returns the main repo's .git path, so dirname yields the main
 // repo root regardless of cwd. Using --show-toplevel here would return
 // the worktree path and silently rename the project to the worktree
-// slug from any rover cwd.
+// slug from any sandboxed-agent cwd.
 func ProjectName(projectRoot string) (string, error) {
 	if projectRoot == "" {
 		wd, err := os.Getwd()

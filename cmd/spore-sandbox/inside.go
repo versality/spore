@@ -23,11 +23,11 @@ func runInside(args []string) {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "spore-rover --inside: missing target command")
+		fmt.Fprintln(os.Stderr, "spore-sandbox --inside: missing target command")
 		os.Exit(2)
 	}
 	if sock == "" {
-		fmt.Fprintln(os.Stderr, "spore-rover --inside: -sock is required")
+		fmt.Fprintln(os.Stderr, "spore-sandbox --inside: -sock is required")
 		os.Exit(2)
 	}
 
@@ -35,17 +35,17 @@ func runInside(args []string) {
 	// process starts the listener before tmux launches us, so this
 	// usually succeeds on the first dial.
 	if err := waitForUnixSocket(sock, 2*time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "spore-rover --inside: %v\n", err)
+		fmt.Fprintf(os.Stderr, "spore-sandbox --inside: %v\n", err)
 		os.Exit(1)
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spore-rover --inside: loopback listen: %v\n", err)
+		fmt.Fprintf(os.Stderr, "spore-sandbox --inside: loopback listen: %v\n", err)
 		os.Exit(1)
 	}
 	logf := func(format string, args ...any) {
-		fmt.Fprintf(os.Stderr, "rover-proxy: "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "sandbox-proxy: "+format+"\n", args...)
 	}
 	go forwardTCPToUnix(ln, sock, logf)
 	proxyURL := fmt.Sprintf("http://%s", ln.Addr().(*net.TCPAddr).String())
@@ -63,7 +63,7 @@ func runInside(args []string) {
 		fmt.Sprintf("SPORE_LOOP_PORT=%d", loopPort),
 	)
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "spore-rover --inside: start %s: %v\n", rest[0], err)
+		fmt.Fprintf(os.Stderr, "spore-sandbox --inside: start %s: %v\n", rest[0], err)
 		os.Exit(1)
 	}
 	stopSignals := forwardSignals(cmd.Process)
@@ -74,7 +74,7 @@ func runInside(args []string) {
 		if ee, ok := err.(*exec.ExitError); ok {
 			os.Exit(ee.ExitCode())
 		}
-		fmt.Fprintf(os.Stderr, "spore-rover --inside: wait: %v\n", err)
+		fmt.Fprintf(os.Stderr, "spore-sandbox --inside: wait: %v\n", err)
 		os.Exit(1)
 	}
 }

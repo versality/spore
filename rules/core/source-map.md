@@ -3,7 +3,7 @@
 ```
 spore/
 |-- cmd/spore/        CLI entry point (Go).
-|-- cmd/spore-rover/  bwrap+proxy sandbox launcher for the rover agent.
+|-- cmd/spore-sandbox/  bwrap+proxy sandbox launcher for worker agents.
 |-- internal/         Go internal packages, kernel implementation.
 |   |-- align/        Pilot-agent alignment-mode tracker.
 |   |-- bootstrap/    Stage-gate driver + per-stage detectors.

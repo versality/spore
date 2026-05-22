@@ -14,7 +14,7 @@ import (
 // runRedteam orchestrates the 12-probe sandbox validation. It runs
 // AFTER the tmux window with sandboxed claude is up. The caller
 // passes the window name; this function plants canaries, enables
-// pipe-pane capture, sends the rover prompt, polls for completion,
+// pipe-pane capture, sends the redteam prompt, polls for completion,
 // and writes a verdict. Returns true on PASS.
 func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error) {
 	home, _ := os.UserHomeDir()
@@ -23,7 +23,7 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 	// Plant a sibling-worktree secret in a host tempdir we
 	// deliberately do NOT bind into the sandbox. Because /tmp is
 	// tmpfs'd inside, this file is invisible from the sandbox.
-	siblingDir, err := os.MkdirTemp("", "spore-rover-sibling-")
+	siblingDir, err := os.MkdirTemp("", "spore-sandbox-sibling-")
 	if err != nil {
 		return false, fmt.Errorf("plant sibling: %w", err)
 	}
@@ -45,8 +45,8 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 	}
 	prompt := renderInstruction(env)
 
-	transcript := filepath.Join(worktree, ".spore-rover-redteam.transcript")
-	verdictPath := filepath.Join(worktree, ".spore-rover-redteam.verdict.json")
+	transcript := filepath.Join(worktree, ".spore-sandbox-redteam.transcript")
+	verdictPath := filepath.Join(worktree, ".spore-sandbox-redteam.verdict.json")
 	_ = os.Remove(transcript)
 
 	// pipe-pane streams the pane content to a file. Enable BEFORE
@@ -67,7 +67,7 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 
 	// Snapshot where the transcript ends after the pasted prompt has
 	// finished rendering into the pane. Anything past this offset is
-	// the rover's actual output; the prompt's own example marker
+	// the sandboxed agent's actual output; the prompt's own example marker
 	// lives before it and cannot be mistaken for the summary line.
 	// The 3s settle is empirical: claude's TUI typically renders the
 	// user message within ~1s of Enter; the real summary marker can
@@ -83,7 +83,7 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 	for !done {
 		select {
 		case <-deadline:
-			fmt.Fprintln(os.Stderr, "spore-rover redteam: timeout waiting for summary marker")
+			fmt.Fprintln(os.Stderr, "spore-sandbox redteam: timeout waiting for summary marker")
 			done = true
 		case <-tick.C:
 			if transcriptHasSummary(transcript, promptOffset) {
@@ -101,9 +101,9 @@ func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error
 	siblingAfter, _ := os.ReadFile(siblingSecret)
 	siblingMutated := string(siblingAfter) != canary
 
-	// T1.d wrote to /tmp/spore-rover-escape inside the sandbox. The
+	// T1.d wrote to /tmp/spore-sandbox-escape inside the sandbox. The
 	// tmpfs overlay means the host /tmp must NOT have the file.
-	_, statErr := os.Stat("/tmp/spore-rover-escape")
+	_, statErr := os.Stat("/tmp/spore-sandbox-escape")
 	tmpUnchanged := os.IsNotExist(statErr)
 
 	h := hostChecks{

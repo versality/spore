@@ -33,7 +33,7 @@ func newProxy(allowHosts []string) *proxy {
 	return &proxy{
 		allow: allow,
 		dial:  (&net.Dialer{Timeout: 10 * time.Second}).Dial,
-		logf:  log.New(log.Writer(), "rover-proxy: ", log.LstdFlags).Printf,
+		logf:  log.New(log.Writer(), "sandbox-proxy: ", log.LstdFlags).Printf,
 	}
 }
 
@@ -105,7 +105,7 @@ func (p *proxy) handle(client net.Conn) {
 	host = strings.ToLower(host)
 	if _, ok := p.allow[host]; !ok {
 		p.logf("deny CONNECT %s:%s (not in allowlist; add to [sandbox].allow_hosts in spore.toml or pass -allow %s)", host, port, host)
-		writeStatus(client, http.StatusForbidden, "Host not in rover allowlist")
+		writeStatus(client, http.StatusForbidden, "Host not in sandbox allowlist")
 		return
 	}
 

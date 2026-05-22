@@ -90,7 +90,7 @@ func TestTranscriptHasSummaryRespectsOffset(t *testing.T) {
 	tx := filepath.Join(dir, "transcript")
 
 	// First half holds the prompt's own example marker; second half
-	// holds the rover's real summary line. Snapshotting offset between
+	// holds the sandboxed agent's real summary line. Snapshotting offset between
 	// the two means scanning past offset only sees the real one.
 	preamble := "prompt body... __SPORE_MARK__::{\"id\":\"summary\",\"completed\":true}\n"
 	tail := "later... __SPORE_MARK__::{\"id\":\"summary\",\"completed\":true}\n"

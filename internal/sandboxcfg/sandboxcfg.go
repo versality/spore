@@ -1,6 +1,6 @@
 // Package sandboxcfg loads the [sandbox] section out of spore.toml
 // and an optional per-user override at ~/.config/spore/sandbox.toml.
-// The merged Config is what spore-rover consults when assembling its
+// The merged Config is what spore-sandbox consults when assembling its
 // bwrap policy and HTTPS CONNECT allowlist.
 //
 // Merge precedence, weakest to strongest:
@@ -8,9 +8,9 @@
 //  1. compiled-in defaults (currently empty)
 //  2. ~/.config/spore/sandbox.toml (user override)
 //  3. <project>/spore.toml [sandbox] (project)
-//  4. CLI flags on the rover invocation
+//  4. CLI flags on the sandbox invocation
 //
-// The rover wires (1)..(3) here; (4) merges on top in main.go.
+// The sandbox wires (1)..(3) here; (4) merges on top in main.go.
 package sandboxcfg
 
 import (

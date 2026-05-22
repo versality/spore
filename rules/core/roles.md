@@ -8,9 +8,8 @@ spore's kernel uses two role names:
   a `.worktrees/<slug>` checkout. Workers run autonomously between
   handovers and report through the task file, commits, and the inbox.
 
-`rover` is a separate concept: the bubblewrap sandbox launcher
-(`cmd/spore-rover/`) that wraps a worker's agent command. It is not a
-synonym for worker.
+The bubblewrap sandbox launcher (`cmd/spore-sandbox/`) is a primitive
+that wraps a worker's agent command; it is not a separate role.
 
 Downstream projects can rename `coordinator` and `worker` at bootstrap
 time. When working inside this repo, always use the kernel names.

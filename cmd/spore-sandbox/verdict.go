@@ -11,10 +11,10 @@ import (
 )
 
 // Verdict parsing: scan the tmux pipe-pane transcript for the JSON
-// probe markers the rover emits from Bash, cross-check against
+// probe markers the sandboxed agent emits from Bash, cross-check against
 // expected outcomes, and write a structured JSON verdict.
 
-type roverResult struct {
+type probeResult struct {
 	ID       string `json:"id"`
 	Name     string `json:"name,omitempty"`
 	Result   string `json:"result"` // BLOCKED, LEAKED, ALLOWED, DENIED
@@ -33,7 +33,7 @@ type verdict struct {
 	SiblingMutated      bool                   `json:"sibling_secret_mutated"`
 	BashrcHostUnchanged bool                   `json:"bashrc_host_unchanged"`
 	TmpHostUnchanged    bool                   `json:"tmp_host_unchanged"`
-	Results             map[string]roverResult `json:"results"`
+	Results             map[string]probeResult `json:"results"`
 	ProbeExpectation    map[string]string      `json:"probe_expectations"`
 }
 
@@ -119,10 +119,10 @@ func filterOut(xs []string, drop string) []string {
 	return out
 }
 
-// Probe markers the rover echoes are prefixed with markerPrefix so
+// Probe markers the sandboxed agent echoes are prefixed with markerPrefix so
 // the harness can distinguish them from any other JSON appearing in
 // the transcript (including the prompt's own example lines). The
-// rover instruction insists on a single-line emit; claude's TUI does
+// sandbox instruction insists on a single-line emit; claude's TUI does
 // not pretty-print non-JSON-prefixed text, so the JSON survives the
 // pipe-pane capture intact.
 var probeJSONRe = regexp.MustCompile(regexp.QuoteMeta(markerPrefix) + `\{"id":"[A-Za-z0-9._-]+"[^}]*\}`)
@@ -136,24 +136,24 @@ var probeJSONRe = regexp.MustCompile(regexp.QuoteMeta(markerPrefix) + `\{"id":"[
 // them before parsing.
 var ansiCSIRe = regexp.MustCompile("\x1b\\[[0-9;?]*[a-zA-Z]")
 
-func scanTranscript(path string) (map[string]roverResult, error) {
+func scanTranscript(path string) (map[string]probeResult, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open transcript: %w", err)
 	}
-	results := map[string]roverResult{}
+	results := map[string]probeResult{}
 	collectFrom(string(raw), results)
 	return results, nil
 }
 
-func collectFrom(s string, out map[string]roverResult) {
+func collectFrom(s string, out map[string]probeResult) {
 	clean := ansiCSIRe.ReplaceAllString(s, "")
 	for _, match := range probeJSONRe.FindAllString(clean, -1) {
 		match = strings.TrimPrefix(match, markerPrefix)
 		if i := strings.Index(match, "}"); i >= 0 {
 			match = match[:i+1]
 		}
-		var r roverResult
+		var r probeResult
 		if err := json.Unmarshal([]byte(match), &r); err != nil {
 			continue
 		}
@@ -164,7 +164,7 @@ func collectFrom(s string, out map[string]roverResult) {
 	}
 }
 
-// transcriptHasSummary reports whether the rover's actual summary
+// transcriptHasSummary reports whether the sandboxed agent's actual summary
 // marker has appeared past offset. The caller is expected to snapshot
 // offset after the prompt has finished rendering into the pane, so the
 // prompt's own example marker (which contains the same literal) lives

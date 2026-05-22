@@ -1,15 +1,15 @@
-// spore-rover wraps an LLM coding agent in a bubblewrap (bwrap)
+// spore-sandbox wraps an LLM coding agent in a bubblewrap (bwrap)
 // sandbox and runs it in a tmux window the operator can watch.
 //
 // Threat model (three points, nothing else):
 //
-//   - FS write-allowlist. The rover writes only inside its worktree
-//     and the small RW set listed in the policy. Operator dotfiles
-//     (~/.ssh, ~/.bashrc, sibling worktrees) are inaccessible.
+//   - FS write-allowlist. The sandbox restricts writes to the agent's
+//     worktree and the small RW set listed in the policy. Operator
+//     dotfiles (~/.ssh, ~/.bashrc, sibling worktrees) are inaccessible.
 //   - FS read-deny. /etc/shadow, ~/.ssh, /root, etc. unreadable.
 //   - Network egress allowlist. When -allow is set, --unshare-net is
-//     passed to bwrap and the rover sees only an in-sandbox HTTPS
-//     CONNECT proxy that lets through the named SNIs.
+//     passed to bwrap and the sandboxed agent sees only an in-sandbox
+//     HTTPS CONNECT proxy that lets through the named SNIs.
 
 package main
 
@@ -124,7 +124,7 @@ func preparePolicy(worktree, homeBase, targetName string, shell bool, extraRW, e
 }
 
 func runLaunch(args []string) {
-	fs := flag.NewFlagSet("spore-rover", flag.ExitOnError)
+	fs := flag.NewFlagSet("spore-sandbox", flag.ExitOnError)
 	var (
 		worktree       string
 		windowName     string
@@ -138,15 +138,15 @@ func runLaunch(args []string) {
 		redteamTimeout time.Duration
 		dryRun         bool
 	)
-	fs.StringVar(&worktree, "worktree", ".", "directory the rover may write to (becomes cwd inside sandbox)")
-	fs.StringVar(&windowName, "window", "", "tmux window name (default: rover-<worktree-base>)")
+	fs.StringVar(&worktree, "worktree", ".", "directory the sandboxed agent may write to (becomes cwd inside sandbox)")
+	fs.StringVar(&windowName, "window", "", "tmux window name (default: sandbox-<worktree-base>)")
 	fs.BoolVar(&shell, "shell", false, "drop into bash instead of launching the target binary")
 	fs.StringVar(&targetName, "target", "claude", "registered target to launch (see target.go)")
 	fs.StringVar(&homeBase, "home", os.Getenv("HOME"), "path the sandbox exposes as $HOME (tmpfs-backed; must exist on host)")
 	fs.Var(&extraRW, "rw", "additional rw bind (repeatable; host path)")
 	fs.Var(&extraRO, "ro", "additional ro bind (repeatable; host path)")
 	fs.Var(&allowHost, "allow", "HTTPS CONNECT hostname allowlist (repeatable); enables --unshare-net + loopback proxy")
-	fs.BoolVar(&redteam, "redteam", false, "after launching, paste the 12-probe rover prompt and write a verdict")
+	fs.BoolVar(&redteam, "redteam", false, "after launching, paste the 12-probe sandbox prompt and write a verdict")
 	fs.DurationVar(&redteamTimeout, "redteam-timeout", 5*time.Minute, "max wall time to wait for the redteam summary marker")
 	fs.BoolVar(&dryRun, "dry-run", false, "print the bwrap argv and exit")
 	if err := fs.Parse(args); err != nil {
@@ -154,7 +154,7 @@ func runLaunch(args []string) {
 	}
 
 	if os.Getenv("TMUX") == "" && !dryRun {
-		fatal("spore-rover must run inside a tmux session (TMUX not set)")
+		fatal("spore-sandbox must run inside a tmux session (TMUX not set)")
 	}
 
 	opts, err := preparePolicy(worktree, homeBase, targetName, shell, extraRW, extraRO, allowHost)
@@ -162,7 +162,7 @@ func runLaunch(args []string) {
 		fatal("%v", err)
 	}
 	if windowName == "" {
-		windowName = "rover-" + filepath.Base(opts.worktreeAbs)
+		windowName = "sandbox-" + filepath.Base(opts.worktreeAbs)
 	}
 
 	bw, err := exec.LookPath("bwrap")
@@ -210,7 +210,7 @@ func runLaunch(args []string) {
 
 // runExec is the non-tmux primitive that wraps an arbitrary command
 // in the bwrap+proxy sandbox. The worker spawn path prefixes its
-// agent command with `spore-rover --exec ... -- <agent argv>`; the
+// agent command with `spore-sandbox --exec ... -- <agent argv>`; the
 // agent runs as a child of this process inside the bwrap, with the
 // host proxy (when -allow is set) managed by the same `sh -c` script
 // runLaunch uses inside its tmux pane.
@@ -229,7 +229,7 @@ func runExec(args []string) {
 		allowHost  multiFlag
 		dryRun     bool
 	)
-	fs.StringVar(&worktree, "worktree", ".", "directory the rover may write to (becomes cwd inside sandbox)")
+	fs.StringVar(&worktree, "worktree", ".", "directory the sandboxed agent may write to (becomes cwd inside sandbox)")
 	fs.StringVar(&homeBase, "home", os.Getenv("HOME"), "path the sandbox exposes as $HOME (tmpfs-backed)")
 	fs.StringVar(&targetName, "target", "claude", "registered target whose StatePaths to bind rw (ignored when -- is given)")
 	fs.Var(&extraRW, "rw", "additional rw bind (repeatable; host path)")
@@ -290,17 +290,17 @@ func runExec(args []string) {
 }
 
 // buildLaunchCmd renders the shell command tmuxNewWindow runs in the
-// rover's pane.
+// sandbox's pane.
 //
-// Pane-lifecycle invariant: when allowHost is non-empty the rover
-// runs with --unshare-net, so the CONNECT proxy must live on the
+// Pane-lifecycle invariant: when allowHost is non-empty bwrap runs
+// with --unshare-net, so the CONNECT proxy must live on the
 // host side and be reachable via a unix socket that bwrap binds into
 // the sandbox. The shell here owns three lifetimes:
 //
 //  1. start the host proxy in the background so it is listening
 //     before bwrap re-execs --inside;
 //  2. install an EXIT trap that kills the proxy and removes the
-//     per-rover socket dir, fires even on abnormal bwrap exit;
+//     per-sandbox socket dir, fires even on abnormal bwrap exit;
 //  3. run bwrap in the foreground so the tmux pane is the tty for
 //     claude's TUI.
 //
@@ -322,9 +322,9 @@ func buildLaunchCmd(bw string, bwrapArgv, target, allowHost []string, windowName
 
 	var sockDir string
 	if dryRun {
-		sockDir = "/tmp/spore-rover-DRYRUN"
+		sockDir = "/tmp/spore-sandbox-DRYRUN"
 	} else {
-		sockDir, err = os.MkdirTemp("", "spore-rover-"+windowName+"-")
+		sockDir, err = os.MkdirTemp("", "spore-sandbox-"+windowName+"-")
 		if err != nil {
 			return "", "", fmt.Errorf("mkdir tempdir: %w", err)
 		}
@@ -332,7 +332,7 @@ func buildLaunchCmd(bw string, bwrapArgv, target, allowHost []string, windowName
 	sock := filepath.Join(sockDir, "proxy.sock")
 	logPath := filepath.Join(sockDir, "proxy.log")
 
-	// Ensure the host path of the rover binary stays reachable
+	// Ensure the host path of the sandbox binary stays reachable
 	// inside the sandbox after the tmpfs layers wipe out /tmp and
 	// /home. Without this the --inside re-exec fails with ENOENT.
 	argv := append(bwrapArgv,
@@ -373,7 +373,7 @@ func resolveBinary(name string) (string, error) {
 }
 
 func fatal(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "spore-rover: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "spore-sandbox: "+format+"\n", args...)
 	os.Exit(1)
 }
 

@@ -4,7 +4,7 @@
 
 ### Highlights
 
-`spore-rover` lands: a bubblewrap-based sandbox launcher that wraps an LLM coding agent (claude, codex, or opencode) so a misbehaving prompt cannot reach the operator's dotfiles, sibling worktrees, or the open internet.
+`spore-sandbox` lands: a bubblewrap-based sandbox launcher that wraps an LLM coding agent (claude, codex, or opencode) so a misbehaving prompt cannot reach the operator's dotfiles, sibling worktrees, or the open internet.
 
 The primitive itself shipped during the previous week; v0.9.0 hardens the debt, documents the surface, opens it up for extension, and adds first-class targets for codex and opencode alongside claude.
 
@@ -12,11 +12,11 @@ The primitive itself shipped during the previous week; v0.9.0 hardens the debt, 
 
 What the sandbox defends against:
 
-- **Filesystem write-allowlist.** The rover writes only inside its worktree and the small RW set listed in the policy. `~/.ssh`, `~/.bashrc`, sibling worktrees, system dotfiles - all inaccessible.
+- **Filesystem write-allowlist.** The sandbox restricts writes to the agent worktree and the small RW set listed in the policy. `~/.ssh`, `~/.bashrc`, sibling worktrees, system dotfiles - all inaccessible.
 - **Filesystem read-deny.** `/etc/shadow`, `~/.ssh`, `/root`, and similar are not readable.
 - **Network egress allowlist.** With any `-allow` flag set, bwrap runs the target under `--unshare-net` and the only network the agent sees is a loopback HTTPS CONNECT proxy that lets through the named SNIs.
 
-Out of scope on purpose: username masking, kernel-grade containment, seccomp/Landlock, per-rover credential isolation, nation-state pivot. The threat modelled is "the LLM runs an unintended command", not "an attacker controls the LLM".
+Out of scope on purpose: username masking, kernel-grade containment, seccomp/Landlock, per-sandbox credential isolation, nation-state pivot. The threat modelled is "the LLM runs an unintended command", not "an attacker controls the LLM".
 
 ### Supported targets
 
@@ -28,12 +28,12 @@ Out of scope on purpose: username masking, kernel-grade containment, seccomp/Lan
 | `codex` | `codex` | `~/.codex` |
 | `opencode` | `opencode` | `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode` |
 
-Adding a new agent is a registry entry in `cmd/spore-rover/target.go`. Binary lookup chases `~/.nix-profile/bin/<name>` symlinks to their `/nix/store` target, so user-profile-only binaries survive the tmpfs `$HOME` mask.
+Adding a new agent is a registry entry in `cmd/spore-sandbox/target.go`. Binary lookup chases `~/.nix-profile/bin/<name>` symlinks to their `/nix/store` target, so user-profile-only binaries survive the tmpfs `$HOME` mask.
 
 ### Two subcommands
 
-- **`spore-rover`** (default) spawns a tmux window in the current session and runs the target inside the sandbox. Operator-attended path; also what `-redteam` uses to validate the primitive.
-- **`spore-rover --exec ... -- <argv>`** wraps an arbitrary command in the same bwrap+proxy sandbox without spawning a tmux window. stdin/stdout/stderr pass through; exit code mirrors the child. This is the primitive the worker spawn path will wrap to soak the sandbox into every minted rover.
+- **`spore-sandbox`** (default) spawns a tmux window in the current session and runs the target inside the sandbox. Operator-attended path; also what `-redteam` uses to validate the primitive.
+- **`spore-sandbox --exec ... -- <argv>`** wraps an arbitrary command in the same bwrap+proxy sandbox without spawning a tmux window. stdin/stdout/stderr pass through; exit code mirrors the child. This is the primitive the worker spawn path will wrap to soak the sandbox into every sandboxed worker.
 
 ### Durable per-project policy
 
@@ -66,7 +66,7 @@ deny CONNECT linear.app:443 (not in allowlist; add to
 
 ### 12-probe red-team validator
 
-`spore-rover -redteam` plants three host-side canaries (sibling-worktree secret, the operator's real `~/.bashrc`, a `/tmp` escape file), pastes the 12 probes into the sandboxed claude pane, polls for the summary marker, and writes a verdict.
+`spore-sandbox -redteam` plants three host-side canaries (sibling-worktree secret, the operator's real `~/.bashrc`, a `/tmp` escape file), pastes the 12 probes into the sandboxed claude pane, polls for the summary marker, and writes a verdict.
 
 The verdict reconciles inside-view `LEAKED` reports on tmpfs-masked paths (T1.d writes to `/tmp`, T4.a writes to `~/.bashrc`) against host-side observation. The inside-view of a tmpfs is by design a lie; truth is what changes outside the sandbox.
 
@@ -74,13 +74,13 @@ The verdict reconciles inside-view `LEAKED` reports on tmpfs-masked paths (T1.d 
 
 ### Documentation
 
-`docs/sandbox-rover.md` is the operator-facing surface: threat model, policy fields with worked examples, configuration precedence, the host-proxy + unix-socket + `--unshare-net` + inside-shim launch pipeline (with an ASCII diagram of why the unix-socket bridge is necessary), the redteam interpretation rules including the T1.d/T4.a LEAKED-but-PASS reconciliation, and a "common gotchas" section.
+`docs/sandbox.md` is the operator-facing surface: threat model, policy fields with worked examples, configuration precedence, the host-proxy + unix-socket + `--unshare-net` + inside-shim launch pipeline (with an ASCII diagram of why the unix-socket bridge is necessary), the redteam interpretation rules including the T1.d/T4.a LEAKED-but-PASS reconciliation, and a "common gotchas" section.
 
-The kernel source map (`rules/core/source-map.md`, rendered into `CLAUDE.md` and `AGENTS.md`) now lists `cmd/spore-rover/`.
+The kernel source map (`rules/core/source-map.md`, rendered into `CLAUDE.md` and `AGENTS.md`) now lists `cmd/spore-sandbox/`.
 
 ### In progress
 
-The worker spawn path in `internal/task/lifecycle.go` is not yet wrapping its agent command through `spore-rover --exec`. The remaining bucket-4 work (tracked in `docs/todo/sandbox-rover-followups.md`): add a default rw bind for the main repo's `.git/worktrees/<slug>/` so `git commit` from inside the sandbox works, plus the `sandbox: false` per-task opt-out via frontmatter.
+The worker spawn path in `internal/task/lifecycle.go` is not yet wrapping its agent command through `spore-sandbox --exec`. The remaining bucket-4 work (tracked in `docs/todo/sandbox-followups.md`): add a default rw bind for the main repo's `.git/worktrees/<slug>/` so `git commit` from inside the sandbox works, plus the `sandbox: false` per-task opt-out via frontmatter.
 
 ## Unreleased
 

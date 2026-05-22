@@ -25,7 +25,7 @@ func runProxyServe(args []string) {
 		os.Exit(2)
 	}
 	if sock == "" {
-		fmt.Fprintln(os.Stderr, "spore-rover --proxy-serve: -sock is required")
+		fmt.Fprintln(os.Stderr, "spore-sandbox --proxy-serve: -sock is required")
 		os.Exit(2)
 	}
 
@@ -46,15 +46,15 @@ func runProxyServe(args []string) {
 		}
 	}
 
-	// Pre-clean stale socket. The path lives in a per-rover tmpdir
+	// Pre-clean stale socket. The path lives in a per-sandbox tmpdir
 	// so this is safe.
 	_ = os.Remove(sock)
 
 	p := newProxy(allow)
-	p.logf = log.New(logOut, "rover-proxy: ", log.LstdFlags).Printf
+	p.logf = log.New(logOut, "sandbox-proxy: ", log.LstdFlags).Printf
 	ln, err := p.listenUnix(sock)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spore-rover --proxy-serve: bind %s: %v\n", sock, err)
+		fmt.Fprintf(os.Stderr, "spore-sandbox --proxy-serve: bind %s: %v\n", sock, err)
 		os.Exit(1)
 	}
 	defer os.Remove(sock)

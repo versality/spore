@@ -7,7 +7,7 @@ import (
 )
 
 // Policy is the contract between the operator and the sandbox. The
-// rover may write inside Worktree and the named RW paths, may read
+// the sandboxed agent may write inside Worktree and the named RW paths, may read
 // inside RO paths and the read-only root, and may speak HTTPS only to
 // the listed AllowHost SNIs via the loopback proxy.
 type Policy struct {

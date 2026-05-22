@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// target names an LLM coding agent the rover can launch. Bin is the
+// target names an LLM coding agent the sandbox can launch. Bin is the
 // PATH-resolvable binary name. StatePaths returns host paths that
 // must be bound rw into the sandbox for the binary to start (typically
 // credentials and session state). StatePaths may return paths that do
@@ -27,8 +27,8 @@ var targets = map[string]target{
 		Bin:  "claude",
 		// claude needs rw on ~/.claude (session state) and
 		// ~/.claude.json (credentials). Exposing the credentials file
-		// to the sandboxed rover is intentional under the current
-		// threat model; per-rover credential isolation is a later
+		// to the sandboxed agent is intentional under the current
+		// threat model; per-sandbox credential isolation is a later
 		// phase.
 		StatePaths: func() []string { return homePaths(".claude", ".claude.json") },
 	},
