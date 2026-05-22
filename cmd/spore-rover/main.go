@@ -88,9 +88,7 @@ func preparePolicy(worktree, homeBase, targetName string, shell bool, extraRW, e
 
 	rw := append([]string(nil), merged.RW...)
 	if !shell {
-		for _, p := range tgt.StatePaths() {
-			rw = append(rw, p)
-		}
+		rw = append(rw, tgt.StatePaths()...)
 	}
 
 	policy := Policy{
@@ -396,8 +394,8 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
-			r == '_' || r == '.' || r == '/' || r == ':' || r == '=' || r == '-' || r == '+' || r == ',') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') &&
+			r != '_' && r != '.' && r != '/' && r != ':' && r != '=' && r != '-' && r != '+' && r != ',' {
 			return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 		}
 	}
