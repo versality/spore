@@ -6,8 +6,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 	"time"
 )
 
@@ -68,18 +66,9 @@ func runInside(args []string) {
 		fmt.Fprintf(os.Stderr, "spore-rover --inside: start %s: %v\n", rest[0], err)
 		os.Exit(1)
 	}
-	sigCh := make(chan os.Signal, 4)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
-	go func() {
-		for s := range sigCh {
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(s)
-			}
-		}
-	}()
+	stopSignals := forwardSignals(cmd.Process)
 	err = cmd.Wait()
-	signal.Stop(sigCh)
-	close(sigCh)
+	stopSignals()
 	ln.Close()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
