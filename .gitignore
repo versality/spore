@@ -21,3 +21,7 @@
 /.wt/
 /bootstrap/flake/local.nix
 /.codex/hooks.json
+
+# spore-rover redteam scratch
+.spore-rover-redteam.transcript
+.spore-rover-redteam.verdict.json

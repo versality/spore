@@ -44,6 +44,7 @@ func main() {
 		extraRW    multiFlag
 		extraRO    multiFlag
 		allowHost  multiFlag
+		redteam    bool
 		dryRun     bool
 	)
 	flag.StringVar(&worktree, "worktree", ".", "directory the rover may write to (becomes cwd inside sandbox)")
@@ -53,6 +54,7 @@ func main() {
 	flag.Var(&extraRW, "rw", "additional rw bind (repeatable; host path)")
 	flag.Var(&extraRO, "ro", "additional ro bind (repeatable; host path)")
 	flag.Var(&allowHost, "allow", "HTTPS CONNECT hostname allowlist (repeatable); enables --unshare-net + loopback proxy")
+	flag.BoolVar(&redteam, "redteam", false, "after launching, paste the 12-probe rover prompt and write a verdict")
 	flag.BoolVar(&dryRun, "dry-run", false, "print the bwrap argv and exit")
 	flag.Parse()
 
@@ -170,6 +172,19 @@ func main() {
 	fmt.Printf("launched in tmux window %q (Ctrl-b w to switch)\n", windowName)
 	if sockDir != "" {
 		fmt.Printf("proxy log: %s/proxy.log\n", sockDir)
+	}
+
+	if redteam {
+		if shell {
+			fatal("-redteam requires claude (drop -shell)")
+		}
+		pass, err := runRedteam(windowName, wtAbs)
+		if err != nil {
+			fatal("redteam: %v", err)
+		}
+		if !pass {
+			os.Exit(2)
+		}
 	}
 }
 

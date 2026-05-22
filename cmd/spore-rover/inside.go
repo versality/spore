@@ -56,11 +56,13 @@ func runInside(args []string) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	loopPort := ln.Addr().(*net.TCPAddr).Port
 	cmd.Env = append(os.Environ(),
 		"HTTPS_PROXY="+proxyURL,
 		"HTTP_PROXY="+proxyURL,
 		"ALL_PROXY="+proxyURL,
 		"NO_PROXY=localhost,127.0.0.1,::1",
+		fmt.Sprintf("SPORE_LOOP_PORT=%d", loopPort),
 	)
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "spore-rover --inside: start %s: %v\n", rest[0], err)
