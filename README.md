@@ -36,10 +36,31 @@ branch, kill the fleet, or run the same checks yourself.
 
 ## Operator Flow
 
-Install the CLI with Nix:
+Install the CLI with Nix. The idiomatic path on a flake-based system is
+to add spore as a flake input and reference the package from your
+NixOS or home-manager config:
+
+```nix
+# flake.nix
+inputs.spore.url = "github:versality/spore";
+
+# NixOS
+environment.systemPackages = [ inputs.spore.packages.${pkgs.system}.default ];
+
+# home-manager
+home.packages = [ inputs.spore.packages.${pkgs.system}.default ];
+```
+
+For a one-shot run without installing:
 
 ```sh
-nix profile install github:versality/spore
+nix run github:versality/spore -- <args>
+```
+
+For an ephemeral shell with `spore` on PATH:
+
+```sh
+nix shell github:versality/spore
 ```
 
 Or build from a checkout with Go 1.25+:
@@ -47,6 +68,9 @@ Or build from a checkout with Go 1.25+:
 ```sh
 go build -o ~/.local/bin/spore ./cmd/spore
 ```
+
+`nix profile install github:versality/spore` also works if you prefer
+imperative management.
 
 Adopt an existing project:
 
