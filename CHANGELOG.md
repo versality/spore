@@ -1,5 +1,100 @@
 # Changelog
 
+## 0.9.0 - 2026-05-22
+
+The headline feature is `spore-rover`, a bubblewrap-based sandbox
+launcher that wraps an LLM coding agent (claude, codex, or
+opencode) so a misbehaving prompt cannot reach the operator's
+dotfiles, sibling worktrees, or the open internet. The primitive
+itself shipped over the previous week; this release hardens the
+debt, documents the surface, and opens it up for extension.
+
+The threat model spore-rover defends:
+
+- **Filesystem write-allowlist.** The rover writes only inside its
+  worktree and the small RW set listed in the policy. `~/.ssh`,
+  `~/.bashrc`, sibling worktrees, system dotfiles - all
+  inaccessible.
+- **Filesystem read-deny.** `/etc/shadow`, `~/.ssh`, `/root`, and
+  similar are not readable.
+- **Network egress allowlist.** With any `-allow` flag set, bwrap
+  runs the target under `--unshare-net` and the only network the
+  agent sees is a loopback HTTPS CONNECT proxy that lets through
+  the named SNIs (e.g. `api.anthropic.com`).
+
+Out of scope, on purpose: username masking, mountinfo path
+scrubbing, kernel-grade containment, seccomp/Landlock, per-rover
+credential isolation, nation-state pivot. The threat modelled is
+"the LLM runs an unintended command", not "an attacker controls
+the LLM".
+
+### What ships
+
+- **Three supported targets.** `-target claude` (default),
+  `-target codex`, `-target opencode`. Each target declares the
+  rw state paths its binary needs (claude: `~/.claude` and
+  `~/.claude.json`; codex: `~/.codex`; opencode: `~/.config/`,
+  `~/.local/share/`, and `~/.cache/opencode`). Adding a new agent
+  is a registry entry in `cmd/spore-rover/target.go`. Binary
+  lookup chases `~/.nix-profile/bin/<name>` symlinks to their
+  `/nix/store` target so user-profile-only binaries survive the
+  tmpfs `$HOME` mask.
+- **Two subcommands.** `spore-rover` (default) spawns a tmux
+  window in the current session and runs the target inside the
+  sandbox; this is the operator-attended path and the one
+  `-redteam` uses to validate the primitive.
+  `spore-rover --exec ... -- <argv>` wraps an arbitrary command
+  in the same bwrap+proxy sandbox but does not spawn its own
+  tmux window; stdin/stdout/stderr pass through, exit code
+  mirrors the child. This is the primitive the worker spawn
+  path will wrap to soak the sandbox into every minted rover.
+- **`[sandbox]` config in `spore.toml`** for durable per-project
+  policy: `allow_hosts`, `rw`, `ro` (all list-valued). Precedence
+  is `compiled-in defaults < ~/.config/spore/sandbox.toml (user)
+  < <project>/spore.toml [sandbox] (project) < CLI flags`. Each
+  layer unions onto the previous. Unknown keys are a hard error
+  so typos surface loudly.
+- **Self-service discovery on denied egress.** The proxy log line
+  for a denied host now points at the config key the operator
+  needs to extend: `deny CONNECT linear.app:443 (not in
+  allowlist; add to [sandbox].allow_hosts in spore.toml or pass
+  -allow linear.app)`.
+- **12-probe red-team validator.** `spore-rover -redteam` plants
+  three host-side canaries (sibling-worktree secret, real
+  `~/.bashrc`, `/tmp` escape file), pastes the 12 probes into
+  the sandboxed claude pane, polls for the summary marker, and
+  writes a verdict. Verdict reconciles inside-view LEAKED reports
+  on tmpfs-masked paths (T1.d /tmp, T4.a `~/.bashrc`) against the
+  host-side observation - the inside-view of a tmpfs is by
+  design a lie; truth is what changes outside the sandbox.
+  `-redteam-timeout` (default 5m) caps the wait.
+
+### Documentation
+
+`docs/sandbox-rover.md` is the operator-facing surface:
+threat model, policy fields with worked examples, configuration
+precedence, the host-proxy + unix-socket + `--unshare-net` +
+inside-shim launch pipeline (with a small ASCII diagram of why
+the unix-socket bridge is necessary), the redteam interpretation
+rules including the T1.d/T4.a LEAKED-but-PASS reconciliation,
+and a "common gotchas" section (bwrap missing from PATH, direnv
+reload timing, worktrees on a tmpfs-masked path,
+window-already-exists, redteam-timeout).
+
+The kernel source map (`rules/core/source-map.md`, rendered into
+`CLAUDE.md` and `AGENTS.md`) now lists `cmd/spore-rover/`.
+
+### In progress
+
+The worker spawn path in `internal/task/lifecycle.go` is not yet
+wrapping its agent command through `spore-rover --exec`. The
+remaining bucket-4 work (per the brief at
+`docs/todo/sandbox-rover-followups.md`) is tracked there: needs
+to add a default rw bind for the main repo's
+`.git/worktrees/<slug>/` so `git commit` from inside the sandbox
+works, plus the `sandbox: false` per-task opt-out via
+frontmatter.
+
 ## Unreleased
 
 - New `spore search nix {packages|options} QUERY` subcommand. Queries
