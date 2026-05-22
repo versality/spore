@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -73,7 +74,7 @@ func (p *proxy) serve(ln net.Listener) {
 }
 
 func errIsClosed(err error) bool {
-	return strings.Contains(err.Error(), "use of closed network connection")
+	return errors.Is(err, net.ErrClosed)
 }
 
 func (p *proxy) handle(client net.Conn) {
