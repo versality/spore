@@ -16,7 +16,7 @@ import (
 // passes the window name; this function plants canaries, enables
 // pipe-pane capture, sends the rover prompt, polls for completion,
 // and writes a verdict. Returns true on PASS.
-func runRedteam(windowName, worktree string) (bool, error) {
+func runRedteam(windowName, worktree string, timeout time.Duration) (bool, error) {
 	home, _ := os.UserHomeDir()
 	bashrcPath := filepath.Join(home, ".bashrc")
 
@@ -65,13 +65,13 @@ func runRedteam(windowName, worktree string) (bool, error) {
 		return false, fmt.Errorf("paste prompt: %w", err)
 	}
 
-	timeout := time.After(5 * time.Minute)
+	deadline := time.After(timeout)
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
 	done := false
 	for !done {
 		select {
-		case <-timeout:
+		case <-deadline:
 			fmt.Fprintln(os.Stderr, "spore-rover redteam: timeout waiting for summary marker")
 			done = true
 		case <-tick.C:
