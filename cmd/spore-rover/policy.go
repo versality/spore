@@ -1,0 +1,79 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// Policy is the contract between the operator and the sandbox. The
+// rover may write inside Worktree and the named RW paths, may read
+// inside RO paths and the read-only root, and may speak HTTPS only to
+// the listed AllowHost SNIs via the loopback proxy.
+type Policy struct {
+	Worktree  string
+	Home      string   // path the sandbox sees as $HOME (tmpfs-backed)
+	RW        []string // additional rw bind mounts (paths as seen on host)
+	RO        []string // additional ro bind mounts on top of the ro root
+	AllowHost []string // SNI allowlist for the HTTPS CONNECT proxy
+}
+
+// bwrapArgs renders the bwrap argv up to (but not including) the
+// trailing "-- <prog> <args...>" terminator. The caller appends the
+// command to run inside the sandbox.
+func (p Policy) bwrapArgs() ([]string, error) {
+	wt, err := absExisting(p.Worktree, true)
+	if err != nil {
+		return nil, fmt.Errorf("worktree: %w", err)
+	}
+	if p.Home == "" {
+		return nil, fmt.Errorf("policy.Home is required")
+	}
+	home := filepath.Clean(p.Home)
+	if !filepath.IsAbs(home) {
+		return nil, fmt.Errorf("policy.Home must be absolute, got %q", home)
+	}
+
+	args := []string{
+		"--ro-bind", "/", "/",
+		"--dev", "/dev",
+		"--proc", "/proc",
+		"--tmpfs", home,
+		"--bind", wt, wt,
+		"--chdir", wt,
+		"--setenv", "HOME", home,
+	}
+	for _, dir := range p.RW {
+		abs, err := absExisting(dir, false)
+		if err != nil {
+			return nil, fmt.Errorf("rw %q: %w", dir, err)
+		}
+		args = append(args, "--bind", abs, abs)
+	}
+	for _, dir := range p.RO {
+		abs, err := absExisting(dir, false)
+		if err != nil {
+			return nil, fmt.Errorf("ro %q: %w", dir, err)
+		}
+		args = append(args, "--ro-bind", abs, abs)
+	}
+	return args, nil
+}
+
+func absExisting(path string, mustBeDir bool) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	st, err := os.Stat(abs)
+	if err != nil {
+		return "", err
+	}
+	if mustBeDir && !st.IsDir() {
+		return "", fmt.Errorf("%q is not a directory", abs)
+	}
+	return abs, nil
+}
