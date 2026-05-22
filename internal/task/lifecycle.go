@@ -62,7 +62,7 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", fmt.Errorf("task %s: unexpected status %q", slug, prev)
 	}
 	m.Status = StatusActive
-	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
+	if err := WriteAtomic(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return "", err
 	}
 
@@ -269,7 +269,7 @@ func Done(tasksDir, slug string, force bool) error {
 	}
 
 	m.Status = StatusDone
-	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
+	if err := WriteAtomic(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return err
 	}
 
@@ -673,7 +673,7 @@ func flipStatusWithBlocker(tasksDir, slug, from, to, blocker string) error {
 	} else {
 		delete(m.Extra, "blocker")
 	}
-	return os.WriteFile(path, frontmatter.Write(m, body), 0o644)
+	return WriteAtomic(path, frontmatter.Write(m, body), 0o644)
 }
 
 // blockCoordinatorGate refuses `spore task block` when the caller is

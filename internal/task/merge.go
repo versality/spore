@@ -159,7 +159,7 @@ func closeMergedTask(tasksDir, slug string) error {
 	}
 
 	m.Status = StatusDone
-	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
+	if err := WriteAtomic(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return err
 	}
 
