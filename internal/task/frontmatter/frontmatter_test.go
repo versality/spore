@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/versality/spore/internal/testutil/golden"
 )
 
 func TestWriteGolden(t *testing.T) {
@@ -17,17 +19,7 @@ func TestWriteGolden(t *testing.T) {
 	}
 	body := []byte("\nbody line one\n")
 	got := Write(m, body)
-	want := "---\n" +
-		"status: draft\n" +
-		"slug: hello-world\n" +
-		"title: hello world\n" +
-		"created: 2026-04-28T10:00:00Z\n" +
-		"project: spore\n" +
-		"---\n" +
-		"\nbody line one\n"
-	if string(got) != want {
-		t.Fatalf("Write golden mismatch\nwant:\n%s\ngot:\n%s", want, got)
-	}
+	golden.Equal(t, "testdata/write-golden.md", got)
 }
 
 func TestRoundTrip(t *testing.T) {
