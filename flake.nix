@@ -99,6 +99,7 @@
               tmux
               fzf
               ripgrep
+              bubblewrap
             ]) ++ [
               claude-code.packages.${system}.default
             ];
