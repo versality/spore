@@ -31,6 +31,7 @@ import (
 var subcommands = map[string]func([]string){
 	"--inside":      runInside,
 	"--proxy-serve": runProxyServe,
+	"--exec":        runExec,
 }
 
 func main() {
@@ -41,6 +42,87 @@ func main() {
 		}
 	}
 	runLaunch(os.Args[1:])
+}
+
+// launchOptions carries the resolved policy + targetArgv that both
+// runLaunch (tmux window) and runExec (direct exec) need to assemble
+// the bwrap+proxy launch command. preparePolicy fills this from the
+// flagset so the two subcommands share their TOML+CLI merge logic.
+type launchOptions struct {
+	worktreeAbs string
+	policy      Policy
+	bwrapArgv   []string
+	targetArgv  []string
+	allowHosts  []string
+}
+
+func preparePolicy(worktree, homeBase, targetName string, shell bool, extraRW, extraRO, allowHost []string) (launchOptions, error) {
+	wtAbs, err := filepath.Abs(worktree)
+	if err != nil {
+		return launchOptions{}, fmt.Errorf("resolve worktree: %w", err)
+	}
+
+	var tgt target
+	if !shell {
+		var ok bool
+		tgt, ok = targets[targetName]
+		if !ok {
+			return launchOptions{}, fmt.Errorf("unknown target %q (known: %s)", targetName, knownTargets())
+		}
+	}
+
+	// Project [sandbox] (and user-level override) merge with CLI
+	// flags. Precedence weakest-to-strongest: defaults < user <
+	// project < CLI. Merge appends with dedupe, so CLI items always
+	// end up last. The project root is the worktree dir.
+	fileCfg, err := sandboxcfg.LoadForProject(wtAbs)
+	if err != nil {
+		return launchOptions{}, fmt.Errorf("load sandbox config: %w", err)
+	}
+	cliCfg := sandboxcfg.Config{
+		AllowHosts: allowHost,
+		RW:         extraRW,
+		RO:         extraRO,
+	}
+	merged := sandboxcfg.Merge(fileCfg, cliCfg)
+
+	rw := append([]string(nil), merged.RW...)
+	if !shell {
+		for _, p := range tgt.StatePaths() {
+			rw = append(rw, p)
+		}
+	}
+
+	policy := Policy{
+		Worktree:  wtAbs,
+		Home:      homeBase,
+		RW:        rw,
+		RO:        merged.RO,
+		AllowHost: merged.AllowHosts,
+	}
+	bwrapArgv, err := policy.bwrapArgs()
+	if err != nil {
+		return launchOptions{}, fmt.Errorf("build policy: %w", err)
+	}
+
+	var targetArgv []string
+	if shell {
+		targetArgv = []string{"bash"}
+	} else {
+		bin, err := exec.LookPath(tgt.Bin)
+		if err != nil {
+			return launchOptions{}, fmt.Errorf("%s not on PATH: %w", tgt.Bin, err)
+		}
+		targetArgv = []string{bin}
+	}
+
+	return launchOptions{
+		worktreeAbs: wtAbs,
+		policy:      policy,
+		bwrapArgv:   bwrapArgv,
+		targetArgv:  targetArgv,
+		allowHosts:  merged.AllowHosts,
+	}, nil
 }
 
 func runLaunch(args []string) {
@@ -77,74 +159,20 @@ func runLaunch(args []string) {
 		fatal("spore-rover must run inside a tmux session (TMUX not set)")
 	}
 
-	wtAbs, err := filepath.Abs(worktree)
+	opts, err := preparePolicy(worktree, homeBase, targetName, shell, extraRW, extraRO, allowHost)
 	if err != nil {
-		fatal("resolve worktree: %v", err)
+		fatal("%v", err)
 	}
 	if windowName == "" {
-		windowName = "rover-" + filepath.Base(wtAbs)
-	}
-
-	var tgt target
-	if !shell {
-		var ok bool
-		tgt, ok = targets[targetName]
-		if !ok {
-			fatal("unknown -target %q (known: %s)", targetName, knownTargets())
-		}
-	}
-
-	// Project [sandbox] (and user-level override) merge with CLI
-	// flags. Precedence weakest-to-strongest: defaults < user <
-	// project < CLI. Merge appends with dedupe, so CLI items always
-	// end up last. The project root is the worktree dir.
-	fileCfg, err := sandboxcfg.LoadForProject(wtAbs)
-	if err != nil {
-		fatal("load sandbox config: %v", err)
-	}
-	cliCfg := sandboxcfg.Config{
-		AllowHosts: allowHost,
-		RW:         extraRW,
-		RO:         extraRO,
-	}
-	merged := sandboxcfg.Merge(fileCfg, cliCfg)
-
-	rw := append([]string(nil), merged.RW...)
-	if !shell {
-		for _, p := range tgt.StatePaths() {
-			rw = append(rw, p)
-		}
-	}
-
-	policy := Policy{
-		Worktree:  wtAbs,
-		Home:      homeBase,
-		RW:        rw,
-		RO:        merged.RO,
-		AllowHost: merged.AllowHosts,
+		windowName = "rover-" + filepath.Base(opts.worktreeAbs)
 	}
 
 	bw, err := exec.LookPath("bwrap")
 	if err != nil {
 		fatal("bwrap not on PATH: %v", err)
 	}
-	bwrapArgv, err := policy.bwrapArgs()
-	if err != nil {
-		fatal("build policy: %v", err)
-	}
 
-	var targetArgv []string
-	if shell {
-		targetArgv = []string{"bash"}
-	} else {
-		bin, err := exec.LookPath(tgt.Bin)
-		if err != nil {
-			fatal("%s not on PATH: %v", tgt.Bin, err)
-		}
-		targetArgv = []string{bin}
-	}
-
-	launchCmd, sockDir, err := buildLaunchCmd(bw, bwrapArgv, targetArgv, merged.AllowHosts, windowName, dryRun)
+	launchCmd, sockDir, err := buildLaunchCmd(bw, opts.bwrapArgv, opts.targetArgv, opts.allowHosts, windowName, dryRun)
 	if err != nil {
 		fatal("build launch: %v", err)
 	}
@@ -172,13 +200,84 @@ func runLaunch(args []string) {
 		if shell {
 			fatal("-redteam requires claude (drop -shell)")
 		}
-		pass, err := runRedteam(windowName, wtAbs, redteamTimeout)
+		pass, err := runRedteam(windowName, opts.worktreeAbs, redteamTimeout)
 		if err != nil {
 			fatal("redteam: %v", err)
 		}
 		if !pass {
 			os.Exit(2)
 		}
+	}
+}
+
+// runExec is the non-tmux primitive that wraps an arbitrary command
+// in the bwrap+proxy sandbox. The worker spawn path prefixes its
+// agent command with `spore-rover --exec ... -- <agent argv>`; the
+// agent runs as a child of this process inside the bwrap, with the
+// host proxy (when -allow is set) managed by the same `sh -c` script
+// runLaunch uses inside its tmux pane.
+//
+// Unlike runLaunch this does NOT need to be invoked from a tmux
+// session and does NOT spawn its own window: stdin/stdout/stderr are
+// passed through, exit code mirrors the bwrap child.
+func runExec(args []string) {
+	fs := flag.NewFlagSet("--exec", flag.ExitOnError)
+	var (
+		worktree   string
+		homeBase   string
+		targetName string
+		extraRW    multiFlag
+		extraRO    multiFlag
+		allowHost  multiFlag
+		dryRun     bool
+	)
+	fs.StringVar(&worktree, "worktree", ".", "directory the rover may write to (becomes cwd inside sandbox)")
+	fs.StringVar(&homeBase, "home", os.Getenv("HOME"), "path the sandbox exposes as $HOME (tmpfs-backed)")
+	fs.StringVar(&targetName, "target", "claude", "registered target whose StatePaths to bind rw (ignored when -- is given)")
+	fs.Var(&extraRW, "rw", "additional rw bind (repeatable; host path)")
+	fs.Var(&extraRO, "ro", "additional ro bind (repeatable; host path)")
+	fs.Var(&allowHost, "allow", "HTTPS CONNECT hostname allowlist (repeatable)")
+	fs.BoolVar(&dryRun, "dry-run", false, "print the shell command and exit")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	rest := fs.Args()
+	if len(rest) == 0 {
+		fatal("--exec: missing -- <argv>; pass the command to run inside the sandbox after a -- separator")
+	}
+
+	opts, err := preparePolicy(worktree, homeBase, targetName, false, extraRW, extraRO, allowHost)
+	if err != nil {
+		fatal("%v", err)
+	}
+
+	bw, err := exec.LookPath("bwrap")
+	if err != nil {
+		fatal("bwrap not on PATH: %v", err)
+	}
+
+	// The caller-supplied argv replaces the target binary; the target
+	// registry still informs the rw paths (claude state, ...) since
+	// the wrapper is launching the same target binary by argv[0].
+	launchCmd, _, err := buildLaunchCmd(bw, opts.bwrapArgv, rest, opts.allowHosts, "exec", dryRun)
+	if err != nil {
+		fatal("build launch: %v", err)
+	}
+
+	if dryRun {
+		fmt.Println(launchCmd)
+		return
+	}
+
+	cmd := exec.Command("sh", "-c", launchCmd)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			os.Exit(ee.ExitCode())
+		}
+		fatal("exec sh: %v", err)
 	}
 }
 

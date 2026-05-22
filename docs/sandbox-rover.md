@@ -210,6 +210,29 @@ the target attempts a real CONNECT.
   minutes; long agents may need more. Pass `-redteam-timeout
   10m` if a slower model is in the pane.
 
+## Two subcommands
+
+The launcher binary exposes two ways to drop into the sandbox:
+
+- **`spore-rover` (default).** Spawns a tmux window in the current
+  session and runs the target binary inside the bwrap+proxy
+  sandbox. Used for ad-hoc operator-attended launches, and by
+  `-redteam` when validating the primitive. Requires `TMUX` to be
+  set unless `-dry-run` is passed.
+- **`spore-rover --exec ... -- <argv>`.** Wraps the given argv in
+  the same bwrap+proxy sandbox but does NOT spawn its own tmux
+  window. stdin/stdout/stderr pass through and the exit code
+  mirrors the child. This is the primitive the worker spawn path
+  will call to soak the sandbox into every minted rover: the
+  worker's existing `tmux new-session sh -c "<agent>"` becomes
+  `tmux new-session sh -c "spore-rover --exec -worktree <wt> --
+  <agent>"`.
+
+Both subcommands share the same policy + config merge (`[sandbox]`
+in spore.toml, user override at `~/.config/spore/sandbox.toml`,
+CLI flags on top), so `-allow linear.app` and friends mean the
+same thing in either mode.
+
 ## See also
 
 - `cmd/spore-rover/main.go` - `runLaunch` and `buildLaunchCmd`.
