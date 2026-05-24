@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/versality/spore/internal/testpath"
 )
 
 func TestRunTaskMergeForceMergeRedRequiresReason(t *testing.T) {
@@ -155,6 +157,92 @@ func TestRunTaskNewPriorityRejectsBogus(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "critical|high|medium|low") {
 		t.Errorf("error %q should list valid values", err)
+	}
+}
+
+func TestRunTaskNewWarnsWhenDefaultAgentMissing(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := os.WriteFile("spore.toml", []byte("[fleet.workers]\ndefault = \"codex\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"spore": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	code, _, stderr := captureFn(t, func() int {
+		if err := runTaskNew([]string{"--no-edit", "Demo Task"}); err != nil {
+			t.Fatal(err)
+		}
+		return 0
+	})
+	if code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	if !strings.Contains(stderr, "missing-worker-agent:codex") {
+		t.Fatalf("stderr = %q, want codex warning", stderr)
+	}
+	if _, err := os.Stat(filepath.Join("tasks", "demo-task.md")); err != nil {
+		t.Fatalf("task not created: %v", err)
+	}
+}
+
+func TestRunTaskNewWarnsWhenExplicitAgentMissing(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"spore": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	code, _, stderr := captureFn(t, func() int {
+		if err := runTaskNew([]string{"--no-edit", "--agent", "codex", "Demo Task"}); err != nil {
+			t.Fatal(err)
+		}
+		return 0
+	})
+	if code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	if !strings.Contains(stderr, "missing-worker-agent:codex") {
+		t.Fatalf("stderr = %q, want codex warning", stderr)
+	}
+	raw, err := os.ReadFile(filepath.Join("tasks", "demo-task.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "agent: codex\n") {
+		t.Fatalf("task missing explicit agent:\n%s", raw)
+	}
+}
+
+func TestRunTaskNewReadyAgentNoWarning(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"codex": "#!/bin/sh\nexit 0\n",
+			"spore": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	code, _, stderr := captureFn(t, func() int {
+		if err := runTaskNew([]string{"--no-edit", "--agent", "codex", "Demo Task"}); err != nil {
+			t.Fatal(err)
+		}
+		return 0
+	})
+	if code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want no warning", stderr)
 	}
 }
 

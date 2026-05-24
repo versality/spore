@@ -65,6 +65,7 @@ Flags for 'new':
   --body <text>                Inline body text (skips editor).
   --body-stdin                 Read body from stdin (skips editor).
   --needs <slug>               Add a dependency (repeatable).
+  --agent <name>               Pin worker agent for this task.
   --priority <v>               critical|high|medium|low (default: medium).
   --edit                       Force editor open.
   --no-edit                    Suppress editor.

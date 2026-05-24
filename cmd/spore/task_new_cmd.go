@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/agentpreflight"
+	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -29,6 +31,7 @@ func runTaskNew(args []string) error {
 	startFlag := fs.Bool("start", false, "set status=active and launch agent")
 	editFlag := fs.Bool("edit", false, "force editor open")
 	noEdit := fs.Bool("no-edit", false, "suppress editor")
+	agent := fs.String("agent", "", "pin worker agent")
 	priority := fs.String("priority", task.DefaultPriority, "critical|high|medium|low")
 	var needs needsFlag
 	fs.Var(&needs, "needs", "add dependency slug (repeatable)")
@@ -76,6 +79,7 @@ func runTaskNew(args []string) error {
 		Title:    title,
 		Created:  time.Now().UTC().Format(time.RFC3339),
 		Project:  project,
+		Agent:    *agent,
 		Priority: *priority,
 		Needs:    []string(needs),
 	}
@@ -100,6 +104,7 @@ func runTaskNew(args []string) error {
 	}
 
 	fmt.Println(slug)
+	warnTaskNewReadiness(m)
 
 	if *startFlag {
 		session, startErr := task.Start(tasksDir, slug, nil)
@@ -109,6 +114,25 @@ func runTaskNew(args []string) error {
 		fmt.Println(session)
 	}
 	return nil
+}
+
+func warnTaskNewReadiness(m frontmatter.Meta) {
+	checkMeta := m
+	if checkMeta.Agent == "" {
+		root := "."
+		if mainRoot, err := resolveMainRoot(); err == nil {
+			root = mainRoot
+		}
+		if cfg, err := fleet.LoadWorkersConfig(root); err == nil {
+			checkMeta.Agent = fleet.SelectAgent(m, cfg, nil)
+		}
+	}
+	if checkMeta.Agent == "" {
+		return
+	}
+	for _, line := range agentpreflight.WarningLines(agentpreflight.Checker{}.CheckWorkerAgent(checkMeta, ".")) {
+		fmt.Fprintln(os.Stderr, line)
+	}
 }
 
 func isTTY() bool {
