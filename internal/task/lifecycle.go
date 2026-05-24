@@ -655,19 +655,6 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	return session, nil
 }
 
-func sessionHasDeadPane(session string) (bool, error) {
-	out, err := exec.Command("tmux", "list-panes", "-t", session, "-F", "#{pane_dead}").CombinedOutput()
-	if err != nil {
-		return false, fmt.Errorf("tmux list-panes: %v: %s", err, strings.TrimSpace(string(out)))
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "1" {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // workerAgentName returns the window name to use for the spawned
 // tmux agent window. Mirrors workerAgentCommand's agent-resolution
 // but yields just the agent label ("claude" / "codex") so the fleet
