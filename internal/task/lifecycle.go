@@ -638,10 +638,13 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	// this every clean exit destroys the session and active frontmatter
 	// becomes a lie (tmux session missing in fleet status).
 	if out, err := exec.Command("tmux", "set-option", "-t", session, "remain-on-exit", "on").CombinedOutput(); err != nil {
+		if !tmuxsess.Has(session) {
+			return "", fmt.Errorf("worker session %s died on spawn (agent=%q): check that the agent binary is on PATH and executable", session, agent)
+		}
 		return "", fmt.Errorf("tmux set-option remain-on-exit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	time.Sleep(workerSpawnSettleDelay)
-	if !hasSession(session) {
+	if !tmuxsess.Has(session) {
 		return "", fmt.Errorf("worker session %s died on spawn (agent=%q): check that the agent binary is on PATH and executable", session, agent)
 	}
 	if dead, err := sessionHasDeadPane(session); err != nil {
