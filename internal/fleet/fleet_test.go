@@ -240,6 +240,46 @@ func TestReconcileReportsFailedTaskAndContinues(t *testing.T) {
 	}
 }
 
+func TestReconcileDoesNotPersistAssignedAgentWhenMissing(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	t.Setenv(CoordinatorAgentEnv, "sleep 30")
+	if err := os.WriteFile(filepath.Join(dirs.project, "spore.toml"), []byte("[fleet.workers]\ndefault = \"codex\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git", "tmux", "sh", "sleep"},
+		FakeTools: map[string]string{
+			"spore": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+	writeTask(t, dirs.tasks, "alpha", "active")
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  1,
+	})
+	if err == nil {
+		t.Fatal("Reconcile err = nil, want missing codex failure")
+	}
+	if len(r.Failed) != 1 || r.Failed[0].Slug != "alpha" {
+		t.Fatalf("Failed = %+v, want alpha", r.Failed)
+	}
+	raw, err := os.ReadFile(filepath.Join(dirs.tasks, "alpha.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "agent: codex") {
+		t.Fatalf("agent persisted despite failed spawn:\n%s", raw)
+	}
+}
+
 func TestReconcileSpawnsByMatterSortOrder(t *testing.T) {
 	requireToolchain(t)
 

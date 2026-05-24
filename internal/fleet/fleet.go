@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/agentpreflight"
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -218,12 +219,25 @@ func Reconcile(cfg Config) (Result, error) {
 			res.Skipped = append(res.Skipped, slug)
 			continue
 		}
-		picked, err := assignAgent(cfg.TasksDir, slug, workersCfg, agentCounts)
+		picked, original, changed, err := selectAgentForTask(cfg.TasksDir, slug, workersCfg, agentCounts)
 		if err != nil {
 			res.Failed = append(res.Failed, FailedTask{Slug: slug, Reason: "assign agent: " + err.Error()})
 			continue
 		}
+		if err := readySelectedAgent(picked, cfg.ProjectRoot); err != nil {
+			res.Failed = append(res.Failed, FailedTask{Slug: slug, Reason: "agent readiness: " + err.Error()})
+			continue
+		}
+		if changed {
+			if err := writeTaskAgent(cfg.TasksDir, slug, picked); err != nil {
+				res.Failed = append(res.Failed, FailedTask{Slug: slug, Reason: "assign agent: " + err.Error()})
+				continue
+			}
+		}
 		if _, err := task.Ensure(cfg.TasksDir, slug, nil); err != nil {
+			if changed {
+				_ = os.WriteFile(filepath.Join(cfg.TasksDir, slug+".md"), original, 0o644)
+			}
 			res.Failed = append(res.Failed, FailedTask{Slug: slug, Reason: "ensure: " + err.Error()})
 			continue
 		}
@@ -262,29 +276,57 @@ func agentCountsFromMetas(metas []frontmatter.Meta, running map[string]bool) map
 	return out
 }
 
-// assignAgent applies SelectAgent to the task at <tasksDir>/<slug>.md,
-// then writes the chosen agent back into the file's frontmatter when
-// it would change. Returns the agent name. A task whose `agent:` is
-// already set short-circuits without touching the file.
-func assignAgent(tasksDir, slug string, cfg WorkersConfig, counts map[string]int) (string, error) {
+// selectAgentForTask computes the selected worker agent without
+// mutating the task file. The caller persists only after readiness and
+// spawn can proceed.
+func selectAgentForTask(tasksDir, slug string, cfg WorkersConfig, counts map[string]int) (string, []byte, bool, error) {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return "", nil, false, err
+	}
+	m, _, err := frontmatter.Parse(raw)
+	if err != nil {
+		return "", nil, false, fmt.Errorf("parse %s: %w", path, err)
+	}
+	picked := SelectAgent(m, cfg, counts)
+	return picked, raw, m.Agent != picked, nil
+}
+
+func writeTaskAgent(tasksDir, slug, picked string) error {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
 	}
 	m, body, err := frontmatter.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("parse %s: %w", path, err)
-	}
-	picked := SelectAgent(m, cfg, counts)
-	if m.Agent == picked {
-		return picked, nil
+		return fmt.Errorf("parse %s: %w", path, err)
 	}
 	m.Agent = picked
 	if err := os.WriteFile(path, frontmatter.Write(m, body), 0o644); err != nil {
-		return "", err
+		return err
 	}
-	return picked, nil
+	return nil
+}
+
+func readySelectedAgent(agent, projectRoot string) error {
+	issues := agentpreflight.Checker{}.CheckWorkerAgent(frontmatter.Meta{Agent: agent}, projectRoot)
+	var blockers []string
+	for _, issue := range issues {
+		if issue.Severity != agentpreflight.SeverityError {
+			continue
+		}
+		if issue.Tool != "" {
+			blockers = append(blockers, issue.Code+":"+issue.Tool)
+		} else {
+			blockers = append(blockers, issue.Code)
+		}
+	}
+	if len(blockers) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(blockers, ", "))
 }
 
 // syncMatters runs Sync against every enabled matter under
