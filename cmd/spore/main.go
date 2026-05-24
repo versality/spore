@@ -37,6 +37,7 @@ Commands:
   bootstrap  Walk a fresh project through the stage gates.
   init       Write a default spore.toml when one is missing.
   install    Drop the spore skills into a project's .claude/skills/.
+  doctor     Report project readiness for tools, agents, and hooks.
   infect     Bootstrap a fresh server with NixOS via nixos-anywhere.
   lint       Run portable lints over the working tree.
   scout      Append lint findings to a JSONL ledger for the healer pipeline.
@@ -324,6 +325,8 @@ func main() {
 		os.Exit(runInit(args))
 	case "install":
 		os.Exit(runInstall(args))
+	case "doctor", "readiness":
+		os.Exit(runDoctor(args))
 	case "budget":
 		os.Exit(runBudget(args))
 	case "coordinator":

@@ -20,10 +20,10 @@ const (
 )
 
 type Issue struct {
-	Severity Severity
-	Code     string
-	Tool     string
-	Message  string
+	Severity Severity `json:"severity"`
+	Code     string   `json:"code"`
+	Tool     string   `json:"tool,omitempty"`
+	Message  string   `json:"message"`
 }
 
 func WarningLines(issues []Issue) []string {
