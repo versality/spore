@@ -140,6 +140,67 @@ func TestRunUnknownModeRecordsError(t *testing.T) {
 	}
 }
 
+func TestRunProgressKeepsWritingUntilCanceled(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "events.jsonl")
+	t.Setenv(EnvMode, ModeProgress)
+	t.Setenv(EnvEventLog, logPath)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		cancel()
+	}()
+
+	code := Run(ctx, Options{Provider: "codex", Now: time.Now})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	events := readEvents(t, logPath)
+	if findEvent(events, "progress") == nil {
+		t.Fatalf("progress event missing: %s", eventTypes(events))
+	}
+	if findEvent(events, "stop") == nil {
+		t.Fatalf("stop event missing: %s", eventTypes(events))
+	}
+}
+
+func TestRunWaitForFileStopsOnSentinel(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "events.jsonl")
+	exitPath := filepath.Join(dir, "exit")
+	t.Setenv(EnvMode, ModeWaitForFile)
+	t.Setenv(EnvEventLog, logPath)
+	t.Setenv(EnvExitFile, exitPath)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		if err := os.WriteFile(exitPath, []byte("go"), 0o644); err != nil {
+			panic(err)
+		}
+	}()
+
+	code := Run(context.Background(), Options{Provider: "claude", Now: time.Now})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	events := readEvents(t, logPath)
+	if findEvent(events, "progress") == nil {
+		t.Fatalf("progress event missing: %s", eventTypes(events))
+	}
+}
+
+func TestRunOneTurnExitsZero(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "events.jsonl")
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, logPath)
+
+	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	if got := eventTypes(readEvents(t, logPath)); got != "start,ready,progress,stop" {
+		t.Fatalf("events = %s", got)
+	}
+}
+
 func TestRunMissingEventLogFailsClearly(t *testing.T) {
 	t.Setenv(EnvMode, ModeWorkThenExit)
 	var stderr bytes.Buffer

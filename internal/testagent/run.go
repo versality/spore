@@ -66,6 +66,51 @@ func Run(ctx context.Context, opts Options) int {
 		<-ctx.Done()
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode, Message: ctx.Err().Error()})
 		return 0
+	case ModeProgress:
+		touch(os.Getenv(EnvReadyFile))
+		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		i := 0
+		for {
+			select {
+			case <-ctx.Done():
+				_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode, Message: ctx.Err().Error()})
+				return 0
+			case <-ticker.C:
+				i++
+				fmt.Fprintf(opts.Stdout, "fake %s progress %d\n", opts.Provider, i)
+				_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: strconv.Itoa(i)})
+			}
+		}
+	case ModeWaitForFile:
+		touch(os.Getenv(EnvReadyFile))
+		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
+		waitPath := os.Getenv(EnvExitFile)
+		if waitPath == "" {
+			_ = rec.event(Event{Type: "error", Provider: opts.Provider, Mode: mode, Error: EnvExitFile + " is required for wait-for-file"})
+			return 2
+		}
+		for {
+			if _, err := os.Stat(waitPath); err == nil {
+				_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "sentinel-seen"})
+				_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
+				return 0
+			}
+			select {
+			case <-ctx.Done():
+				_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode, Message: ctx.Err().Error()})
+				return 0
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	case ModeOneTurn:
+		touch(os.Getenv(EnvReadyFile))
+		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
+		fmt.Fprintf(opts.Stdout, "fake %s one turn\n", opts.Provider)
+		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
+		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
+		return 0
 	case ModeWorkThenExit:
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
@@ -192,7 +237,7 @@ func turnLimit() int {
 
 func IsMode(mode string) bool {
 	switch mode {
-	case ModeIdle, ModeWorkThenExit:
+	case ModeIdle, ModeProgress, ModeWaitForFile, ModeOneTurn, ModeWorkThenExit:
 		return true
 	default:
 		return false

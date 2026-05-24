@@ -13,6 +13,9 @@ const (
 
 const (
 	ModeIdle         = "idle"
+	ModeProgress     = "progress"
+	ModeWaitForFile  = "wait-for-file"
+	ModeOneTurn      = "one-turn"
 	ModeWorkThenExit = "work-then-exit"
 )
 
