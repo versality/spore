@@ -196,6 +196,28 @@ func TestInstallIfMissingPreservesCustomizedConfig(t *testing.T) {
 	}
 }
 
+func TestInstallIfMissingDoesNotRewriteRuntimeHooks(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, ".codex", "hooks.json")
+	custom := []byte(`{"runtime":"custom"}` + "\n")
+	if err := os.MkdirAll(filepath.Dir(runtime), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(runtime, custom, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := install.InstallIfMissing(root, spore.BundledConfigs, "configs", "configs"); err != nil {
+		t.Fatalf("InstallIfMissing: %v", err)
+	}
+	body, err := os.ReadFile(runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, custom) {
+		t.Fatalf("runtime hook file overwritten: %q", body)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

@@ -39,3 +39,13 @@ Recovery:
 - fix missing tools or hook source configs;
 - run `spore task ensure <slug>` or `spore fleet reconcile`;
 - use `spore fleet list-sessions` to inspect live tmux state.
+
+Migration policy:
+
+- install creates missing source configs only;
+- existing `configs/claude/hooks-config.json`,
+  `configs/codex/hooks-config.json`, and settings extras are preserved;
+- runtime files such as `.codex/hooks.json` and
+  `.claude/settings.local.json` are rendered at spawn time, not by
+  install;
+- `spore doctor` reports which projects still need migration work.
