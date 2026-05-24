@@ -2,6 +2,11 @@
 
 package main
 
+// This gated suite treats paultyng/testagent as an external compatibility
+// canary only. It is not Spore's source of truth for lifecycle hooks.
+// Source of truth stays in vendor docs, lifecyclehooks registry, renderer
+// tests, doctor checks, and Spore's internal fake for worktree-scoped hooks.
+
 import (
 	"os"
 	"os/exec"
