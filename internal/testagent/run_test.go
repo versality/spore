@@ -23,7 +23,7 @@ func TestRunWorkThenExitRecordsLaunchAndProgress(t *testing.T) {
 	var stdout bytes.Buffer
 
 	code := Run(context.Background(), Options{
-		Provider: "claude",
+		Provider: "fake-agent",
 		Argv:     []string{"codex", "--", "brief"},
 		Stdout:   &stdout,
 		Now:      fixedNow,
@@ -38,7 +38,7 @@ func TestRunWorkThenExitRecordsLaunchAndProgress(t *testing.T) {
 	if got := eventTypes(events); got != "start,ready,progress,progress,stop" {
 		t.Fatalf("events = %s", got)
 	}
-	if events[0].Provider != "claude" || events[0].Mode != ModeWorkThenExit {
+	if events[0].Provider != "fake-agent" || events[0].Mode != ModeWorkThenExit {
 		t.Fatalf("start event provider/mode = %q/%q", events[0].Provider, events[0].Mode)
 	}
 	if events[0].Env["SPORE_TASK_SLUG"] != "smoke" {
@@ -82,7 +82,7 @@ func TestRunWorkerLaunchContractRecordsBrief(t *testing.T) {
 	t.Setenv("WT_PROJECT", "spore")
 	t.Setenv("SPORE_BRIEF_FILE", briefPath)
 
-	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "fake-agent", Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -105,7 +105,7 @@ func TestRunWorkerLaunchContractErrorsWithoutSlug(t *testing.T) {
 	t.Setenv(EnvEventLog, logPath)
 	t.Setenv("WT_SESSION_KIND", "worker")
 
-	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "fake-agent", Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -192,7 +192,7 @@ func TestRunOneTurnExitsZero(t *testing.T) {
 	t.Setenv(EnvMode, ModeOneTurn)
 	t.Setenv(EnvEventLog, logPath)
 
-	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "fake-agent", Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}

@@ -64,9 +64,7 @@ func Run(ctx context.Context, opts Options) int {
 	}
 	switch mode {
 	case ModeExitZero:
-		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "Stop")
-		}
+		runStopHooks(ctx, rec, opts.Provider)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeExitNonzero:
@@ -134,9 +132,7 @@ func Run(ctx context.Context, opts Options) int {
 		}
 		fmt.Fprintf(opts.Stdout, "fake %s one turn\n", opts.Provider)
 		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
-		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "Stop")
-		}
+		runStopHooks(ctx, rec, opts.Provider)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeWorkThenExit:
@@ -150,9 +146,7 @@ func Run(ctx context.Context, opts Options) int {
 			fmt.Fprintf(opts.Stdout, "fake %s progress %d\n", opts.Provider, i)
 			_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: strconv.Itoa(i)})
 		}
-		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "Stop")
-		}
+		runStopHooks(ctx, rec, opts.Provider)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	default:
@@ -160,6 +154,15 @@ func Run(ctx context.Context, opts Options) int {
 		_ = rec.event(Event{Type: "error", Provider: opts.Provider, Mode: mode, Error: msg})
 		fmt.Fprintln(opts.Stderr, "fake agent: "+msg)
 		return 2
+	}
+}
+
+func runStopHooks(ctx context.Context, rec recorder, provider string) {
+	switch provider {
+	case "codex":
+		runCodexHooks(ctx, rec, "Stop")
+	case "claude":
+		runClaudeHooks(ctx, rec, "Stop")
 	}
 }
 

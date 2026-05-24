@@ -22,6 +22,14 @@ type hookCommand struct {
 	Kinds   []string `json:"kinds"`
 }
 
+type claudeSettingsFile struct {
+	Hooks map[string][]claudeHookGroup `json:"hooks"`
+}
+
+type claudeHookGroup struct {
+	Hooks []hookCommand `json:"hooks"`
+}
+
 func runCodexHooks(ctx context.Context, rec recorder, event string) {
 	path := filepath.Join(cwd(), ".codex", "hooks.json")
 	body, err := os.ReadFile(path)
@@ -35,34 +43,7 @@ func runCodexHooks(ctx context.Context, rec recorder, event string) {
 		return
 	}
 	for _, hook := range cfg.Events[event] {
-		if hook.Command == "" {
-			_ = rec.event(Event{Type: "hook-error", Provider: "codex", Fields: map[string]string{"event": event}, Error: "empty hook command"})
-			continue
-		}
-		timeout := time.Duration(hook.Timeout) * time.Second
-		if timeout <= 0 {
-			timeout = 10 * time.Second
-		}
-		hookCtx, cancel := context.WithTimeout(ctx, timeout)
-		cmd := exec.CommandContext(hookCtx, "sh", "-c", hook.Command)
-		cmd.Stdin = bytes.NewBufferString(codexHookPayload(event))
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		cancel()
-		fields := map[string]string{
-			"event":    event,
-			"command":  hook.Command,
-			"stdout":   stdout.String(),
-			"stderr":   stderr.String(),
-			"timedOut": strconv.FormatBool(hookCtx.Err() == context.DeadlineExceeded),
-		}
-		if err != nil {
-			_ = rec.event(Event{Type: "hook-error", Provider: "codex", Fields: fields, Error: fmt.Sprintf("%v", err)})
-			continue
-		}
-		_ = rec.event(Event{Type: "hook", Provider: "codex", Fields: fields})
+		runHookCommand(ctx, rec, "codex", event, hook)
 	}
 }
 
@@ -75,4 +56,54 @@ func codexHookPayload(event string) string {
 	default:
 		return `{"stop_hook_active":false}` + "\n"
 	}
+}
+
+func runClaudeHooks(ctx context.Context, rec recorder, event string) {
+	path := filepath.Join(cwd(), ".claude", "settings.local.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		_ = rec.event(Event{Type: "hook-warning", Provider: "claude", Fields: map[string]string{"event": event, "path": path}, Error: err.Error()})
+		return
+	}
+	var cfg claudeSettingsFile
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		_ = rec.event(Event{Type: "hook-parse-error", Provider: "claude", Fields: map[string]string{"event": event, "path": path}, Error: err.Error()})
+		return
+	}
+	for _, group := range cfg.Hooks[event] {
+		for _, hook := range group.Hooks {
+			runHookCommand(ctx, rec, "claude", event, hook)
+		}
+	}
+}
+
+func runHookCommand(ctx context.Context, rec recorder, provider, event string, hook hookCommand) {
+	if hook.Command == "" {
+		_ = rec.event(Event{Type: "hook-error", Provider: provider, Fields: map[string]string{"event": event}, Error: "empty hook command"})
+		return
+	}
+	timeout := time.Duration(hook.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	hookCtx, cancel := context.WithTimeout(ctx, timeout)
+	cmd := exec.CommandContext(hookCtx, "sh", "-c", hook.Command)
+	cmd.Stdin = bytes.NewBufferString(codexHookPayload(event))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	cancel()
+	fields := map[string]string{
+		"event":    event,
+		"command":  hook.Command,
+		"stdout":   stdout.String(),
+		"stderr":   stderr.String(),
+		"timedOut": strconv.FormatBool(hookCtx.Err() == context.DeadlineExceeded),
+	}
+	if err != nil {
+		_ = rec.event(Event{Type: "hook-error", Provider: provider, Fields: fields, Error: fmt.Sprintf("%v", err)})
+		return
+	}
+	_ = rec.event(Event{Type: "hook", Provider: provider, Fields: fields})
 }
