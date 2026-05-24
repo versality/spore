@@ -53,12 +53,30 @@ type Result struct {
 	Reaped  []string
 	Kept    []string
 	Skipped []string
+	Failed  []FailedTask
 
 	// Matter is the per-matter sync outcome from the prelude pass.
 	// Empty when no matters are configured. Errors do not abort
 	// reconciliation: the worker pass still runs against whatever
 	// tasks are on disk.
 	Matter []MatterResult
+}
+
+type FailedTask struct {
+	Slug   string
+	Reason string
+}
+
+type ReconcileFailuresError struct {
+	Failed []FailedTask
+}
+
+func (e *ReconcileFailuresError) Error() string {
+	var parts []string
+	for _, failed := range e.Failed {
+		parts = append(parts, failed.Slug+": "+failed.Reason)
+	}
+	return "fleet reconcile failed: " + strings.Join(parts, "; ")
 }
 
 // MatterResult records one matter's sync outcome for the pass.
@@ -202,10 +220,12 @@ func Reconcile(cfg Config) (Result, error) {
 		}
 		picked, err := assignAgent(cfg.TasksDir, slug, workersCfg, agentCounts)
 		if err != nil {
-			return res, fmt.Errorf("assign agent %s: %w", slug, err)
+			res.Failed = append(res.Failed, FailedTask{Slug: slug, Reason: "assign agent: " + err.Error()})
+			continue
 		}
 		if _, err := task.Ensure(cfg.TasksDir, slug, nil); err != nil {
-			return res, fmt.Errorf("ensure %s: %w", slug, err)
+			res.Failed = append(res.Failed, FailedTask{Slug: slug, Reason: "ensure: " + err.Error()})
+			continue
 		}
 		res.Spawned = append(res.Spawned, slug)
 		runningSet[slug] = true
@@ -217,6 +237,10 @@ func Reconcile(cfg Config) (Result, error) {
 	sort.Strings(res.Reaped)
 	sort.Strings(res.Kept)
 	sort.Strings(res.Skipped)
+	sort.Slice(res.Failed, func(i, j int) bool { return res.Failed[i].Slug < res.Failed[j].Slug })
+	if len(res.Failed) > 0 {
+		return res, &ReconcileFailuresError{Failed: res.Failed}
+	}
 	return res, nil
 }
 

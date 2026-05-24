@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
+	"github.com/versality/spore/internal/testpath"
 )
 
 func TestReconcileShortCircuitsWhenDisabled(t *testing.T) {
@@ -195,6 +197,46 @@ func TestReconcileKeptDoesNotConsumeMaxWorkers(t *testing.T) {
 	}
 	if got, want := r2.Skipped, []string{"charlie"}; !equalSlices(got, want) {
 		t.Errorf("Skipped (pass 2) = %v, want %v", got, want)
+	}
+}
+
+func TestReconcileReportsFailedTaskAndContinues(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	t.Setenv(CoordinatorAgentEnv, "sleep 30")
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git", "tmux", "sh", "sleep"},
+		FakeTools: map[string]string{
+			"spore":  "#!/bin/sh\nexit 0\n",
+			"claude": "#!/bin/sh\nexec sleep 30\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	writeTaskWithAgent(t, dirs.tasks, "alpha", "active", "codex")
+	writeTaskWithAgent(t, dirs.tasks, "beta", "active", "claude")
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  2,
+	})
+	if err == nil {
+		t.Fatal("Reconcile err = nil, want per-task failure")
+	}
+	var failErr *ReconcileFailuresError
+	if !errors.As(err, &failErr) {
+		t.Fatalf("err = %T %v, want ReconcileFailuresError", err, err)
+	}
+	if len(r.Failed) != 1 || r.Failed[0].Slug != "alpha" {
+		t.Fatalf("Failed = %+v, want alpha", r.Failed)
+	}
+	if got, want := r.Spawned, []string{"beta"}; !equalSlices(got, want) {
+		t.Fatalf("Spawned = %v, want %v", got, want)
 	}
 }
 

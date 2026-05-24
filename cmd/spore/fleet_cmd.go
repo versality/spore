@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -211,6 +212,11 @@ func runFleetReconcile(args []string) error {
 		MaxWorkers:  resolved,
 	})
 	if err != nil {
+		var failErr *fleet.ReconcileFailuresError
+		if !errors.As(err, &failErr) {
+			return err
+		}
+		printFleetReconcileResult(res, resolved)
 		return err
 	}
 	if res.Disabled {
@@ -218,8 +224,13 @@ func runFleetReconcile(args []string) error {
 		fmt.Printf("fleet: disabled (flag missing at %s)\n", flagPath)
 		return nil
 	}
-	fmt.Printf("fleet: active=%d spawned=%d kept=%d reaped=%d skipped=%d\n",
-		len(res.Active), len(res.Spawned), len(res.Kept), len(res.Reaped), len(res.Skipped))
+	printFleetReconcileResult(res, resolved)
+	return nil
+}
+
+func printFleetReconcileResult(res fleet.Result, resolved int) {
+	fmt.Printf("fleet: active=%d spawned=%d kept=%d reaped=%d skipped=%d failed=%d\n",
+		len(res.Active), len(res.Spawned), len(res.Kept), len(res.Reaped), len(res.Skipped), len(res.Failed))
 	if len(res.Spawned) > 0 {
 		fmt.Printf("  spawned: %s\n", strings.Join(res.Spawned, ", "))
 	}
@@ -229,6 +240,9 @@ func runFleetReconcile(args []string) error {
 	if len(res.Skipped) > 0 {
 		fmt.Printf("  skipped: %s (max-workers=%d)\n", strings.Join(res.Skipped, ", "), resolved)
 	}
+	for _, failed := range res.Failed {
+		fmt.Fprintf(os.Stderr, "  failed %s: %s\n", failed.Slug, failed.Reason)
+	}
 	for _, m := range res.Matter {
 		if m.Err != nil {
 			fmt.Fprintf(os.Stderr, "  matter %s: %v\n", m.Name, m.Err)
@@ -236,7 +250,6 @@ func runFleetReconcile(args []string) error {
 		}
 		fmt.Printf("  matter %s: created=%d updated=%d\n", m.Name, m.Created, m.Updated)
 	}
-	return nil
 }
 
 func runFleetEnable(args []string) error {
