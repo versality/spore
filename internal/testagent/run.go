@@ -59,8 +59,14 @@ func Run(ctx context.Context, opts Options) int {
 		return 2
 	}
 	recordLaunchContract(rec, opts.Provider, mode)
+	if opts.Provider == "codex" {
+		runCodexHooks(ctx, rec, "SessionStart")
+	}
 	switch mode {
 	case ModeExitZero:
+		if opts.Provider == "codex" {
+			runCodexHooks(ctx, rec, "Stop")
+		}
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeExitNonzero:
@@ -123,17 +129,29 @@ func Run(ctx context.Context, opts Options) int {
 	case ModeOneTurn:
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
+		if opts.Provider == "codex" {
+			runCodexHooks(ctx, rec, "PreToolUse")
+		}
 		fmt.Fprintf(opts.Stdout, "fake %s one turn\n", opts.Provider)
 		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
+		if opts.Provider == "codex" {
+			runCodexHooks(ctx, rec, "Stop")
+		}
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeWorkThenExit:
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
+		if opts.Provider == "codex" {
+			runCodexHooks(ctx, rec, "PreToolUse")
+		}
 		turns := turnLimit()
 		for i := 1; i <= turns; i++ {
 			fmt.Fprintf(opts.Stdout, "fake %s progress %d\n", opts.Provider, i)
 			_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: strconv.Itoa(i)})
+		}
+		if opts.Provider == "codex" {
+			runCodexHooks(ctx, rec, "Stop")
 		}
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0

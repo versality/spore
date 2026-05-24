@@ -25,15 +25,26 @@ func TestInstallPathHarnessRunsNamedClaudeAndCodex(t *testing.T) {
 		})
 	}
 	events := readEvents(t, logPath)
-	if len(events) != 8 {
-		t.Fatalf("event count = %d, want 8", len(events))
+	starts := eventsByType(events, "start")
+	if len(starts) != 2 {
+		t.Fatalf("start event count = %d, want 2: %s", len(starts), eventTypes(events))
 	}
-	if events[0].Provider != "claude" {
-		t.Fatalf("first provider = %q, want claude", events[0].Provider)
+	if starts[0].Provider != "claude" {
+		t.Fatalf("first provider = %q, want claude", starts[0].Provider)
 	}
-	if events[4].Provider != "codex" {
-		t.Fatalf("second provider = %q, want codex", events[4].Provider)
+	if starts[1].Provider != "codex" {
+		t.Fatalf("second provider = %q, want codex", starts[1].Provider)
 	}
+}
+
+func eventsByType(events []Event, typ string) []Event {
+	var out []Event
+	for _, event := range events {
+		if event.Type == typ {
+			out = append(out, event)
+		}
+	}
+	return out
 }
 
 func TestInstallPathHarnessCanOmitCodex(t *testing.T) {

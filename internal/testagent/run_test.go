@@ -23,7 +23,7 @@ func TestRunWorkThenExitRecordsLaunchAndProgress(t *testing.T) {
 	var stdout bytes.Buffer
 
 	code := Run(context.Background(), Options{
-		Provider: "codex",
+		Provider: "claude",
 		Argv:     []string{"codex", "--", "brief"},
 		Stdout:   &stdout,
 		Now:      fixedNow,
@@ -38,7 +38,7 @@ func TestRunWorkThenExitRecordsLaunchAndProgress(t *testing.T) {
 	if got := eventTypes(events); got != "start,ready,progress,progress,stop" {
 		t.Fatalf("events = %s", got)
 	}
-	if events[0].Provider != "codex" || events[0].Mode != ModeWorkThenExit {
+	if events[0].Provider != "claude" || events[0].Mode != ModeWorkThenExit {
 		t.Fatalf("start event provider/mode = %q/%q", events[0].Provider, events[0].Mode)
 	}
 	if events[0].Env["SPORE_TASK_SLUG"] != "smoke" {
@@ -82,7 +82,7 @@ func TestRunWorkerLaunchContractRecordsBrief(t *testing.T) {
 	t.Setenv("WT_PROJECT", "spore")
 	t.Setenv("SPORE_BRIEF_FILE", briefPath)
 
-	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -150,7 +150,7 @@ func TestRunProgressKeepsWritingUntilCanceled(t *testing.T) {
 		cancel()
 	}()
 
-	code := Run(ctx, Options{Provider: "codex", Now: time.Now})
+	code := Run(ctx, Options{Provider: "claude", Now: time.Now})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -192,7 +192,7 @@ func TestRunOneTurnExitsZero(t *testing.T) {
 	t.Setenv(EnvMode, ModeOneTurn)
 	t.Setenv(EnvEventLog, logPath)
 
-	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -214,7 +214,7 @@ func TestRunImmediateExitModes(t *testing.T) {
 			t.Setenv(EnvMode, tc.mode)
 			t.Setenv(EnvEventLog, logPath)
 
-			code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+			code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
 			if code != tc.want {
 				t.Fatalf("Run exit = %d, want %d", code, tc.want)
 			}
@@ -258,7 +258,7 @@ func TestRunHangBeforeReadyNeverTouchesReady(t *testing.T) {
 		cancel()
 	}()
 
-	code := Run(ctx, Options{Provider: "codex", Now: time.Now})
+	code := Run(ctx, Options{Provider: "claude", Now: time.Now})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
