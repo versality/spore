@@ -34,6 +34,8 @@ const AgentBinaryEnv = "SPORE_AGENT_BINARY"
 // launches. Empty lets the codex CLI use its own default.
 const CodexModelEnv = "SPORE_CODEX_MODEL"
 
+const workerSpawnSettleDelay = 150 * time.Millisecond
+
 // Start flips status to active and (when starting from backlog) creates
 // the worktree and wt/<slug> branch under <projectRoot>/.worktrees/.
 // In every case it spawns a detached wt-style tmux session running
@@ -633,7 +635,29 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if out, err := exec.Command("tmux", "set-option", "-t", session, "remain-on-exit", "on").CombinedOutput(); err != nil {
 		return "", fmt.Errorf("tmux set-option remain-on-exit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
+	time.Sleep(workerSpawnSettleDelay)
+	if !hasSession(session) {
+		return "", fmt.Errorf("worker session %s died on spawn (agent=%q): check that the agent binary is on PATH and executable", session, agent)
+	}
+	if dead, err := sessionHasDeadPane(session); err != nil {
+		return "", err
+	} else if dead {
+		return "", fmt.Errorf("worker session %s has a dead pane after spawn (agent=%q)", session, agent)
+	}
 	return session, nil
+}
+
+func sessionHasDeadPane(session string) (bool, error) {
+	out, err := exec.Command("tmux", "list-panes", "-t", session, "-F", "#{pane_dead}").CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("tmux list-panes: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "1" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // workerAgentName returns the window name to use for the spawned
