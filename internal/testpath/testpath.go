@@ -27,7 +27,7 @@ func Install(t testing.TB, opts Options) Harness {
 	for _, tool := range opts.RealTools {
 		path, err := exec.LookPath(tool)
 		if err != nil {
-			t.Fatalf("look path %s: %v", tool, err)
+			t.Skipf("%s not available: %v", tool, err)
 		}
 		WriteExecutable(t, filepath.Join(binDir, tool), fmt.Sprintf("#!/bin/sh\nexec %q \"$@\"\n", path))
 	}

@@ -28,6 +28,9 @@ func InstallPathHarness(t testing.TB, opts PathOptions) PathHarness {
 		t.Fatal(err)
 	}
 	fakeAgent := filepath.Join(binDir, "fake-agent")
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skipf("go not available: %v", err)
+	}
 	cmd := exec.Command("go", "build", "-o", fakeAgent, "./internal/testagent/cmd/fake-agent")
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(os.Environ(), "GOCACHE="+filepath.Join(t.TempDir(), "gocache"))
@@ -43,7 +46,7 @@ func InstallPathHarness(t testing.TB, opts PathOptions) PathHarness {
 	for _, tool := range opts.RealTools {
 		path, err := exec.LookPath(tool)
 		if err != nil {
-			t.Fatalf("look path %s: %v", tool, err)
+			t.Skipf("%s not available: %v", tool, err)
 		}
 		writeExecScript(t, filepath.Join(binDir, tool), fmt.Sprintf("#!/bin/sh\nexec %q \"$@\"\n", path))
 	}

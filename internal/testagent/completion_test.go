@@ -39,6 +39,9 @@ func TestRunCompleteWithEvidenceWritesEvidence(t *testing.T) {
 }
 
 func TestRunCommitChangeCommitsDeterministicChange(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@example.invalid")

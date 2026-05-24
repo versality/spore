@@ -40,9 +40,7 @@ func TestInboxHooksRegressionMissingSporeAndCodexHooksAreReported(t *testing.T) 
 }
 
 func TestInboxHooksRegressionCodexStartRendersWatchInbox(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/git"); err != nil {
-		t.Skip("test expects git on host")
-	}
+	requireCLITools(t, "git", "tmux", "sh", "sleep")
 	root := t.TempDir()
 	t.Chdir(root)
 	runGitCmd(t, root, "init", "-q", "-b", "main")
@@ -83,9 +81,7 @@ func TestInboxHooksRegressionCodexStartRendersWatchInbox(t *testing.T) {
 }
 
 func TestInboxHooksRegressionCodexRenderedWatchInboxDrainsTell(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/git"); err != nil {
-		t.Skip("test expects git on host")
-	}
+	requireCLITools(t, "git", "go", "tmux", "sh", "sleep")
 	sporeBin := buildSporeForTest(t)
 	root := t.TempDir()
 	t.Chdir(root)
@@ -154,9 +150,7 @@ func TestInboxHooksRegressionCodexRenderedWatchInboxDrainsTell(t *testing.T) {
 }
 
 func TestInboxHooksRegressionClaudeRenderedWatchInboxDrainsTell(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/git"); err != nil {
-		t.Skip("test expects git on host")
-	}
+	requireCLITools(t, "git", "go", "tmux", "sh", "sleep")
 	sporeBin := buildSporeForTest(t)
 	root := t.TempDir()
 	t.Chdir(root)
@@ -232,8 +226,18 @@ func runGitCmd(t *testing.T, dir string, args ...string) {
 	}
 }
 
+func requireCLITools(t *testing.T, tools ...string) {
+	t.Helper()
+	for _, tool := range tools {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s not available: %v", tool, err)
+		}
+	}
+}
+
 func buildSporeForTest(t *testing.T) string {
 	t.Helper()
+	requireCLITools(t, "go")
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime caller failed")
