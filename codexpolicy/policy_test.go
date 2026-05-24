@@ -67,6 +67,7 @@ func TestInteractiveArgs(t *testing.T) {
 	want := []string{
 		"codex",
 		"--dangerously-bypass-approvals-and-sandbox",
+		"--dangerously-bypass-hook-trust",
 		"--no-alt-screen",
 		"--disable", "apps",
 		"-m", "gpt-5.5",

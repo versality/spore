@@ -45,10 +45,14 @@ func ReasoningConfig(effort string) string {
 
 // InteractiveArgs returns the Codex CLI argv shape Spore uses for tmux
 // worker and coordinator launches.
+// See https://developers.openai.com/codex/cli/reference and
+// https://developers.openai.com/codex/hooks for the hook trust flag:
+// Spore owns the rendered project/worktree hook files for these launches.
 func InteractiveArgs(model, effort string) []string {
 	args := []string{
 		"codex",
 		"--dangerously-bypass-approvals-and-sandbox",
+		"--dangerously-bypass-hook-trust",
 		"--no-alt-screen",
 		"--disable", "apps",
 	}

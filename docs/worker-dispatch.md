@@ -56,7 +56,7 @@ the landed `main` branch is published upstream.
 `agent: claude-code` use the same default. `agent: codex` starts:
 
 ```
-codex --dangerously-bypass-approvals-and-sandbox --no-alt-screen --disable apps
+codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --no-alt-screen --disable apps
 ```
 
 Codex reasoning effort comes from `effort:` when present

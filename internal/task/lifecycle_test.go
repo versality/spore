@@ -411,7 +411,7 @@ func TestWorkerAgentCommandCodexUsesEffortPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workerAgentCommand: %v", err)
 	}
-	want := "codex --dangerously-bypass-approvals-and-sandbox --no-alt-screen --disable apps -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'"
+	want := "codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --no-alt-screen --disable apps -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'"
 	if got != want {
 		t.Errorf("command = %q want %q", got, want)
 	}
