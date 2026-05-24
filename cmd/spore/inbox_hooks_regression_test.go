@@ -72,7 +72,7 @@ func TestInboxHooksRegressionCodexStartRendersWatchInbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task start: %v", err)
 	}
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", session).Run() })
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run() })
 	body, err := os.ReadFile(filepath.Join(root, ".worktrees", "codex-smoke", ".codex", "hooks.json"))
 	if err != nil {
 		t.Fatalf("read rendered codex hooks: %v", err)

@@ -184,8 +184,8 @@ func TestCoordinatorStartReportsDeadAgent(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("start with missing agent: exit=0 (want non-zero); stdout=%q stderr=%q", out, errOut)
 	}
-	if !strings.Contains(errOut, "died on spawn") {
-		t.Errorf("stderr missing 'died on spawn': %q", errOut)
+	if !strings.Contains(errOut, "coordinator preflight failed") {
+		t.Errorf("stderr missing preflight failure: %q", errOut)
 	}
 	if fleet.CoordinatorAlive(root) {
 		t.Errorf("session %q must not be alive when agent failed to exec", session)
