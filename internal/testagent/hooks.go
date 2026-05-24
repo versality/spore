@@ -49,6 +49,13 @@ func runCodexHooks(ctx context.Context, rec recorder, event string) {
 	}
 }
 
+func hookPayload(provider, event string) string {
+	if provider == "claude" {
+		return claudeHookPayload(event)
+	}
+	return codexHookPayload(event)
+}
+
 func codexHookPayload(event string) string {
 	switch event {
 	case "PreToolUse":
@@ -57,6 +64,17 @@ func codexHookPayload(event string) string {
 		return `{"source":"startup"}` + "\n"
 	default:
 		return `{"stop_hook_active":false}` + "\n"
+	}
+}
+
+func claudeHookPayload(event string) string {
+	switch event {
+	case "PreToolUse":
+		return `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"true"}}` + "\n"
+	case "SessionStart":
+		return `{"hook_event_name":"SessionStart","source":"startup"}` + "\n"
+	default:
+		return `{"hook_event_name":"Stop","stop_hook_active":false}` + "\n"
 	}
 }
 
@@ -90,7 +108,7 @@ func runHookCommand(ctx context.Context, rec recorder, provider, event string, h
 	}
 	hookCtx, cancel := context.WithTimeout(ctx, timeout)
 	cmd := exec.CommandContext(hookCtx, "sh", "-c", hook.Command)
-	cmd.Stdin = bytes.NewBufferString(codexHookPayload(event))
+	cmd.Stdin = bytes.NewBufferString(hookPayload(provider, event))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

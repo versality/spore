@@ -127,6 +127,47 @@ func TestRunClaudeExecutesStopHooks(t *testing.T) {
 	}
 }
 
+func TestRunClaudeHookReceivesClaudePayload(t *testing.T) {
+	dir := t.TempDir()
+	settingsDir := filepath.Join(dir, ".claude")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(dir, "payload.out")
+	settings := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"cat > ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.local.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldwd); err != nil {
+			t.Fatal(err)
+		}
+	})
+	logPath := filepath.Join(dir, "events.jsonl")
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, logPath)
+
+	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"hook_event_name":"Stop","stop_hook_active":false}` + "\n"
+	if string(body) != want {
+		t.Fatalf("payload = %q, want %q", body, want)
+	}
+}
+
 func TestRunClaudeInvalidSettingsRecordsParseError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
