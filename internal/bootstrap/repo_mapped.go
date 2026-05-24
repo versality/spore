@@ -95,6 +95,7 @@ func detectRepoMapped(root string) (string, error) {
 	if len(configs.Written) > 0 {
 		notes += fmt.Sprintf("; installed %d config file(s)", len(configs.Written))
 	}
+	notes += "; " + hookSourceConfigReadiness(root, "")
 	return notes, nil
 }
 
