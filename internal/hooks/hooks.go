@@ -2,13 +2,15 @@
 // (PreToolUse, Stop, ...) maps to a Go function that takes the hook
 // request, evaluates whatever policy applies, and returns a decision
 // the harness writes back to the calling agent on stdout. Claude Code
-// and Codex share the same JSON envelope shape, so the same entry
-// points serve both.
+// and Codex are close enough for shared Spore handlers, but their
+// vendor contracts remain separate:
+// https://code.claude.com/docs/en/hooks and
+// https://developers.openai.com/codex/hooks.
 //
 // The kernel ships JSON-protocol types, a PreToolUse decider that
 // blocks forbidden bash patterns, and a no-op Stop. Wiring them as
-// actual hooks is up to the consumer (`.claude/settings.json` for
-// Claude Code, `.codex/hooks.json` for Codex); the kernel just
+// actual hooks is up to the consumer (`.claude/settings.local.json`
+// for Claude Code, `.codex/hooks.json` for Codex); the kernel just
 // provides the implementations.
 package hooks
 

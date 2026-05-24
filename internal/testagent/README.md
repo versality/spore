@@ -52,3 +52,11 @@ This harness lands the mock agent plan in these commits:
 - `testagent: support completion and evidence fixtures`
 - `testagent: add coordinator-mode fake agent`
 - `testagent: document fake agent usage`
+
+## External testagent boundary
+
+Spore also has a gated `external_testagent` suite for
+https://github.com/paultyng/testagent. Use it for vendor CLI argv and
+Claude rendered settings validation. Keep Spore's internal fake for
+worktree-scoped Codex `.codex/hooks.json` coverage until upstream
+testagent reads that documented project-local hook source.
