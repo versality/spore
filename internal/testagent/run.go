@@ -133,6 +133,7 @@ func Run(ctx context.Context, opts Options) int {
 		fmt.Fprintf(opts.Stdout, "fake %s one turn\n", opts.Provider)
 		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
 		runStopHooks(ctx, rec, opts.Provider)
+		drainInbox(rec, opts.Provider, mode)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeWorkThenExit:
@@ -147,6 +148,7 @@ func Run(ctx context.Context, opts Options) int {
 			_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: strconv.Itoa(i)})
 		}
 		runStopHooks(ctx, rec, opts.Provider)
+		drainInbox(rec, opts.Provider, mode)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	default:
