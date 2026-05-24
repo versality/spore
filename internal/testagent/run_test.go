@@ -201,6 +201,75 @@ func TestRunOneTurnExitsZero(t *testing.T) {
 	}
 }
 
+func TestRunImmediateExitModes(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want int
+	}{
+		{mode: ModeExitZero, want: 0},
+		{mode: ModeExitNonzero, want: 127},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "events.jsonl")
+			t.Setenv(EnvMode, tc.mode)
+			t.Setenv(EnvEventLog, logPath)
+
+			code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+			if code != tc.want {
+				t.Fatalf("Run exit = %d, want %d", code, tc.want)
+			}
+			if len(readEvents(t, logPath)) < 2 {
+				t.Fatal("event log too short")
+			}
+		})
+	}
+}
+
+func TestRunCrashAfterReadyWritesReadyThenFails(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "events.jsonl")
+	readyPath := filepath.Join(dir, "ready")
+	t.Setenv(EnvMode, ModeCrashReady)
+	t.Setenv(EnvEventLog, logPath)
+	t.Setenv(EnvReadyFile, readyPath)
+
+	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
+	if code == 0 {
+		t.Fatal("Run exit = 0, want non-zero")
+	}
+	if _, err := os.Stat(readyPath); err != nil {
+		t.Fatalf("ready file: %v", err)
+	}
+	if got := eventTypes(readEvents(t, logPath)); got != "start,ready,error" {
+		t.Fatalf("events = %s", got)
+	}
+}
+
+func TestRunHangBeforeReadyNeverTouchesReady(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "events.jsonl")
+	readyPath := filepath.Join(dir, "ready")
+	t.Setenv(EnvMode, ModeHangReady)
+	t.Setenv(EnvEventLog, logPath)
+	t.Setenv(EnvReadyFile, readyPath)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	code := Run(ctx, Options{Provider: "codex", Now: time.Now})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	if _, err := os.Stat(readyPath); !os.IsNotExist(err) {
+		t.Fatalf("ready file err = %v, want not exist", err)
+	}
+	if got := eventTypes(readEvents(t, logPath)); got != "start,hang,stop" {
+		t.Fatalf("events = %s", got)
+	}
+}
+
 func TestRunMissingEventLogFailsClearly(t *testing.T) {
 	t.Setenv(EnvMode, ModeWorkThenExit)
 	var stderr bytes.Buffer

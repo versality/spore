@@ -60,6 +60,22 @@ func Run(ctx context.Context, opts Options) int {
 	}
 	recordLaunchContract(rec, opts.Provider, mode)
 	switch mode {
+	case ModeExitZero:
+		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
+		return 0
+	case ModeExitNonzero:
+		_ = rec.event(Event{Type: "error", Provider: opts.Provider, Mode: mode, Error: "exit-immediately-nonzero"})
+		return 127
+	case ModeCrashReady:
+		touch(os.Getenv(EnvReadyFile))
+		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
+		_ = rec.event(Event{Type: "error", Provider: opts.Provider, Mode: mode, Error: "crash-after-ready"})
+		return 1
+	case ModeHangReady:
+		_ = rec.event(Event{Type: "hang", Provider: opts.Provider, Mode: mode, Message: "waiting without ready"})
+		<-ctx.Done()
+		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode, Message: ctx.Err().Error()})
+		return 0
 	case ModeIdle:
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
@@ -237,7 +253,8 @@ func turnLimit() int {
 
 func IsMode(mode string) bool {
 	switch mode {
-	case ModeIdle, ModeProgress, ModeWaitForFile, ModeOneTurn, ModeWorkThenExit:
+	case ModeIdle, ModeProgress, ModeWaitForFile, ModeOneTurn, ModeWorkThenExit,
+		ModeExitZero, ModeExitNonzero, ModeCrashReady, ModeHangReady:
 		return true
 	default:
 		return false

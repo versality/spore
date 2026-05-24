@@ -17,6 +17,10 @@ const (
 	ModeWaitForFile  = "wait-for-file"
 	ModeOneTurn      = "one-turn"
 	ModeWorkThenExit = "work-then-exit"
+	ModeExitZero     = "exit-immediately-zero"
+	ModeExitNonzero  = "exit-immediately-nonzero"
+	ModeCrashReady   = "crash-after-ready"
+	ModeHangReady    = "hang-before-ready"
 )
 
 type Event struct {
