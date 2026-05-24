@@ -514,6 +514,45 @@ func TestStartDetectsAgentExitDuringSettle(t *testing.T) {
 	}
 }
 
+func TestEnsureExistingDeadPaneIsNotHealthy(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skipf("tmux not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	session := "dead-pane-test-" + strings.ReplaceAll(filepath.Base(repo), "-", "")
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: active\nslug: x\ntitle: X\nsession: "+session+"\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", session, "sh", "-c", "read line").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tmux new-session: %v: %s", err, out)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
+	})
+	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "set-option", "-t", session, "remain-on-exit", "on").CombinedOutput(); err != nil {
+		t.Fatalf("tmux remain-on-exit: %v: %s", err, out)
+	}
+	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "send-keys", "-t", session, "done", "Enter").CombinedOutput(); err != nil {
+		t.Fatalf("tmux send-keys: %v: %s", err, out)
+	}
+	time.Sleep(workerSpawnSettleDelay)
+
+	_, err = Ensure(tasksDir, "x", nil)
+	if err == nil || !strings.Contains(err.Error(), "dead pane") {
+		t.Fatalf("Ensure err = %v, want dead pane", err)
+	}
+}
+
 func TestWorkerAgentCommandCodexUsesEffortPolicy(t *testing.T) {
 	t.Setenv("SPORE_AGENT_BINARY", "")
 	m := frontmatter.Meta{

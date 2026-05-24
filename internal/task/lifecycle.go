@@ -518,6 +518,11 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		session = meta.Session
 	}
 	if tmuxsess.Has(session) {
+		if dead, err := sessionHasDeadPane(session); err != nil {
+			return "", err
+		} else if dead {
+			return "", fmt.Errorf("worker session %s has a dead pane", session)
+		}
 		return session, nil
 	}
 	if err := preflightWorkerExecution(meta, projectRoot); err != nil {
