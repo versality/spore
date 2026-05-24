@@ -168,6 +168,52 @@ func TestDoctorReportsLifecycleHookTimeoutAndKindsDrift(t *testing.T) {
 	}
 }
 
+func TestInstallPreservesPartialLifecycleConfigAndDoctorWarns(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	writeDoctorFile(t, "spore.toml", "[fleet.workers]\ndefault = \"codex\"\n")
+	installDoctorTools(t, "codex")
+	partial := "{\n" +
+		"  \"events\": {\n" +
+		"    \"Stop\": [\n" +
+		"      {\n" +
+		"        \"command\": \"spore hooks watch-inbox\",\n" +
+		"        \"timeout\": 604800,\n" +
+		"        \"asyncRewake\": true,\n" +
+		"        \"kinds\": [\"coordinator\", \"worker\"]\n" +
+		"      }\n" +
+		"    ]\n" +
+		"  }\n" +
+		"}\n"
+	sourcePath := filepath.Join("configs", "codex", "hooks-config.json")
+	writeDoctorFile(t, sourcePath, partial)
+
+	if code := runInstall([]string{"--root", root}); code != 0 {
+		t.Fatalf("install exit code = %d, want 0", code)
+	}
+	body, err := os.ReadFile(filepath.Join(root, sourcePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != partial {
+		t.Fatalf("install rewrote partial config:\n%s", body)
+	}
+
+	code, stdout, _ := captureFn(t, func() int { return runDoctor([]string{"--json"}) })
+	if code == 0 {
+		t.Fatal("doctor exit = 0, want lifecycle warning")
+	}
+	if !strings.Contains(stdout, `"code": "missing-lifecycle-hook"`) {
+		t.Fatalf("stdout = %s", stdout)
+	}
+	if !strings.Contains(stdout, "spore coordinator token-monitor") {
+		t.Fatalf("stdout = %s", stdout)
+	}
+	if strings.Contains(stdout, "missing spore hooks watch-inbox") {
+		t.Fatalf("watch-inbox hook reported as missing:\n%s", stdout)
+	}
+}
+
 func TestDoctorAllowsCustomExtraHooks(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
