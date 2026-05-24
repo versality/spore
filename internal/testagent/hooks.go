@@ -13,7 +13,7 @@ import (
 )
 
 type codexHooksFile struct {
-	Events map[string][]hookCommand `json:"events"`
+	Hooks map[string][]claudeHookGroup `json:"hooks"`
 }
 
 type hookCommand struct {
@@ -42,8 +42,10 @@ func runCodexHooks(ctx context.Context, rec recorder, event string) {
 		_ = rec.event(Event{Type: "hook-parse-error", Provider: "codex", Fields: map[string]string{"event": event, "path": path}, Error: err.Error()})
 		return
 	}
-	for _, hook := range cfg.Events[event] {
-		runHookCommand(ctx, rec, "codex", event, hook)
+	for _, group := range cfg.Hooks[event] {
+		for _, hook := range group.Hooks {
+			runHookCommand(ctx, rec, "codex", event, hook)
+		}
 	}
 }
 

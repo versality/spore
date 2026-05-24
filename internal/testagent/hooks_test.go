@@ -14,7 +14,7 @@ func TestRunCodexExecutesRuntimeHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	outPath := filepath.Join(dir, "hooks.out")
-	hooks := `{"events":{"SessionStart":[{"command":"printf session >> ` + outPath + `","timeout":10}],"PreToolUse":[{"command":"printf pre >> ` + outPath + `","timeout":10}],"Stop":[{"command":"printf stop >> ` + outPath + `","timeout":10}]}}`
+	hooks := `{"hooks":{"SessionStart":[{"hooks":[{"command":"printf session >> ` + outPath + `","timeout":10}]}],"PreToolUse":[{"hooks":[{"command":"printf pre >> ` + outPath + `","timeout":10}]}],"Stop":[{"hooks":[{"command":"printf stop >> ` + outPath + `","timeout":10}]}]}}`
 	if err := os.WriteFile(filepath.Join(hooksDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
 		t.Fatal(err)
 	}
