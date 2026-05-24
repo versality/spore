@@ -136,7 +136,7 @@ func TestSummarizeFloorAction(t *testing.T) {
 	if !strings.Contains(s.Actions[0], "active-live=2 below floor=6") {
 		t.Fatalf("floor action=%q", s.Actions[0])
 	}
-	if !strings.Contains(s.Actions[0], "spore task new --draft") {
+	if !strings.Contains(s.Actions[0], "spore task new") {
 		t.Fatalf("floor action must use spore CLI, got %q", s.Actions[0])
 	}
 }

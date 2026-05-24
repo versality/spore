@@ -60,7 +60,6 @@ Subcommands:
   migrate-status <from> <to>   Rewrite every tasks/*.md status==<from> to <to>.
 
 Flags for 'new':
-  --draft                      Set status=draft (default).
   --start                      Set status=active and launch agent after creation.
   --body <text>                Inline body text (skips editor).
   --body-stdin                 Read body from stdin (skips editor).

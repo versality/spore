@@ -540,14 +540,14 @@ func markMinted(stateDir, hash, now, title string) error {
 	return err
 }
 
-// MintViaWT shells out to `wt task new --draft <title> --body-stdin
+// MintViaWT shells out to `wt task new <title> --body-stdin
 // --no-edit`, piping body on stdin. It is the production wiring for
 // Config.Mint. Tests inject their own MintFunc.
 func MintViaWT(hash, title, body string) error {
 	if _, err := exec.LookPath("wt"); err != nil {
 		return fmt.Errorf("wt: %w", err)
 	}
-	cmd := exec.Command("wt", "task", "new", "--draft", title, "--body-stdin", "--no-edit")
+	cmd := exec.Command("wt", "task", "new", title, "--body-stdin", "--no-edit")
 	cmd.Stdin = strings.NewReader(body)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard

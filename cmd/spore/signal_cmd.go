@@ -40,7 +40,7 @@ scan only:
 Auto-mint:
   When SPORE_SIGNAL_AUTO_MINT=1 (and not --dry-run), every ticket-candidate
   that has not been minted before runs:
-    wt task new --draft "<title>" --body-stdin --no-edit
+    wt task new "<title>" --body-stdin --no-edit
 `
 
 func runSignal(args []string) int {
