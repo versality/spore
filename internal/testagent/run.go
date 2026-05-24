@@ -59,6 +59,7 @@ func Run(ctx context.Context, opts Options) int {
 		return 2
 	}
 	recordLaunchContract(rec, opts.Provider, mode)
+	recordCoordinatorContract(rec, opts.Provider, mode)
 	if opts.Provider == "codex" {
 		runCodexHooks(ctx, rec, "SessionStart")
 	}
