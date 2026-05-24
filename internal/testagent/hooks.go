@@ -61,7 +61,7 @@ func codexHookPayload(event string) string {
 		"hook_event_name": event,
 		"session_id":      "testagent-session",
 		"cwd":             cwd(),
-		"transcript_path":  filepath.Join(os.TempDir(), "testagent-transcript-testagent-session.jsonl"),
+		"transcript_path": filepath.Join(os.TempDir(), "testagent-transcript-testagent-session.jsonl"),
 		"permission_mode": "default",
 	}
 	switch event {
