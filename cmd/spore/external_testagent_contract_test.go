@@ -21,7 +21,7 @@ func TestExternalTestagentAcceptsWorkerArgv(t *testing.T) {
 		args []string
 	}{
 		{name: "claude", args: append([]string{"claude"}, claudepolicy.InteractiveArgs("", "")[1:]...)},
-		{name: "codex", args: append([]string{"codex"}, codexpolicy.InteractiveArgs("", "medium")[1:]...)},
+		{name: "codex", args: append([]string{"codex"}, externalTestagentCodexArgs("medium")...)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,6 +33,13 @@ func TestExternalTestagentAcceptsWorkerArgv(t *testing.T) {
 				t.Fatalf("testagent %s argv rejected: %v: %s", tt.name, err, out)
 			}
 		})
+	}
+}
+
+func TestExternalTestagentDocumentsCodexArgvGap(t *testing.T) {
+	args := codexpolicy.InteractiveArgs("", "medium")
+	if !containsArg(args, "--dangerously-bypass-hook-trust") {
+		t.Fatalf("Spore Codex argv missing hook trust bypass: %#v", args)
 	}
 }
 
@@ -68,6 +75,26 @@ func TestExternalTestagentDocumentsCodexHookConfigGap(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, ".codex", "config.toml")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected codex config.toml state: %v", err)
 	}
+}
+
+func externalTestagentCodexArgs(effort string) []string {
+	var out []string
+	for _, arg := range codexpolicy.InteractiveArgs("", effort)[1:] {
+		if arg == "--dangerously-bypass-hook-trust" {
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }
 
 func externalTestagentBin(t *testing.T) string {
