@@ -12,6 +12,7 @@ import (
 	"github.com/versality/spore/internal/agentpreflight"
 	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/hooks/settings"
+	"github.com/versality/spore/internal/lifecyclehooks"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -105,6 +106,7 @@ func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
 		if _, err := os.Stat(source); os.IsNotExist(err) {
 			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-codex-hooks-config", Tool: "codex", Message: "configs/codex/hooks-config.json is missing"})
 		} else {
+			issues = append(issues, lifecycleSourceIssues("codex", source)...)
 			issues = append(issues, runtimeDriftIssue("codex", source, "", runtime, task.SessionKindWorker)...)
 		}
 	}
@@ -115,10 +117,67 @@ func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
 		if _, err := os.Stat(source); os.IsNotExist(err) {
 			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-claude-hooks-config", Tool: "claude", Message: "configs/claude/hooks-config.json is missing"})
 		} else {
+			issues = append(issues, lifecycleSourceIssues("claude", source)...)
 			issues = append(issues, runtimeDriftIssue("claude", source, extras, runtime, task.SessionKindWorker)...)
 		}
 	}
 	return issues
+}
+
+func lifecycleSourceIssues(driver, source string) []agentpreflight.Issue {
+	cfg, ok, err := settings.LoadConfig(source)
+	if err != nil {
+		return []agentpreflight.Issue{{Severity: agentpreflight.SeverityWarn, Code: "lifecycle-hooks-source-invalid", Tool: driver, Message: err.Error()}}
+	}
+	if !ok {
+		return nil
+	}
+	var issues []agentpreflight.Issue
+	for _, hook := range lifecyclehooks.ForDriver(driver) {
+		got, found := lifecycleSourceFind(cfg, hook.Command)
+		if !found {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-lifecycle-hook", Tool: driver, Message: source + " missing " + hook.Command})
+			continue
+		}
+		if got.event != hook.Event {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "lifecycle-hook-event-drift", Tool: driver, Message: hook.Command + " is under " + got.event + ", want " + hook.Event})
+		}
+		if got.bin.Timeout != hook.Timeout {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "lifecycle-hook-timeout-drift", Tool: driver, Message: hook.Command + " timeout drift"})
+		}
+		if !equalStringSlices(got.bin.Kinds, hook.Kinds) {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "lifecycle-hook-kinds-drift", Tool: driver, Message: hook.Command + " kinds drift"})
+		}
+	}
+	return issues
+}
+
+type lifecycleSourceHook struct {
+	event string
+	bin   settings.Bin
+}
+
+func lifecycleSourceFind(cfg settings.Config, command string) (lifecycleSourceHook, bool) {
+	for event, bins := range cfg.Events {
+		for _, bin := range bins {
+			if bin.Command == command {
+				return lifecycleSourceHook{event: event, bin: bin}, true
+			}
+		}
+	}
+	return lifecycleSourceHook{}, false
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func runtimeDriftIssue(driver, source, extras, runtime, kind string) []agentpreflight.Issue {
