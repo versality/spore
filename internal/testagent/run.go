@@ -63,6 +63,12 @@ func Run(ctx context.Context, opts Options) int {
 		runCodexHooks(ctx, rec, "SessionStart")
 	}
 	switch mode {
+	case ModeEvidence, ModeCommitChange, ModeRequestMerge, ModeSelfDone:
+		code := runCompletionMode(ctx, rec, opts.Provider, mode)
+		if code == 0 {
+			_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
+		}
+		return code
 	case ModeExitZero:
 		runStopHooks(ctx, rec, opts.Provider)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
@@ -279,7 +285,8 @@ func turnLimit() int {
 func IsMode(mode string) bool {
 	switch mode {
 	case ModeIdle, ModeProgress, ModeWaitForFile, ModeOneTurn, ModeWorkThenExit,
-		ModeExitZero, ModeExitNonzero, ModeCrashReady, ModeHangReady:
+		ModeExitZero, ModeExitNonzero, ModeCrashReady, ModeHangReady,
+		ModeEvidence, ModeCommitChange, ModeRequestMerge, ModeSelfDone:
 		return true
 	default:
 		return false

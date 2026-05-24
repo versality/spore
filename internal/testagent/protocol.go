@@ -22,6 +22,10 @@ const (
 	ModeExitNonzero  = "exit-immediately-nonzero"
 	ModeCrashReady   = "crash-after-ready"
 	ModeHangReady    = "hang-before-ready"
+	ModeEvidence     = "complete-with-evidence"
+	ModeCommitChange = "commit-change"
+	ModeRequestMerge = "request-operator-merge"
+	ModeSelfDone     = "self-done"
 )
 
 type Event struct {
