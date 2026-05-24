@@ -286,6 +286,38 @@ func TestDoctorAllowsCustomExtraHooks(t *testing.T) {
 	}
 }
 
+func TestDoctorChecksEveryConfiguredWorkerAgent(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	writeDoctorFile(t, "spore.toml", `
+[fleet.workers]
+default = "claude"
+
+[fleet.workers.ratio]
+claude = 50
+codex = 50
+`)
+	writeDoctorFile(t, filepath.Join("configs", "claude", "hooks-config.json"), string(mustReadRepoFile(t, filepath.Join("configs", "claude", "hooks-config.json"))))
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"git":    "#!/bin/sh\nexit 0\n",
+			"tmux":   "#!/bin/sh\nexit 0\n",
+			"spore":  "#!/bin/sh\nexit 0\n",
+			"claude": "#!/bin/sh\nexit 0\n",
+			"codex":  "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	code, stdout, _ := captureFn(t, func() int { return runDoctor([]string{"--json"}) })
+	if code == 0 {
+		t.Fatal("doctor exit = 0, want missing codex hook config")
+	}
+	if !strings.Contains(stdout, `"code": "missing-codex-hooks-config"`) {
+		t.Fatalf("stdout = %s", stdout)
+	}
+}
+
 func writeDoctorFile(t *testing.T, rel, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(rel), 0o755); err != nil {

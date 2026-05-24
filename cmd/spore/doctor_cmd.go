@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/versality/spore/internal/agentpreflight"
 	"github.com/versality/spore/internal/fleet"
@@ -78,15 +79,14 @@ func buildDoctorReport(root string) doctorReport {
 	var issues []agentpreflight.Issue
 	issues = append(issues, checker.CheckRequiredTools(root)...)
 	issues = append(issues, checker.CheckCoordinatorAgent(root)...)
-	worker := frontmatter.Meta{}
+	workerAgents := []string{fleet.DefaultWorkerAgent}
 	if cfg, err := fleet.LoadWorkersConfig(root); err == nil {
-		worker.Agent = fleet.SelectAgent(worker, cfg, nil)
+		workerAgents = configuredWorkerAgents(cfg)
 	}
-	if worker.Agent == "" {
-		worker.Agent = fleet.DefaultWorkerAgent
+	for _, agent := range workerAgents {
+		issues = append(issues, checker.CheckWorkerAgent(frontmatter.Meta{Agent: agent}, root)...)
+		issues = append(issues, hookConfigIssues(root, agent)...)
 	}
-	issues = append(issues, checker.CheckWorkerAgent(worker, root)...)
-	issues = append(issues, hookConfigIssues(root, worker.Agent)...)
 	issues = dedupeIssues(issues)
 	ok := true
 	for _, issue := range issues {
@@ -96,6 +96,30 @@ func buildDoctorReport(root string) doctorReport {
 		}
 	}
 	return doctorReport{OK: ok, Issues: issues}
+}
+
+func configuredWorkerAgents(cfg fleet.WorkersConfig) []string {
+	seen := map[string]bool{}
+	var agents []string
+	add := func(agent string) {
+		if agent == "" || seen[agent] {
+			return
+		}
+		seen[agent] = true
+		agents = append(agents, agent)
+	}
+	add(cfg.Default)
+	for agent := range cfg.Ratio {
+		add(agent)
+	}
+	for _, agent := range cfg.Rules {
+		add(agent)
+	}
+	if len(agents) == 0 {
+		add(fleet.DefaultWorkerAgent)
+	}
+	sort.Strings(agents)
+	return agents
 }
 
 func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
