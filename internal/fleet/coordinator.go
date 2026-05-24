@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/versality/spore/internal/agentpreflight"
 	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/tmuxsess"
@@ -89,6 +90,9 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		}
 	}
 	agent := coordinatorAgent(tomlCfg)
+	if err := preflightCoordinator(projectRoot); err != nil {
+		return "", false, err
+	}
 	rolePath := CoordinatorRolePath(projectRoot)
 	project, err := task.ProjectName(projectRoot)
 	if err != nil {
@@ -146,6 +150,26 @@ func EnsureCoordinator(projectRoot string) (string, bool, error) {
 		)
 	}
 	return session, true, nil
+}
+
+func preflightCoordinator(projectRoot string) error {
+	checker := agentpreflight.Checker{}
+	issues := append(checker.CheckRequiredTools(projectRoot), checker.CheckCoordinatorAgent(projectRoot)...)
+	var blockers []string
+	for _, issue := range issues {
+		if issue.Severity != agentpreflight.SeverityError {
+			continue
+		}
+		if issue.Tool != "" {
+			blockers = append(blockers, issue.Code+":"+issue.Tool)
+		} else {
+			blockers = append(blockers, issue.Code)
+		}
+	}
+	if len(blockers) == 0 {
+		return nil
+	}
+	return fmt.Errorf("coordinator preflight failed: %s", strings.Join(blockers, ", "))
 }
 
 // coordinatorAgent picks the binary the coordinator session execs.

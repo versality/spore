@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/versality/spore/internal/testpath"
 	"github.com/versality/spore/internal/tmuxsess"
 )
 
@@ -192,6 +193,30 @@ func TestCoordinatorAgentPrecedence(t *testing.T) {
 				t.Errorf("coordinatorAgent(%+v) = %q, want %q", cfg, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEnsureCoordinatorMissingDriverFailsBeforeTmux(t *testing.T) {
+	requireToolchain(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "spore.toml"), []byte("[coordinator]\ndriver = \"codex\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git", "tmux", "sh"},
+		FakeTools: map[string]string{
+			"spore":  "#!/bin/sh\nexit 0\n",
+			"claude": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	session, spawned, err := EnsureCoordinator(dir)
+	if err == nil || !strings.Contains(err.Error(), "missing-coordinator-agent:codex") {
+		t.Fatalf("EnsureCoordinator session=%q spawned=%v err=%v, want codex preflight", session, spawned, err)
+	}
+	if tmuxsess.Has(CoordinatorSessionName(dir)) {
+		t.Fatalf("coordinator session exists after preflight failure")
 	}
 }
 
