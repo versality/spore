@@ -420,7 +420,7 @@ func TestStartMissingSelectedAgentLeavesDraft(t *testing.T) {
 	h := testpath.Install(t, testpath.Options{
 		RealTools: []string{"git"},
 		FakeTools: map[string]string{
-			"tmux":  "#!/bin/sh\nexit 0\n",
+			"tmux":  "#!/bin/sh\nexit 1\n",
 			"spore": "#!/bin/sh\nexit 0\n",
 		},
 	})
@@ -433,6 +433,42 @@ func TestStartMissingSelectedAgentLeavesDraft(t *testing.T) {
 	}
 	if status := readStatus(t, taskPath); status != "draft" {
 		t.Fatalf("status = %q, want draft", status)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree stat err = %v, want not exist", err)
+	}
+}
+
+func TestEnsureMissingSelectedAgentDoesNotCreateWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: active\nslug: x\ntitle: X\nagent: codex\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{
+			"tmux":  "#!/bin/sh\nexit 1\n",
+			"spore": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+	t.Setenv("SPORE_AGENT_BINARY", "")
+
+	_, err := Ensure(tasksDir, "x", nil)
+	if err == nil || !strings.Contains(err.Error(), "missing-worker-agent:codex") {
+		t.Fatalf("Ensure err = %v, want missing codex preflight", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x")); !os.IsNotExist(err) {
 		t.Fatalf("worktree stat err = %v, want not exist", err)

@@ -508,6 +508,19 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	session, err := tmuxSessionName(projectRoot, slug, meta)
+	if err != nil {
+		return "", err
+	}
+	if meta.Session != "" {
+		session = meta.Session
+	}
+	if tmuxsess.Has(session) {
+		return session, nil
+	}
+	if err := preflightWorkerExecution(meta, projectRoot); err != nil {
+		return "", err
+	}
 	worktree := filepath.Join(projectRoot, ".worktrees", slug)
 	branch := "wt/" + slug
 
@@ -544,16 +557,6 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", worktreeConflictError(state, worktree, branch, projectRoot)
 	}
 
-	session, err := tmuxSessionName(projectRoot, slug, meta)
-	if err != nil {
-		return "", err
-	}
-	if meta.Session != "" {
-		session = meta.Session
-	}
-	if tmuxsess.Has(session) {
-		return session, nil
-	}
 	agent, err := workerAgentCommand(meta)
 	if err != nil {
 		return "", err
