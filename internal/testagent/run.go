@@ -134,6 +134,7 @@ func Run(ctx context.Context, opts Options) int {
 		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
 		runStopHooks(ctx, rec, opts.Provider)
 		drainInbox(rec, opts.Provider, mode)
+		writeTranscript(rec, opts.Provider, mode)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeWorkThenExit:
@@ -149,6 +150,7 @@ func Run(ctx context.Context, opts Options) int {
 		}
 		runStopHooks(ctx, rec, opts.Provider)
 		drainInbox(rec, opts.Provider, mode)
+		writeTranscript(rec, opts.Provider, mode)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	default:

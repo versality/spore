@@ -8,6 +8,7 @@ const (
 	EnvReadyFile  = "SPORE_FAKE_AGENT_READY_FILE"
 	EnvExitFile   = "SPORE_FAKE_AGENT_EXIT_FILE"
 	EnvTranscript = "SPORE_FAKE_AGENT_TRANSCRIPT"
+	EnvTokenTotal = "SPORE_FAKE_AGENT_TOKEN_TOTAL"
 	EnvTurnLimit  = "SPORE_FAKE_AGENT_TURN_LIMIT"
 )
 
@@ -50,5 +51,6 @@ var LaunchEnvKeys = []string{
 	EnvReadyFile,
 	EnvExitFile,
 	EnvTranscript,
+	EnvTokenTotal,
 	EnvTurnLimit,
 }
