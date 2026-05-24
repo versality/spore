@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/versality/spore/evidence"
+	"github.com/versality/spore/internal/agentpreflight"
 	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/consumerclaim"
@@ -61,15 +62,18 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 	default:
 		return "", fmt.Errorf("task %s: unexpected status %q", slug, prev)
 	}
+	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
+	if err != nil {
+		return "", err
+	}
+	if err := preflightWorkerExecution(m, projectRoot); err != nil {
+		return "", err
+	}
 	m.Status = StatusActive
 	if err := WriteAtomic(path, frontmatter.Write(m, body), 0o644); err != nil {
 		return "", err
 	}
 
-	projectRoot, err := ProjectRootFromTasksDir(tasksDir)
-	if err != nil {
-		return "", err
-	}
 	session := taskTmuxSession(tasksDir, projectRoot, slug)
 	// Pause leaves the session alive for the operator; Start
 	// replaces it so a resume gets a fresh agent and new-session
@@ -96,6 +100,26 @@ func Ensure(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", fmt.Errorf("task %s: already done", slug)
 	}
 	return ensureSession(tasksDir, slug, extraEnv)
+}
+
+func preflightWorkerExecution(m frontmatter.Meta, projectRoot string) error {
+	checker := agentpreflight.Checker{}
+	issues := append(checker.CheckRequiredTools(projectRoot), checker.CheckWorkerAgent(m, projectRoot)...)
+	var blockers []string
+	for _, issue := range issues {
+		if issue.Severity != agentpreflight.SeverityError {
+			continue
+		}
+		if issue.Tool != "" {
+			blockers = append(blockers, issue.Code+":"+issue.Tool)
+		} else {
+			blockers = append(blockers, issue.Code)
+		}
+	}
+	if len(blockers) > 0 {
+		return fmt.Errorf("worker preflight failed: %s", strings.Join(blockers, ", "))
+	}
+	return nil
 }
 
 // Reap kills every tmux session matching slug for the project (the
