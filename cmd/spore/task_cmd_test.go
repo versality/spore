@@ -246,6 +246,21 @@ func TestRunTaskNewReadyAgentNoWarning(t *testing.T) {
 	}
 }
 
+func TestInboxHookHintWarnsForActiveCodexWithoutRuntimeHooks(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := os.MkdirAll("tasks", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("tasks", "x.md"), []byte("---\nstatus: active\nslug: x\ntitle: X\nagent: codex\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hint := inboxHookHint("tasks", "x")
+	if !strings.Contains(hint, "wake is body-free") || !strings.Contains(hint, ".codex/hooks.json") {
+		t.Fatalf("hint = %q", hint)
+	}
+}
+
 func TestResolveTasksDirFromLinkedWorktree(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)

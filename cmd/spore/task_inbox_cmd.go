@@ -4,9 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 
+	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/task"
+	"github.com/versality/spore/internal/task/frontmatter"
 	inboxpkg "github.com/versality/spore/internal/task/inbox"
 )
 
@@ -21,7 +24,43 @@ func runTaskTell(args []string) error {
 	if err := task.SelfBlockOnCoordinatorTell(resolveTasksDir(), target, msg, callerSlugFromEnv()); err != nil {
 		return err
 	}
+	if hint := inboxHookHint(resolveTasksDir(), target); hint != "" {
+		fmt.Fprintln(os.Stderr, hint)
+	}
 	return nil
+}
+
+func inboxHookHint(tasksDir, slug string) string {
+	raw, err := os.ReadFile(filepath.Join(tasksDir, slug+".md"))
+	if err != nil {
+		return ""
+	}
+	m, _, err := frontmatter.Parse(raw)
+	if err != nil || !task.IsActive(m.Status) {
+		return ""
+	}
+	root, err := resolveMainRoot()
+	if err != nil {
+		return ""
+	}
+	agent := m.Agent
+	if agent == "" {
+		agent = fleet.DefaultWorkerAgent
+	}
+	var runtime string
+	switch agent {
+	case "codex":
+		runtime = filepath.Join(root, ".worktrees", slug, ".codex", "hooks.json")
+	case "claude", "claude-code":
+		runtime = filepath.Join(root, ".worktrees", slug, ".claude", "settings.local.json")
+	default:
+		return ""
+	}
+	if _, err := os.Stat(runtime); os.IsNotExist(err) {
+		rel, _ := filepath.Rel(root, runtime)
+		return "warning[inbox-hooks-missing]: wake is body-free; " + filepath.ToSlash(rel) + " is missing, so the worker may not drain inbox automatically"
+	}
+	return ""
 }
 
 // callerSlugFromEnv returns the slug of the worker session invoking
