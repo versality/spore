@@ -2,11 +2,12 @@
 
 claude-code reads one global `~/.claude/settings.json` per user, and
 its hook bindings fire on every claude session the operator runs on
-that host. codex is shaped the same way around `~/.codex/hooks.json`.
-A consumer that wires fleet-specific Stop hooks (coordinator inbox
-watchers, worker-token monitors, ration reminders) into either global
-file leaks those hooks into operator-interactive sessions, where they
-are noise at best and corruption at worst.
+that host. Codex supports hook configuration in user config and
+project-local `.codex/hooks.json`. A consumer that wires
+fleet-specific Stop hooks (coordinator inbox watchers, worker-token
+monitors, ration reminders) into global config leaks those hooks into
+operator-interactive sessions, where they are noise at best and
+corruption at worst.
 
 Spore's spore-internal answer is a session-kind discriminator: spore's
 tmux spawners tag each session with `WT_SESSION_KIND=coordinator` or

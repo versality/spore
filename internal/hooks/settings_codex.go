@@ -10,6 +10,7 @@ import (
 // blob from the same HookBin event map SettingsForKind consumes. The
 // JSON shape differs from claude's settings.json: codex reads a flat
 // top-level object `{"hooks": {...}}` with no $schema, no permissions.
+// Vendor contract: https://developers.openai.com/codex/hooks.
 // Same kind-filter and matcher-consolidation rules as SettingsForKind.
 //
 // When kind is non-empty, a HookBin is included only if its Kinds is

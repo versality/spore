@@ -31,8 +31,11 @@ func Settings(events map[string][]HookBin) ([]byte, error) {
 }
 
 // SettingsForKind emits a complete, deterministic settings.json blob
-// for claude-code. The events map keys are hook event names (Stop,
-// Notification, PostToolUse, UserPromptSubmit, PreToolUse, ...).
+// for claude-code. Vendor contract:
+// https://docs.anthropic.com/en/docs/claude-code/settings and
+// https://code.claude.com/docs/en/hooks. The events map keys are hook
+// event names (Stop, Notification, PostToolUse, UserPromptSubmit,
+// PreToolUse, ...).
 // Empty slices are omitted. Keys are sorted at every level.
 // Hooks with the same Matcher within one event are consolidated
 // into a single group.
