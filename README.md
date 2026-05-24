@@ -372,6 +372,8 @@ Main extension points:
   unresolved tradeoffs.
 - [docs/worker-dispatch.md](docs/worker-dispatch.md) - why workers
   are spawned through tmux and how the merge close path works.
+- [docs/task-state-failure-semantics.md](docs/task-state-failure-semantics.md)
+  - setup warnings, execution failures, fleet outcomes, and recovery.
 - [docs/evidence.md](docs/evidence.md) - the evidence contract for
   task close gates.
 - [docs/budget.md](docs/budget.md) - rolling Anthropic spend tracking
