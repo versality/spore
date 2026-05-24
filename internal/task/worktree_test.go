@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/versality/spore/internal/testpath"
 )
 
 func TestClassifyWorktree(t *testing.T) {
@@ -172,6 +174,15 @@ func TestEnsureRefusesDirNotRegistered(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
 	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{
+			"tmux":  "#!/bin/sh\nif [ \"$1\" = has-session ]; then exit 1; fi\nexit 0\n",
+			"spore": "#!/bin/sh\nexit 0\n",
+			"sleep": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
 
 	repo := t.TempDir()
 	t.Chdir(repo)
