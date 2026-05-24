@@ -115,6 +115,7 @@ func setupReadinessNotes(root string) string {
 		meta.Agent = cfg.Default
 	}
 	issues = append(issues, checker.CheckWorkerAgent(meta, root)...)
+	issues = append(issues, checker.CheckSetupToolHints()...)
 	lines := agentpreflight.WarningLines(issues)
 	if len(lines) == 0 {
 		return ""

@@ -112,6 +112,7 @@ func installReadinessWarnings(root string) []string {
 		meta.Agent = cfg.Default
 	}
 	issues = append(issues, checker.CheckWorkerAgent(meta, root)...)
+	issues = append(issues, checker.CheckSetupToolHints()...)
 	return agentpreflight.WarningLines(dedupeIssues(issues))
 }
 

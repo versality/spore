@@ -83,6 +83,25 @@ func (c Checker) CheckRequiredTools(projectRoot string) []Issue {
 	return issues
 }
 
+func (c Checker) CheckSetupToolHints() []Issue {
+	var issues []Issue
+	if missing := c.missingTools([]string{"gh", "age", "go", "gofmt", "just", "nix", "pgrep", "sh", "bash", "wt"}); len(missing) > 0 {
+		issues = append(issues, Issue{
+			Severity: SeverityWarn,
+			Code:     "missing-recommended-tools",
+			Message:  "recommended tools are not on PATH: " + strings.Join(missing, ", "),
+		})
+	}
+	if missing := c.missingTools([]string{"bwrap", "ssh", "scp", "rsync"}); len(missing) > 0 {
+		issues = append(issues, Issue{
+			Severity: SeverityWarn,
+			Code:     "missing-feature-tools",
+			Message:  "feature-specific tools are not on PATH: " + strings.Join(missing, ", "),
+		})
+	}
+	return issues
+}
+
 func (c Checker) CheckWorkerAgent(meta frontmatter.Meta, projectRoot string) []Issue {
 	tool := workerTool(meta, c.env("SPORE_AGENT_BINARY"))
 	issues := c.checkExecutable(tool, "missing-worker-agent", "selected worker agent "+tool+" is not on PATH")
@@ -145,6 +164,16 @@ func (c Checker) hasTool(tool string) bool {
 	}
 	_, err := look(tool)
 	return err == nil
+}
+
+func (c Checker) missingTools(tools []string) []string {
+	var missing []string
+	for _, tool := range tools {
+		if !c.hasTool(tool) {
+			missing = append(missing, tool)
+		}
+	}
+	return missing
 }
 
 func (c Checker) env(key string) string {

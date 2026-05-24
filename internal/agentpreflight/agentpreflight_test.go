@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -74,6 +75,26 @@ func TestCheckRequiredTools(t *testing.T) {
 	}
 }
 
+func TestCheckSetupToolHintsGroupsMissingTools(t *testing.T) {
+	c := fakeChecker("git", "tmux", "spore", "claude")
+	issues := c.CheckSetupToolHints()
+	assertIssue(t, issues, SeverityWarn, "missing-recommended-tools", "")
+	assertIssue(t, issues, SeverityWarn, "missing-feature-tools", "")
+	if !issueMessageContains(issues, "missing-recommended-tools", "bash") || !issueMessageContains(issues, "missing-recommended-tools", "go") {
+		t.Fatalf("issues = %+v, want recommended bash and go hints", issues)
+	}
+	if !issueMessageContains(issues, "missing-feature-tools", "bwrap") || !issueMessageContains(issues, "missing-feature-tools", "rsync") {
+		t.Fatalf("issues = %+v, want feature-specific bwrap and rsync hints", issues)
+	}
+}
+
+func TestCheckSetupToolHintsReady(t *testing.T) {
+	c := fakeChecker("gh", "age", "go", "gofmt", "just", "nix", "pgrep", "sh", "bash", "wt", "bwrap", "ssh", "scp", "rsync")
+	if issues := c.CheckSetupToolHints(); len(issues) != 0 {
+		t.Fatalf("issues = %+v, want none", issues)
+	}
+}
+
 func fakeChecker(tools ...string) Checker {
 	set := map[string]bool{}
 	for _, tool := range tools {
@@ -109,6 +130,15 @@ func hasIssueWithSeverity(issues []Issue, severity Severity, code, tool string) 
 func hasIssue(issues []Issue, code, tool string) bool {
 	for _, issue := range issues {
 		if issue.Code == code && issue.Tool == tool {
+			return true
+		}
+	}
+	return false
+}
+
+func issueMessageContains(issues []Issue, code, want string) bool {
+	for _, issue := range issues {
+		if issue.Code == code && strings.Contains(issue.Message, want) {
 			return true
 		}
 	}

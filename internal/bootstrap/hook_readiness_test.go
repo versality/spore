@@ -80,3 +80,27 @@ func TestDetectRepoMappedReportsSetupReadinessWarnings(t *testing.T) {
 		t.Fatalf("notes = %q, want codex readiness warning", notes)
 	}
 }
+
+func TestDetectRepoMappedReportsSetupToolHints(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), []byte("module x\n"))
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"git":    "#!/bin/sh\nexit 0\n",
+			"tmux":   "#!/bin/sh\nexit 0\n",
+			"spore":  "#!/bin/sh\nexit 0\n",
+			"claude": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	notes, err := detectRepoMapped(root)
+	if err != nil {
+		t.Fatalf("detectRepoMapped: %v", err)
+	}
+	for _, want := range []string{"missing-recommended-tools", "bash", "go", "missing-feature-tools", "bwrap", "rsync"} {
+		if !strings.Contains(notes, want) {
+			t.Fatalf("notes = %q, want %q", notes, want)
+		}
+	}
+}
