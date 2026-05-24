@@ -19,6 +19,7 @@ Usage:
 Copies bundled assets into the target checkout:
   - skill bodies (spore-bootstrap, diagram) into <root>/.claude/skills/
   - generic harness shell scripts into <root>/harness/
+  - missing hook source configs into <root>/configs/
 
 Idempotent: re-runs only rewrite files whose contents drifted from the
 embedded copy.
@@ -68,6 +69,11 @@ func runInstall(args []string) int {
 		fmt.Fprintln(os.Stderr, "spore install:", err)
 		return 1
 	}
+	configs, err := install.InstallIfMissing(dest, spore.BundledConfigs, "configs", "configs")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore install:", err)
+		return 1
+	}
 	for _, p := range skills.Written {
 		rel, _ := filepath.Rel(dest, p)
 		fmt.Printf("wrote %s\n", rel)
@@ -76,12 +82,16 @@ func runInstall(args []string) int {
 		rel, _ := filepath.Rel(dest, p)
 		fmt.Printf("wrote %s\n", rel)
 	}
-	total := len(skills.Written) + len(scripts.Written)
+	for _, p := range configs.Written {
+		rel, _ := filepath.Rel(dest, p)
+		fmt.Printf("wrote %s\n", rel)
+	}
+	total := len(skills.Written) + len(scripts.Written) + len(configs.Written)
 	if total == 0 {
 		fmt.Println("install: already up to date")
 	} else {
-		fmt.Printf("installed %d skill file(s) under %s/.claude/skills/, %d harness script(s) under %s/harness/\n",
-			len(skills.Written), dest, len(scripts.Written), dest)
+		fmt.Printf("installed %d skill file(s) under %s/.claude/skills/, %d harness script(s) under %s/harness/, %d config file(s) under %s/configs/\n",
+			len(skills.Written), dest, len(scripts.Written), dest, len(configs.Written), dest)
 	}
 	return 0
 }

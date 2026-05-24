@@ -25,6 +25,62 @@ type Result struct {
 	Skipped []string
 }
 
+// InstallIfMissing copies embedded files that do not exist yet. Existing
+// destination files are preserved byte-for-byte, even when they differ
+// from the embedded copy.
+func InstallIfMissing(root string, src embed.FS, srcPrefix, destSubpath string) (Result, error) {
+	var res Result
+	if root == "" {
+		return res, errors.New("install: root is empty")
+	}
+	if destSubpath == "" {
+		return res, errors.New("install: destSubpath is empty")
+	}
+
+	err := fs.WalkDir(src, srcPrefix, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(srcPrefix, p)
+		if err != nil {
+			return err
+		}
+		if filepath.Base(rel) == ".gitkeep" {
+			return nil
+		}
+		body, err := src.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", p, err)
+		}
+		mode := os.FileMode(0o644)
+		if bytes.HasPrefix(body, []byte("#!")) {
+			mode = 0o755
+		}
+		dest := filepath.Join(root, destSubpath, rel)
+		if _, err := os.Stat(dest); err == nil {
+			res.Skipped = append(res.Skipped, dest)
+			return nil
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat %s: %w", dest, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dest), err)
+		}
+		if err := os.WriteFile(dest, body, mode); err != nil {
+			return fmt.Errorf("write %s: %w", dest, err)
+		}
+		res.Written = append(res.Written, dest)
+		return nil
+	})
+	if err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
 // Install copies every embedded file under srcPrefix into
 // <root>/<destSubpath>/, preserving relative paths under srcPrefix.
 // Files whose content begins with `#!` are written 0755; the rest are

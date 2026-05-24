@@ -143,6 +143,59 @@ func TestInstallEmptyDestSubpathReturnsError(t *testing.T) {
 	}
 }
 
+func TestInstallIfMissingCreatesConfigs(t *testing.T) {
+	root := t.TempDir()
+	res, err := install.InstallIfMissing(root, spore.BundledConfigs, "configs", "configs")
+	if err != nil {
+		t.Fatalf("InstallIfMissing: %v", err)
+	}
+	for _, rel := range []string{
+		filepath.Join("configs", "codex", "hooks-config.json"),
+		filepath.Join("configs", "claude", "hooks-config.json"),
+		filepath.Join("configs", "claude", "settings-extras.json"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("stat %s: %v", rel, err)
+		}
+	}
+	if len(res.Written) != 3 {
+		t.Fatalf("Written=%d, want 3: %v", len(res.Written), res.Written)
+	}
+}
+
+func TestInstallIfMissingPreservesCustomizedConfig(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "configs", "codex", "hooks-config.json")
+	custom := []byte(`{"custom":true}` + "\n")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, custom, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := install.InstallIfMissing(root, spore.BundledConfigs, "configs", "configs")
+	if err != nil {
+		t.Fatalf("InstallIfMissing: %v", err)
+	}
+	body, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, custom) {
+		t.Fatalf("custom config overwritten: %q", body)
+	}
+	foundSkipped := false
+	for _, p := range res.Skipped {
+		if p == target {
+			foundSkipped = true
+			break
+		}
+	}
+	if !foundSkipped {
+		t.Fatalf("custom config not marked skipped: %+v", res)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

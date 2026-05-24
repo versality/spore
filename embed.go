@@ -62,6 +62,12 @@ var BundledHandover embed.FS
 //go:embed all:bootstrap/scripts
 var BundledScripts embed.FS
 
+// BundledConfigs is the source config tree `spore install` ensures
+// into consumer projects. Existing consumer configs are preserved.
+//
+//go:embed all:configs
+var BundledConfigs embed.FS
+
 // BundledCoordinatorRole is the default role file the fleet reconciler
 // uses to boot the singleton coordinator agent. Consumers can override
 // by writing their own bootstrap/coordinator/role.md before bootstrap.

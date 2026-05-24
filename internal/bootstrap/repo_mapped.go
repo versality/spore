@@ -77,6 +77,10 @@ func detectRepoMapped(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("install scripts: %w", err)
 	}
+	configs, err := install.InstallIfMissing(root, spore.BundledConfigs, "configs", "configs")
+	if err != nil {
+		return "", fmt.Errorf("install configs: %w", err)
+	}
 
 	notes := "detected: " + strings.Join(hits, ",")
 	if len(wrote) > 0 {
@@ -87,6 +91,9 @@ func detectRepoMapped(root string) (string, error) {
 	}
 	if len(scripts.Written) > 0 {
 		notes += fmt.Sprintf("; installed %d harness script(s)", len(scripts.Written))
+	}
+	if len(configs.Written) > 0 {
+		notes += fmt.Sprintf("; installed %d config file(s)", len(configs.Written))
 	}
 	return notes, nil
 }
