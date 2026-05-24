@@ -25,6 +25,7 @@ type Event struct {
 	CWD      string            `json:"cwd,omitempty"`
 	Argv     []string          `json:"argv,omitempty"`
 	Env      map[string]string `json:"env,omitempty"`
+	Fields   map[string]string `json:"fields,omitempty"`
 	Message  string            `json:"message,omitempty"`
 	Error    string            `json:"error,omitempty"`
 }

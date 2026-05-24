@@ -49,6 +49,75 @@ func TestRunWorkThenExitRecordsLaunchAndProgress(t *testing.T) {
 	}
 }
 
+func TestRunWorkerLaunchContractRecordsBrief(t *testing.T) {
+	dir := t.TempDir()
+	wtDir := filepath.Join(dir, ".wt")
+	if err := os.MkdirAll(wtDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	briefPath := filepath.Join(wtDir, "initial-prompt")
+	if err := os.WriteFile(briefPath, []byte("brief body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldwd); err != nil {
+			t.Fatal(err)
+		}
+	})
+	logPath := filepath.Join(t.TempDir(), "events.jsonl")
+	t.Setenv(EnvMode, ModeWorkThenExit)
+	t.Setenv(EnvEventLog, logPath)
+	t.Setenv("WT_SESSION_KIND", "worker")
+	t.Setenv("SPORE_TASK_SLUG", "smoke")
+	t.Setenv("SPORE_PROJECT_ROOT", filepath.Dir(dir))
+	t.Setenv("SPORE_TASK_INBOX", filepath.Join(dir, "inbox"))
+	t.Setenv("SPORE_COORDINATOR_STATE_DIR", filepath.Join(dir, "state"))
+	t.Setenv("WT_PROJECT", "spore")
+	t.Setenv("SPORE_BRIEF_FILE", briefPath)
+
+	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	events := readEvents(t, logPath)
+	contract := findEvent(events, "launch-contract")
+	if contract == nil {
+		t.Fatalf("launch-contract event missing: %s", eventTypes(events))
+	}
+	if contract.Fields["initial_prompt_exists"] != "true" {
+		t.Fatalf("initial_prompt_exists = %q", contract.Fields["initial_prompt_exists"])
+	}
+	if contract.Fields["brief_bytes"] != "10" {
+		t.Fatalf("brief_bytes = %q", contract.Fields["brief_bytes"])
+	}
+}
+
+func TestRunWorkerLaunchContractErrorsWithoutSlug(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "events.jsonl")
+	t.Setenv(EnvMode, ModeWorkThenExit)
+	t.Setenv(EnvEventLog, logPath)
+	t.Setenv("WT_SESSION_KIND", "worker")
+
+	code := Run(context.Background(), Options{Provider: "claude", Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	events := readEvents(t, logPath)
+	if findEvent(events, "launch-contract-error") == nil {
+		t.Fatalf("launch-contract-error event missing: %s", eventTypes(events))
+	}
+	if findEvent(events, "launch-contract-warning") == nil {
+		t.Fatalf("launch-contract-warning event missing: %s", eventTypes(events))
+	}
+}
+
 func TestRunUnknownModeRecordsError(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "events.jsonl")
 	t.Setenv(EnvMode, "wat")
@@ -115,6 +184,15 @@ func eventTypes(events []Event) string {
 		out += e.Type
 	}
 	return out
+}
+
+func findEvent(events []Event, typ string) *Event {
+	for i := range events {
+		if events[i].Type == typ {
+			return &events[i]
+		}
+	}
+	return nil
 }
 
 func fixedNow() time.Time {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -57,6 +58,7 @@ func Run(ctx context.Context, opts Options) int {
 		fmt.Fprintf(opts.Stderr, "fake agent: write event log: %v\n", err)
 		return 2
 	}
+	recordLaunchContract(rec, opts.Provider, mode)
 	switch mode {
 	case ModeIdle:
 		touch(os.Getenv(EnvReadyFile))
@@ -80,6 +82,60 @@ func Run(ctx context.Context, opts Options) int {
 		fmt.Fprintln(opts.Stderr, "fake agent: "+msg)
 		return 2
 	}
+}
+
+func recordLaunchContract(rec recorder, provider, mode string) {
+	env := selectedEnv()
+	if env["WT_SESSION_KIND"] != "worker" {
+		return
+	}
+	if env["SPORE_TASK_SLUG"] == "" {
+		_ = rec.event(Event{
+			Type:     "launch-contract-error",
+			Provider: provider,
+			Mode:     mode,
+			Error:    "SPORE_TASK_SLUG is required for worker sessions",
+		})
+	}
+	briefPath := env["SPORE_BRIEF_FILE"]
+	fields := map[string]string{
+		"brief_file": briefPath,
+	}
+	if briefPath == "" {
+		_ = rec.event(Event{
+			Type:     "launch-contract-warning",
+			Provider: provider,
+			Mode:     mode,
+			Error:    "SPORE_BRIEF_FILE is not set",
+			Fields:   fields,
+		})
+		return
+	}
+	body, err := os.ReadFile(briefPath)
+	if err != nil {
+		fields["brief_readable"] = "false"
+		_ = rec.event(Event{
+			Type:     "launch-contract-warning",
+			Provider: provider,
+			Mode:     mode,
+			Error:    "SPORE_BRIEF_FILE is unreadable: " + err.Error(),
+			Fields:   fields,
+		})
+		return
+	}
+	fields["brief_readable"] = "true"
+	fields["brief_bytes"] = strconv.Itoa(len(body))
+	if _, err := os.Stat(filepath.Join(cwd(), ".wt", "initial-prompt")); err == nil {
+		fields["initial_prompt_exists"] = "true"
+	} else {
+		fields["initial_prompt_exists"] = "false"
+	}
+	_ = rec.event(Event{
+		Type:     "launch-contract",
+		Provider: provider,
+		Mode:     mode,
+		Fields:   fields,
+	})
 }
 
 type recorder struct {
