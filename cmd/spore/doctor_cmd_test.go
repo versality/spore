@@ -64,3 +64,37 @@ func TestDoctorReadyProject(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout)
 	}
 }
+
+func TestDoctorReportsCodexRuntimeHookDrift(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	write := func(rel, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(rel, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("spore.toml", "[fleet.workers]\ndefault = \"codex\"\n")
+	write(filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"Stop":[{"command":"spore hooks watch-inbox","timeout":10}]}}`)
+	write(filepath.Join(".codex", "hooks.json"), `{"events":{"Stop":[{"command":"stale"}]}}`)
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"git":   "#!/bin/sh\nexit 0\n",
+			"tmux":  "#!/bin/sh\nexit 0\n",
+			"spore": "#!/bin/sh\nexit 0\n",
+			"codex": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	code, stdout, _ := captureFn(t, func() int { return runDoctor([]string{"--json"}) })
+	if code == 0 {
+		t.Fatal("doctor exit = 0, want drift warning")
+	}
+	if !strings.Contains(stdout, `"code": "runtime-hooks-drift"`) {
+		t.Fatalf("stdout = %s", stdout)
+	}
+}
