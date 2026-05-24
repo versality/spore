@@ -149,10 +149,29 @@ func TestEnsureExistingDeadPaneIsNotHealthy(t *testing.T) {
 	if out, err := exec.Command("tmux", "-L", testTmuxSocket, "send-keys", "-t", session, "done", "Enter").CombinedOutput(); err != nil {
 		t.Fatalf("tmux send-keys: %v: %s", err, out)
 	}
-	time.Sleep(workerSpawnSettleDelay)
+	waitForDeadPane(t, session)
 
 	_, err = Ensure(tasksDir, "x", nil)
 	if err == nil || !strings.Contains(err.Error(), "dead pane") {
 		t.Fatalf("Ensure err = %v, want dead pane", err)
 	}
+}
+
+func waitForDeadPane(t *testing.T, session string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		dead, err := sessionHasDeadPane(session)
+		if err != nil {
+			lastErr = err
+		} else if dead {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if lastErr != nil {
+		t.Fatalf("dead pane did not appear: %v", lastErr)
+	}
+	t.Fatal("dead pane did not appear before timeout")
 }
