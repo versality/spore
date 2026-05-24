@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/versality/spore/internal/hooks/settings"
+	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/testpath"
 )
 
@@ -117,6 +119,62 @@ func TestDoctorReportsCodexRuntimeHookDrift(t *testing.T) {
 	}
 	if !strings.Contains(stdout, `"code": "runtime-hooks-drift"`) {
 		t.Fatalf("stdout = %s", stdout)
+	}
+}
+
+func TestDoctorAcceptsCoordinatorRuntimeHooks(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	sourcePath := filepath.Join("configs", "codex", "hooks-config.json")
+	writeDoctorFile(t, sourcePath, `{
+  "events": {
+    "PreToolUse": [
+      {
+        "command": "spore hooks codex pre-tool-use",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "command": "spore coordinator token-monitor",
+        "timeout": 10,
+        "kinds": ["coordinator"]
+      },
+      {
+        "command": "spore fleet replenish-hook",
+        "timeout": 30,
+        "kinds": ["coordinator"]
+      },
+      {
+        "command": "spore hooks plan-ready-mechanical",
+        "timeout": 10,
+        "kinds": ["worker"]
+      },
+      {
+        "command": "spore hooks watch-inbox",
+        "timeout": 604800,
+        "kinds": ["coordinator", "worker"]
+      },
+      {
+        "command": "spore worker token-monitor",
+        "timeout": 10,
+        "kinds": ["worker"]
+      }
+    ]
+  }
+}`)
+	rendered, ok, err := settings.RenderCodex(sourcePath, task.SessionKindCoordinator)
+	if err != nil || !ok {
+		t.Fatalf("RenderCodex ok=%v err=%v", ok, err)
+	}
+	writeDoctorFile(t, filepath.Join(".codex", "hooks.json"), string(rendered))
+	installDoctorTools(t, "codex")
+
+	issues := hookConfigIssues(root, "codex")
+	for _, issue := range issues {
+		if issue.Code == "runtime-hooks-drift" {
+			t.Fatalf("coordinator runtime reported as worker drift: %#v", issues)
+		}
 	}
 }
 

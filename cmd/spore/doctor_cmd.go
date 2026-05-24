@@ -107,7 +107,7 @@ func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
 			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-codex-hooks-config", Tool: "codex", Message: "configs/codex/hooks-config.json is missing"})
 		} else {
 			issues = append(issues, lifecycleSourceIssues("codex", source)...)
-			issues = append(issues, runtimeDriftIssue("codex", source, "", runtime, task.SessionKindWorker)...)
+			issues = append(issues, runtimeDriftIssue("codex", source, "", runtime, task.SessionKindCoordinator)...)
 		}
 	}
 	if workerAgent == "" || workerAgent == "claude" || workerAgent == "claude-code" {
@@ -118,7 +118,7 @@ func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
 			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-claude-hooks-config", Tool: "claude", Message: "configs/claude/hooks-config.json is missing"})
 		} else {
 			issues = append(issues, lifecycleSourceIssues("claude", source)...)
-			issues = append(issues, runtimeDriftIssue("claude", source, extras, runtime, task.SessionKindWorker)...)
+			issues = append(issues, runtimeDriftIssue("claude", source, extras, runtime, task.SessionKindCoordinator)...)
 		}
 	}
 	return issues
