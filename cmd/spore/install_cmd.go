@@ -8,7 +8,10 @@ import (
 	"path/filepath"
 
 	spore "github.com/versality/spore"
+	"github.com/versality/spore/internal/agentpreflight"
+	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/install"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 const installUsage = `spore install - drop spore assets into a target project
@@ -93,5 +96,35 @@ func runInstall(args []string) int {
 		fmt.Printf("installed %d skill file(s) under %s/.claude/skills/, %d harness script(s) under %s/harness/, %d config file(s) under %s/configs/\n",
 			len(skills.Written), dest, len(scripts.Written), dest, len(configs.Written), dest)
 	}
+	for _, line := range installReadinessWarnings(dest) {
+		fmt.Fprintln(os.Stderr, line)
+	}
 	return 0
+}
+
+func installReadinessWarnings(root string) []string {
+	checker := agentpreflight.Checker{}
+	var issues []agentpreflight.Issue
+	issues = append(issues, checker.CheckRequiredTools(root)...)
+	issues = append(issues, checker.CheckCoordinatorAgent(root)...)
+	meta := frontmatter.Meta{Agent: fleet.DefaultWorkerAgent}
+	if cfg, err := fleet.LoadWorkersConfig(root); err == nil && cfg.Default != "" {
+		meta.Agent = cfg.Default
+	}
+	issues = append(issues, checker.CheckWorkerAgent(meta, root)...)
+	return agentpreflight.WarningLines(dedupeIssues(issues))
+}
+
+func dedupeIssues(issues []agentpreflight.Issue) []agentpreflight.Issue {
+	seen := map[string]bool{}
+	var out []agentpreflight.Issue
+	for _, issue := range issues {
+		key := string(issue.Severity) + "\x00" + issue.Code + "\x00" + issue.Tool + "\x00" + issue.Message
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, issue)
+	}
+	return out
 }

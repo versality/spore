@@ -2,6 +2,7 @@ package agentpreflight
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,25 @@ type Issue struct {
 	Code     string
 	Tool     string
 	Message  string
+}
+
+func WarningLines(issues []Issue) []string {
+	var lines []string
+	for _, issue := range issues {
+		if issue.Severity == SeverityInfo {
+			continue
+		}
+		prefix := "warning"
+		if issue.Severity == SeverityError {
+			prefix = "error"
+		}
+		if issue.Tool != "" {
+			lines = append(lines, fmt.Sprintf("%s[%s:%s]: %s", prefix, issue.Code, issue.Tool, issue.Message))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s[%s]: %s", prefix, issue.Code, issue.Message))
+		}
+	}
+	return lines
 }
 
 type Checker struct {

@@ -9,7 +9,10 @@ import (
 	"strings"
 
 	spore "github.com/versality/spore"
+	"github.com/versality/spore/internal/agentpreflight"
+	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/install"
+	"github.com/versality/spore/internal/task/frontmatter"
 )
 
 // repoMarkers maps a marker file (project root relative) to a short
@@ -96,7 +99,27 @@ func detectRepoMapped(root string) (string, error) {
 		notes += fmt.Sprintf("; installed %d config file(s)", len(configs.Written))
 	}
 	notes += "; " + hookSourceConfigReadiness(root, "")
+	if warnings := setupReadinessNotes(root); warnings != "" {
+		notes += "; " + warnings
+	}
 	return notes, nil
+}
+
+func setupReadinessNotes(root string) string {
+	checker := agentpreflight.Checker{}
+	var issues []agentpreflight.Issue
+	issues = append(issues, checker.CheckRequiredTools(root)...)
+	issues = append(issues, checker.CheckCoordinatorAgent(root)...)
+	meta := frontmatter.Meta{Agent: fleet.DefaultWorkerAgent}
+	if cfg, err := fleet.LoadWorkersConfig(root); err == nil && cfg.Default != "" {
+		meta.Agent = cfg.Default
+	}
+	issues = append(issues, checker.CheckWorkerAgent(meta, root)...)
+	lines := agentpreflight.WarningLines(issues)
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "; ")
 }
 
 func ensureInstructionFiles(root string) ([]string, error) {

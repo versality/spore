@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/versality/spore/internal/testpath"
 )
 
 func TestHookSourceConfigReadinessWarnsForMissingCodexConfig(t *testing.T) {
@@ -53,5 +55,28 @@ func TestDetectRepoMappedReportsInstalledHookConfigsPresent(t *testing.T) {
 	}
 	if strings.Contains(notes, "hook source config missing") {
 		t.Fatalf("notes = %q, want source config present after install", notes)
+	}
+}
+
+func TestDetectRepoMappedReportsSetupReadinessWarnings(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), []byte("module x\n"))
+	writeFile(t, filepath.Join(root, "spore.toml"), []byte("[fleet.workers]\ndefault = \"codex\"\n"))
+	h := testpath.Install(t, testpath.Options{
+		FakeTools: map[string]string{
+			"git":    "#!/bin/sh\nexit 0\n",
+			"tmux":   "#!/bin/sh\nexit 0\n",
+			"spore":  "#!/bin/sh\nexit 0\n",
+			"claude": "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	notes, err := detectRepoMapped(root)
+	if err != nil {
+		t.Fatalf("detectRepoMapped: %v", err)
+	}
+	if !strings.Contains(notes, "missing-worker-agent:codex") {
+		t.Fatalf("notes = %q, want codex readiness warning", notes)
 	}
 }
