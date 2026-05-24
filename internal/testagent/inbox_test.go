@@ -26,7 +26,7 @@ func TestRunProcessesInboxMessages(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
-	if _, err := os.Stat(msg + ".processed"); err != nil {
+	if _, err := os.Stat(filepath.Join(inbox, "read", "001.json")); err != nil {
 		t.Fatalf("processed inbox message: %v", err)
 	}
 	events := readEvents(t, logPath)

@@ -12,6 +12,7 @@ func drainInbox(rec recorder, provider, mode string) {
 	if inbox == "" {
 		return
 	}
+	readDir := filepath.Join(inbox, "read")
 	entries, err := os.ReadDir(inbox)
 	if err != nil {
 		_ = rec.event(Event{Type: "inbox-error", Provider: provider, Mode: mode, Error: err.Error(), Fields: map[string]string{"inbox": inbox}})
@@ -38,7 +39,11 @@ func drainInbox(rec recorder, provider, mode string) {
 				"bytes": string(body),
 			},
 		})
-		if err := os.Rename(path, path+".processed"); err != nil {
+		if err := os.MkdirAll(readDir, 0o755); err != nil {
+			_ = rec.event(Event{Type: "inbox-error", Provider: provider, Mode: mode, Error: err.Error(), Fields: map[string]string{"path": readDir}})
+			continue
+		}
+		if err := os.Rename(path, filepath.Join(readDir, entry.Name())); err != nil {
 			_ = rec.event(Event{Type: "inbox-error", Provider: provider, Mode: mode, Error: err.Error(), Fields: map[string]string{"path": path}})
 		}
 	}
