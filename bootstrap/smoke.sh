@@ -102,6 +102,57 @@ echo "smoke: bootstrap ok"
 
 project_root="$work/proj"
 
+if [ "${SPORE_SMOKE_FAKE_READINESS:-}" = "1" ]; then
+  fake_bin="$work/fake-bin"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/codex" <<'EOF'
+#!/usr/bin/env sh
+exec sleep 600
+EOF
+  cat > "$fake_bin/claude" <<'EOF'
+#!/usr/bin/env sh
+exec sleep 600
+EOF
+  ln -s "$spore_bin" "$fake_bin/spore"
+  chmod +x "$fake_bin/codex" "$fake_bin/claude"
+  export PATH="$fake_bin:$PATH"
+  unset SPORE_AGENT_BINARY
+
+  "$spore_bin" doctor >/dev/null
+  for cfg in configs/codex/hooks-config.json configs/claude/hooks-config.json; do
+    if [ ! -f "$project_root/$cfg" ]; then
+      echo "smoke: fake readiness: missing $cfg" >&2
+      exit 1
+    fi
+  done
+
+  codex_slug="$("$spore_bin" task new --agent codex "fake codex smoke")"
+  claude_slug="$("$spore_bin" task new --agent claude "fake claude smoke")"
+  codex_session="$("$spore_bin" task start "$codex_slug")"
+  claude_session="$("$spore_bin" task start "$claude_slug")"
+  if [ ! -f "$project_root/.worktrees/$codex_slug/.codex/hooks.json" ]; then
+    echo "smoke: fake readiness: missing codex runtime hooks" >&2
+    exit 1
+  fi
+  if [ ! -f "$project_root/.worktrees/$claude_slug/.claude/settings.local.json" ]; then
+    echo "smoke: fake readiness: missing claude runtime hooks" >&2
+    exit 1
+  fi
+  rm -f "$fake_bin/codex"
+  missing_slug="$("$spore_bin" task new --agent codex "missing codex smoke")"
+  if "$spore_bin" task start "$missing_slug" >/tmp/spore-missing-codex.out 2>&1; then
+    echo "smoke: fake readiness: missing codex start unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if grep -q '^status: active$' "$project_root/tasks/$missing_slug.md"; then
+    echo "smoke: fake readiness: missing codex mutated task active" >&2
+    exit 1
+  fi
+  tmux kill-session -t "$codex_session" 2>/dev/null || true
+  tmux kill-session -t "$claude_session" 2>/dev/null || true
+  echo "smoke: fake readiness lifecycle ok"
+fi
+
 # Fleet smoke: reconciler shape.
 #   1. With the kill-switch flag missing, reconcile is a no-op
 #      (and the disabled marker prints).
