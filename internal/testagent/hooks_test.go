@@ -2,6 +2,7 @@ package testagent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,6 +82,63 @@ func TestRunCodexInvalidHooksRecordsParseError(t *testing.T) {
 	}
 	if findEvent(readEvents(t, logPath), "hook-parse-error") == nil {
 		t.Fatal("hook-parse-error event missing")
+	}
+}
+
+func TestRunCodexHookReceivesDocumentedPayload(t *testing.T) {
+	dir := t.TempDir()
+	hooksDir := filepath.Join(dir, ".codex")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(dir, "payload.out")
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"cat > ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(hooksDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldwd); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, filepath.Join(dir, "events.jsonl"))
+
+	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	var payload map[string]any
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("payload json: %v: %s", err, raw)
+	}
+	assertPayloadString(t, payload, "hook_event_name", "Stop")
+	assertPayloadString(t, payload, "session_id", "testagent-session")
+	assertPayloadString(t, payload, "cwd", dir)
+	assertPayloadString(t, payload, "permission_mode", "default")
+	if payload["transcript_path"] == "" {
+		t.Fatalf("payload transcript_path missing: %#v", payload)
+	}
+	if payload["stop_hook_active"] != false {
+		t.Fatalf("payload stop_hook_active = %#v, want false", payload["stop_hook_active"])
+	}
+}
+
+func assertPayloadString(t *testing.T, payload map[string]any, key, want string) {
+	t.Helper()
+	if got, _ := payload[key].(string); got != want {
+		t.Fatalf("payload %s = %q, want %q: %#v", key, got, want, payload)
 	}
 }
 

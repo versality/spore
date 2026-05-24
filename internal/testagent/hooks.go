@@ -57,14 +57,24 @@ func hookPayload(provider, event string) string {
 }
 
 func codexHookPayload(event string) string {
+	base := map[string]any{
+		"hook_event_name": event,
+		"session_id":      "testagent-session",
+		"cwd":             cwd(),
+		"transcript_path":  filepath.Join(os.TempDir(), "testagent-transcript-testagent-session.jsonl"),
+		"permission_mode": "default",
+	}
 	switch event {
 	case "PreToolUse":
-		return `{"tool_name":"Bash","tool_input":{"command":"true"}}` + "\n"
+		base["tool_name"] = "Bash"
+		base["tool_input"] = map[string]string{"command": "true"}
 	case "SessionStart":
-		return `{"source":"startup"}` + "\n"
+		base["source"] = "startup"
 	default:
-		return `{"stop_hook_active":false}` + "\n"
+		base["stop_hook_active"] = false
+		base["last_assistant_message"] = "done"
 	}
+	return jsonLine(base)
 }
 
 func claudeHookPayload(event string) string {
@@ -76,6 +86,14 @@ func claudeHookPayload(event string) string {
 	default:
 		return `{"hook_event_name":"Stop","stop_hook_active":false}` + "\n"
 	}
+}
+
+func jsonLine(v any) string {
+	body, err := json.Marshal(v)
+	if err != nil {
+		return "{}\n"
+	}
+	return string(body) + "\n"
 }
 
 func runClaudeHooks(ctx context.Context, rec recorder, event string) {
