@@ -81,7 +81,14 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 	// replaces it so a resume gets a fresh agent and new-session
 	// does not collide on the name.
 	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
-	return ensureSession(tasksDir, slug, extraEnv)
+	session, err = ensureSession(tasksDir, slug, extraEnv)
+	if err != nil {
+		if restoreErr := WriteAtomic(path, raw, 0o644); restoreErr != nil {
+			return "", fmt.Errorf("%w; restore task status: %v", err, restoreErr)
+		}
+		return "", err
+	}
+	return session, nil
 }
 
 // Ensure makes sure the wt/<slug> branch, worktree, and tmux session

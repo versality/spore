@@ -116,6 +116,9 @@ func TestStartDetectsAgentExitDuringSettle(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "died on spawn") && !strings.Contains(err.Error(), "dead pane") {
 		t.Fatalf("Start err = %v, want settle failure", err)
 	}
+	if status := readStatus(t, filepath.Join(tasksDir, "x.md")); status != "draft" {
+		t.Fatalf("status = %q, want draft after failed spawn", status)
+	}
 }
 
 func TestEnsureExistingDeadPaneIsNotHealthy(t *testing.T) {
