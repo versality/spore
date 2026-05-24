@@ -15,29 +15,38 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Has reports whether a tmux session with the given name exists.
 // Returns false when tmux is not running.
 func Has(name string) bool {
-	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
+	return exec.Command("tmux", "has-session", "-t", exactTarget(name)).Run() == nil
 }
 
 // Kill kills a tmux session, ignoring the error from tmux. Use this
 // in best-effort cleanup paths where a missing session is not a
 // failure (already gone, never spawned, server down).
 func Kill(name string) {
-	cmd := exec.Command("tmux", "kill-session", "-t", name)
+	cmd := exec.Command("tmux", "kill-session", "-t", exactTarget(name))
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return
+	}
+	for range 20 {
+		if !Has(name) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // KillErr kills a tmux session and surfaces the error to the caller
 // with tmux's stderr appended. Use when the caller needs to log or
 // react to the failure.
 func KillErr(name string) error {
-	cmd := exec.Command("tmux", "kill-session", "-t", name)
+	cmd := exec.Command("tmux", "kill-session", "-t", exactTarget(name))
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -48,6 +57,13 @@ func KillErr(name string) error {
 		return fmt.Errorf("tmux kill-session %s: %w (%s)", name, err, msg)
 	}
 	return nil
+}
+
+func exactTarget(name string) string {
+	if strings.HasPrefix(name, "=") {
+		return name
+	}
+	return "=" + name
 }
 
 // List returns the names of every active tmux session in the order

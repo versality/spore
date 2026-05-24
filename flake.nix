@@ -151,7 +151,7 @@
             '';
             go-test = pkgs.runCommand "spore-go-test"
               {
-                nativeBuildInputs = [ ciGo pkgs.git pkgs.just ];
+                nativeBuildInputs = [ ciGo pkgs.git pkgs.just pkgs.tmux pkgs.bash pkgs.coreutils ];
               } ''
               cp -r ${./.}/. ./src
               cd src
@@ -160,6 +160,8 @@
               export GOCACHE=$TMPDIR/gocache
               export GOMODCACHE=$TMPDIR/gomod
               export CGO_ENABLED=0
+              export LANG=C.UTF-8
+              export LC_ALL=C.UTF-8
               go test ./...
               touch $out
             '';
