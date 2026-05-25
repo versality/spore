@@ -61,7 +61,7 @@ func Run(ctx context.Context, opts Options) int {
 	recordLaunchContract(rec, opts.Provider, mode)
 	recordCoordinatorContract(rec, opts.Provider, mode)
 	if opts.Provider == "codex" {
-		runCodexHooks(ctx, rec, "SessionStart")
+		runCodexHooks(ctx, rec, "SessionStart", opts.Argv)
 	}
 	switch mode {
 	case ModeEvidence, ModeCommitChange, ModeRequestMerge, ModeSelfDone:
@@ -71,7 +71,7 @@ func Run(ctx context.Context, opts Options) int {
 		}
 		return code
 	case ModeExitZero:
-		runStopHooks(ctx, rec, opts.Provider)
+		runStopHooks(ctx, rec, opts.Provider, opts.Argv)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
 		return 0
 	case ModeExitNonzero:
@@ -135,11 +135,11 @@ func Run(ctx context.Context, opts Options) int {
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
 		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "PreToolUse")
+			runCodexHooks(ctx, rec, "PreToolUse", opts.Argv)
 		}
 		fmt.Fprintf(opts.Stdout, "fake %s one turn\n", opts.Provider)
 		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
-		runStopHooks(ctx, rec, opts.Provider)
+		runStopHooks(ctx, rec, opts.Provider, opts.Argv)
 		drainInbox(rec, opts.Provider, mode)
 		writeTranscript(rec, opts.Provider, mode)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
@@ -148,14 +148,14 @@ func Run(ctx context.Context, opts Options) int {
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
 		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "PreToolUse")
+			runCodexHooks(ctx, rec, "PreToolUse", opts.Argv)
 		}
 		turns := turnLimit()
 		for i := 1; i <= turns; i++ {
 			fmt.Fprintf(opts.Stdout, "fake %s progress %d\n", opts.Provider, i)
 			_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: strconv.Itoa(i)})
 		}
-		runStopHooks(ctx, rec, opts.Provider)
+		runStopHooks(ctx, rec, opts.Provider, opts.Argv)
 		drainInbox(rec, opts.Provider, mode)
 		writeTranscript(rec, opts.Provider, mode)
 		_ = rec.event(Event{Type: "stop", Provider: opts.Provider, Mode: mode})
@@ -168,10 +168,10 @@ func Run(ctx context.Context, opts Options) int {
 	}
 }
 
-func runStopHooks(ctx context.Context, rec recorder, provider string) {
+func runStopHooks(ctx context.Context, rec recorder, provider string, argv []string) {
 	switch provider {
 	case "codex":
-		runCodexHooks(ctx, rec, "Stop")
+		runCodexHooks(ctx, rec, "Stop", argv)
 	case "claude":
 		runClaudeHooks(ctx, rec, "Stop")
 	}

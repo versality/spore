@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
 func TestRunCodexExecutesRuntimeHooks(t *testing.T) {
 	dir := t.TempDir()
+	trustCodexProject(t, dir)
 	hooksDir := filepath.Join(dir, ".codex")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -35,7 +38,7 @@ func TestRunCodexExecutesRuntimeHooks(t *testing.T) {
 	t.Setenv(EnvMode, ModeOneTurn)
 	t.Setenv(EnvEventLog, logPath)
 
-	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -54,6 +57,7 @@ func TestRunCodexExecutesRuntimeHooks(t *testing.T) {
 
 func TestRunCodexInvalidHooksRecordsParseError(t *testing.T) {
 	dir := t.TempDir()
+	trustCodexProject(t, dir)
 	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +80,7 @@ func TestRunCodexInvalidHooksRecordsParseError(t *testing.T) {
 	t.Setenv(EnvMode, ModeOneTurn)
 	t.Setenv(EnvEventLog, logPath)
 
-	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -87,6 +91,7 @@ func TestRunCodexInvalidHooksRecordsParseError(t *testing.T) {
 
 func TestRunCodexHookReceivesDocumentedPayload(t *testing.T) {
 	dir := t.TempDir()
+	trustCodexProject(t, dir)
 	hooksDir := filepath.Join(dir, ".codex")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -111,7 +116,7 @@ func TestRunCodexHookReceivesDocumentedPayload(t *testing.T) {
 	t.Setenv(EnvMode, ModeOneTurn)
 	t.Setenv(EnvEventLog, filepath.Join(dir, "events.jsonl"))
 
-	code := Run(context.Background(), Options{Provider: "codex", Now: fixedNow})
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
 	if code != 0 {
 		t.Fatalf("Run exit = %d, want 0", code)
 	}
@@ -135,10 +140,141 @@ func TestRunCodexHookReceivesDocumentedPayload(t *testing.T) {
 	}
 }
 
+func TestRunCodexLinkedWorktreeReadsRootHooks(t *testing.T) {
+	root := t.TempDir()
+	worktree := filepath.Join(root, ".worktrees", "demo")
+	runGitForHooks(t, root, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("root\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForHooks(t, root, "add", "file.txt")
+	runGitForHooks(t, root, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "init")
+	runGitForHooks(t, root, "worktree", "add", "-q", "-b", "wt/demo", worktree)
+	trustCodexProject(t, root)
+
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(root, "hooks.out")
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"printf root >> ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(root, ".codex", "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(worktree, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ignoredPath := filepath.Join(root, "ignored.out")
+	ignored := `{"hooks":{"Stop":[{"hooks":[{"command":"printf ignored >> ` + ignoredPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(worktree, ".codex", "hooks.json"), []byte(ignored), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withWorkingDir(t, worktree)
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, filepath.Join(root, "events.jsonl"))
+
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(body); got != "root" {
+		t.Fatalf("root hook output = %q", got)
+	}
+	if _, err := os.Stat(ignoredPath); !os.IsNotExist(err) {
+		t.Fatalf("worktree hook ran or stat failed: %v", err)
+	}
+}
+
+func TestRunCodexUntrustedProjectDoesNotDiscoverHooks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(dir, "hooks.out")
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"printf stop >> ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(dir, ".codex", "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", t.TempDir())
+	withWorkingDir(t, dir)
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, filepath.Join(dir, "events.jsonl"))
+
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+		t.Fatalf("untrusted hook ran or stat failed: %v", err)
+	}
+}
+
+func TestRunCodexRequiresHookTrustWithoutBypass(t *testing.T) {
+	dir := t.TempDir()
+	trustCodexProject(t, dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(dir, "hooks.out")
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"printf stop >> ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(dir, ".codex", "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withWorkingDir(t, dir)
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, filepath.Join(dir, "events.jsonl"))
+
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex"}, Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+		t.Fatalf("untrusted hook command ran or stat failed: %v", err)
+	}
+}
+
 func assertPayloadString(t *testing.T, payload map[string]any, key, want string) {
 	t.Helper()
 	if got, _ := payload[key].(string); got != want {
 		t.Fatalf("payload %s = %q, want %q: %#v", key, got, want, payload)
+	}
+}
+
+func trustCodexProject(t *testing.T, root string) {
+	t.Helper()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte("[projects."+strconv.Quote(filepath.Clean(root))+"]\ntrust_level = \"trusted\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func withWorkingDir(t *testing.T, dir string) {
+	t.Helper()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldwd); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func runGitForHooks(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
 
