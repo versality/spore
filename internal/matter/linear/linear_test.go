@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -20,11 +21,12 @@ import (
 // drive the Sync paths. State and issues are mutable so a test can
 // verify a transition mutation actually moved the issue.
 type stubLinear struct {
-	t      *testing.T
-	team   string
-	states map[string]string // name -> id
-	issues map[string]*stubIssue
-	calls  int
+	t               *testing.T
+	team            string
+	states          map[string]string // name -> id
+	issues          map[string]*stubIssue
+	calls           int
+	lastIssuesQuery string
 }
 
 type stubIssue struct {
@@ -35,6 +37,7 @@ type stubIssue struct {
 	URL         string
 	StateID     string
 	SortOrder   float64
+	Labels      []string
 	Relations   []stubRelation
 }
 
@@ -117,6 +120,7 @@ func (s *stubLinear) handler() http.HandlerFunc {
 		case strings.Contains(body.Query, "issueUpdate"):
 			s.respondIssueUpdate(w, body.Variables)
 		case strings.Contains(body.Query, "issues("):
+			s.lastIssuesQuery = body.Query
 			s.respondIssues(w, body.Variables)
 		default:
 			http.Error(w, "unrecognised query: "+body.Query, http.StatusBadRequest)
@@ -144,6 +148,7 @@ func (s *stubLinear) respondStates(w http.ResponseWriter) {
 
 func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 	stateID, _ := vars["stateId"].(string)
+	label, _ := vars["label"].(string)
 	type stateNode struct {
 		Type string `json:"type"`
 	}
@@ -170,6 +175,9 @@ func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 	var nodes []node
 	for _, iss := range s.issues {
 		if iss.StateID != stateID {
+			continue
+		}
+		if label != "" && !slices.Contains(iss.Labels, label) {
 			continue
 		}
 		rels := make([]relation, 0, len(iss.Relations))
@@ -577,6 +585,25 @@ func TestParseConfigDefaultsAndValidation(t *testing.T) {
 	}
 	if cfg.ReadyState != "Ready" || cfg.DoneState != "Done" {
 		t.Errorf("defaults not applied: %#v", cfg)
+	}
+	if cfg.ClaimLabel != "" {
+		t.Errorf("claim_label should default to empty, got %q", cfg.ClaimLabel)
+	}
+
+	// explicit claim_label is parsed through
+	cfg2, err := parseConfig(matter.Config{
+		Name: "linear",
+		Options: map[string]string{
+			"team":        "MAR",
+			"api_key_env": "LINEAR_API_KEY",
+			"claim_label": "team-foo",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg2.ClaimLabel != "team-foo" {
+		t.Errorf("claim_label not parsed: %#v", cfg2)
 	}
 }
 
