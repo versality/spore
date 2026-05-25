@@ -71,6 +71,80 @@ func TestClassifyWorktree(t *testing.T) {
 	}
 }
 
+func TestPrepareTaskBaselineCommitsOnlyCurrentTask(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	repo := t.TempDir()
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "other.md"), []byte("other head\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "tasks/other.md")
+	runGit(t, repo, "commit", "-q", "-m", "seed tasks")
+
+	if err := os.WriteFile(filepath.Join(tasksDir, "demo.md"), []byte("---\nslug: demo\n---\nbrief\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	worktree := filepath.Join(repo, ".worktrees", "demo")
+	runGit(t, repo, "worktree", "add", "-q", "-b", "wt/demo", worktree)
+	if err := os.WriteFile(filepath.Join(worktree, "tasks", "other.md"), []byte("leaked other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, "tasks", "leaked.md"), []byte("leaked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := prepareTaskBaseline(tasksDir, worktree, "demo"); err != nil {
+		t.Fatalf("prepareTaskBaseline: %v", err)
+	}
+	if got := readFileString(t, filepath.Join(worktree, "tasks", "other.md")); got != "other head\n" {
+		t.Fatalf("other task = %q, want HEAD content", got)
+	}
+	if _, err := os.Stat(filepath.Join(worktree, "tasks", "leaked.md")); !os.IsNotExist(err) {
+		t.Fatalf("leaked task should be cleaned, stat err=%v", err)
+	}
+	if got := readFileString(t, filepath.Join(worktree, "tasks", "demo.md")); !strings.Contains(got, "brief") {
+		t.Fatalf("current task not copied: %q", got)
+	}
+	status := strings.TrimSpace(string(runGitOutput(t, worktree, "status", "--porcelain")))
+	if status != "" {
+		t.Fatalf("worktree status = %q, want clean", status)
+	}
+	head := strings.TrimSpace(string(runGitOutput(t, worktree, "log", "-1", "--format=%s")))
+	if head != "task: start demo" {
+		t.Fatalf("HEAD subject = %q, want task baseline commit", head)
+	}
+}
+
+func readFileString(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func runGitOutput(t *testing.T, repo string, args ...string) []byte {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v in %s: %v: %s", args, repo, err, out)
+	}
+	return out
+}
+
 func TestEnsureReusesExistingWorktree(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)

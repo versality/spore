@@ -557,6 +557,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	freshWorktree := false
 	switch state {
 	case worktreeOK:
 	case worktreeAbsent, worktreeStaleReg:
@@ -577,13 +578,14 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("git worktree add: %w: %s", err, strings.TrimSpace(string(out)))
 		}
-		// Source HEAD often has no committed brief; soft-fails so the
-		// worker falls back to interactive mode there.
-		if err := copyBriefToWorktree(tasksDir, worktree, slug); err != nil {
-			return "", fmt.Errorf("copy brief: %w", err)
-		}
+		freshWorktree = true
 	default:
 		return "", worktreeConflictError(state, worktree, branch, projectRoot)
+	}
+	if freshWorktree {
+		if err := prepareTaskBaseline(tasksDir, worktree, slug); err != nil {
+			return "", fmt.Errorf("prepare task baseline: %w", err)
+		}
 	}
 
 	agent, err := workerAgentCommand(meta, projectRoot)

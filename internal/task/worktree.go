@@ -3,6 +3,7 @@ package task
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -148,4 +149,52 @@ func worktreeConflictError(state worktreeState, worktree, branch, projectRoot st
 		return fmt.Errorf("branch %s is checked out at %s, cannot also check out at %s", branch, atPath, worktree)
 	}
 	return fmt.Errorf("worktree %s: unexpected state %d", worktree, state)
+}
+
+// prepareTaskBaseline removes task-file leakage from the main checkout,
+// copies only the current task brief into the fresh worker worktree, and
+// commits that single task file before the agent starts. Existing
+// worktrees do not call this path because they may contain prior worker
+// output.
+func prepareTaskBaseline(tasksDir, worktree, slug string) error {
+	if err := resetTasksToHead(worktree); err != nil {
+		return err
+	}
+	if err := copyBriefToWorktree(tasksDir, worktree, slug); err != nil {
+		return fmt.Errorf("copy brief: %w", err)
+	}
+	taskRel := filepath.ToSlash(filepath.Join("tasks", slug+".md"))
+	if out, err := gitCmd(worktree, "add", "--", taskRel).CombinedOutput(); err != nil {
+		return fmt.Errorf("git add -- %s: %w: %s", taskRel, err, strings.TrimSpace(string(out)))
+	}
+	out, err := gitCmd(worktree, "diff", "--cached", "--quiet", "--", taskRel).CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+		return fmt.Errorf("git diff --cached --quiet -- %s: %w: %s", taskRel, err, strings.TrimSpace(string(out)))
+	}
+	if out, err := gitCmd(worktree, "commit", "-m", "task: start "+slug, "--", taskRel).CombinedOutput(); err != nil {
+		return fmt.Errorf("git commit task baseline: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func resetTasksToHead(worktree string) error {
+	if _, err := os.Stat(filepath.Join(worktree, "tasks")); os.IsNotExist(err) {
+		return nil
+	}
+	out, err := gitCmd(worktree, "ls-tree", "-r", "--name-only", "HEAD", "--", "tasks").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git ls-tree HEAD -- tasks: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		if out, err := gitCmd(worktree, "checkout", "HEAD", "--", "tasks").CombinedOutput(); err != nil {
+			return fmt.Errorf("git checkout HEAD -- tasks: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+	}
+	if out, err := gitCmd(worktree, "clean", "-fd", "--", "tasks").CombinedOutput(); err != nil {
+		return fmt.Errorf("git clean -fd -- tasks: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
