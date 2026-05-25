@@ -113,6 +113,11 @@ func Ensure(tasksDir, slug string, extraEnv []string) (string, error) {
 
 func preflightWorkerExecution(m frontmatter.Meta, projectRoot string) error {
 	checker := agentpreflight.Checker{}
+	resolved, err := resolveWorkerAgent(m, projectRoot)
+	if err != nil {
+		return err
+	}
+	m.Agent = resolved
 	issues := append(checker.CheckRequiredTools(projectRoot), checker.CheckWorkerAgent(m, projectRoot)...)
 	var blockers []string
 	for _, issue := range issues {
@@ -571,11 +576,14 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", worktreeConflictError(state, worktree, branch, projectRoot)
 	}
 
-	agent, err := workerAgentCommand(meta)
+	agent, err := workerAgentCommand(meta, projectRoot)
 	if err != nil {
 		return "", err
 	}
-	agentName := workerAgentName(meta)
+	agentName, err := workerAgentName(meta, projectRoot)
+	if err != nil {
+		return "", err
+	}
 	project, err := ProjectName(projectRoot)
 	if err != nil {
 		return "", err
@@ -660,24 +668,6 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", fmt.Errorf("worker session %s has a dead pane after spawn (agent=%q)", session, agent)
 	}
 	return session, nil
-}
-
-// workerAgentName returns the window name to use for the spawned
-// tmux agent window. Mirrors workerAgentCommand's agent-resolution
-// but yields just the agent label ("claude" / "codex") so the fleet
-// liveness check (which expects window name == agent) sees the
-// window as healthy regardless of the binary's wrapper basename.
-func workerAgentName(m frontmatter.Meta) string {
-	switch m.Agent {
-	case "codex":
-		return "codex"
-	case "":
-		return "claude"
-	case "claude", "claude-code":
-		return "claude"
-	default:
-		return m.Agent
-	}
 }
 
 func readTaskMeta(tasksDir, slug string) (frontmatter.Meta, error) {

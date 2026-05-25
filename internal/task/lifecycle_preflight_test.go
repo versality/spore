@@ -82,6 +82,131 @@ func TestEnsureMissingSelectedAgentDoesNotCreateWorktree(t *testing.T) {
 	}
 }
 
+func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.WriteFile(filepath.Join(repo, "spore.toml"), []byte("[fleet.workers]\ndefault = \"codex\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks watch-inbox","timeout":604800,"kinds":["coordinator","worker"]}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: draft\nslug: x\ntitle: X\neffort: high\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmuxState := filepath.Join(t.TempDir(), "tmux-session")
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{
+			"codex": "#!/bin/sh\nexit 0\n",
+			"spore": "#!/bin/sh\nexit 0\n",
+			"tmux":  "#!/bin/sh\ncase \"$1\" in\n  has-session) test -f " + shellQuote(tmuxState) + " ;;\n  new-session) echo ok > " + shellQuote(tmuxState) + " ;;\n  set-option) exit 0 ;;\n  list-panes) echo 0 ;;\n  kill-session) exit 0 ;;\n  *) exit 0 ;;\nesac\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+	t.Setenv("SPORE_AGENT_BINARY", "")
+
+	_, err := Start(tasksDir, "x", nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if body, err := os.ReadFile(filepath.Join(repo, ".worktrees", "x", ".codex", "hooks.json")); err != nil {
+		t.Fatalf("codex hooks missing: %v", err)
+	} else if !strings.Contains(string(body), "spore hooks watch-inbox") {
+		t.Fatalf("codex hooks missing watch-inbox:\n%s", body)
+	}
+}
+
+func TestStartMissingFleetDefaultAgentDoesNotCreateWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.WriteFile(filepath.Join(repo, "spore.toml"), []byte("[fleet.workers]\ndefault = \"codex\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	taskPath := filepath.Join(tasksDir, "x.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: draft\nslug: x\ntitle: X\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{"tmux": "#!/bin/sh\nexit 1\n", "spore": "#!/bin/sh\nexit 0\n"},
+	})
+	t.Setenv("PATH", h.BinDir)
+	t.Setenv("SPORE_AGENT_BINARY", "")
+
+	_, err := Start(tasksDir, "x", nil)
+	if err == nil || !strings.Contains(err.Error(), "missing-worker-agent:codex") {
+		t.Fatalf("Start err = %v, want missing codex preflight", err)
+	}
+	if status := readStatus(t, taskPath); status != "draft" {
+		t.Fatalf("status = %q, want draft", status)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree stat err = %v, want not exist", err)
+	}
+}
+
+func TestStartExplicitAgentOverridesFleetDefault(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.WriteFile(filepath.Join(repo, "spore.toml"), []byte("[fleet.workers]\ndefault = \"codex\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: draft\nslug: x\ntitle: X\nagent: claude\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{"tmux": "#!/bin/sh\nexit 1\n", "spore": "#!/bin/sh\nexit 0\n"},
+	})
+	t.Setenv("PATH", h.BinDir)
+	t.Setenv("SPORE_AGENT_BINARY", "")
+
+	_, err := Start(tasksDir, "x", nil)
+	if err == nil || !strings.Contains(err.Error(), "missing-worker-agent:claude") {
+		t.Fatalf("Start err = %v, want missing claude preflight", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree stat err = %v, want not exist", err)
+	}
+}
+
 func TestStartDetectsAgentExitDuringSettle(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)

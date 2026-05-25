@@ -407,7 +407,7 @@ func TestWorkerAgentCommandCodexUsesEffortPolicy(t *testing.T) {
 			"model":  "gpt-5.5",
 		},
 	}
-	got, err := workerAgentCommand(m)
+	got, err := workerAgentCommand(m, "")
 	if err != nil {
 		t.Fatalf("workerAgentCommand: %v", err)
 	}
@@ -425,7 +425,7 @@ func TestWorkerAgentCommandClaudeUsesEffortPolicy(t *testing.T) {
 			"effort": "high",
 		},
 	}
-	got, err := workerAgentCommand(m)
+	got, err := workerAgentCommand(m, "")
 	if err != nil {
 		t.Fatalf("workerAgentCommand: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestWorkerAgentCommandClaudeUsesEffortPolicy(t *testing.T) {
 
 func TestWorkerAgentCommandOverrideWins(t *testing.T) {
 	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
-	got, err := workerAgentCommand(frontmatter.Meta{Agent: "codex"})
+	got, err := workerAgentCommand(frontmatter.Meta{Agent: "codex"}, "")
 	if err != nil {
 		t.Fatalf("workerAgentCommand: %v", err)
 	}
