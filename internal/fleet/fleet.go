@@ -186,11 +186,17 @@ func Reconcile(cfg Config) (Result, error) {
 	}
 	agentCounts := agentCountsFromMetas(metas, runningSet)
 
+	// MaxWorkers caps NEW tmux launches per pass, not the total alive
+	// fleet. Pre-existing-alive sessions are already classified as Kept
+	// in the reap loop above; charging them against the spawn cap would
+	// starve every newly-Ready task on the next pass (under
+	// --max-workers=1, one alive session would skip every active slug).
+	spawnedThisPass := 0
 	for _, slug := range actives {
 		if runningSet[slug] {
 			continue
 		}
-		if len(runningSet) >= cfg.MaxWorkers {
+		if spawnedThisPass >= cfg.MaxWorkers {
 			res.Skipped = append(res.Skipped, slug)
 			continue
 		}
@@ -203,6 +209,7 @@ func Reconcile(cfg Config) (Result, error) {
 		}
 		res.Spawned = append(res.Spawned, slug)
 		runningSet[slug] = true
+		spawnedThisPass++
 		agentCounts[picked]++
 	}
 
