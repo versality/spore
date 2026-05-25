@@ -299,8 +299,9 @@ type chainResult struct {
 }
 
 // runChain runs cfg.Chain sequentially, piping payload to each on
-// stdin. A child's exit-2 stops the chain and propagates. Timeouts
-// log a one-line warning and continue.
+// stdin. Any child failure stops the chain and returns exit 2 with a
+// continuation prompt so Codex surfaces the lifecycle failure instead of
+// treating stderr on an exit-0 adapter as ignorable output.
 func runChain(cfg StopConfig, payload []byte) chainResult {
 	var stderr strings.Builder
 	for _, h := range cfg.Chain {
@@ -328,7 +329,7 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 		if !ok {
 			fmt.Fprintf(&stderr, "spore hooks codex stop: chain %v: %v\n", h.Argv, err)
 			appendWorkerStopError(cfg, "spawn-error", h.Argv, -1, fmt.Sprintf("%v: %s", err, combined.String()))
-			continue
+			return chainResult{ExitCode: 2, Stderr: stderr.String()}
 		}
 		rc := exitErr.ExitCode()
 		switch {
@@ -338,9 +339,11 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 		case timedOut || rc == 124 || rc == 137:
 			fmt.Fprintf(&stderr, "spore hooks codex stop: timed out after %s: %v\n", timeout, h.Argv)
 			appendWorkerStopError(cfg, "timeout", h.Argv, rc, combined.String())
+			return chainResult{ExitCode: 2, Stderr: stderr.String()}
 		default:
 			fmt.Fprintf(&stderr, "spore hooks codex stop: %v exited %d\n", h.Argv, rc)
 			appendWorkerStopError(cfg, "exit", h.Argv, rc, combined.String())
+			return chainResult{ExitCode: 2, Stderr: stderr.String()}
 		}
 	}
 	return chainResult{ExitCode: 0, Stderr: stderr.String()}

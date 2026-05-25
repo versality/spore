@@ -190,8 +190,11 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	if info, err := os.Stat(filepath.Join(repo, ".worktrees", "x", ".codex")); err != nil || !info.IsDir() {
+		t.Fatalf("worktree codex layer dir missing: info=%v err=%v", info, err)
+	}
 	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x", ".codex", "hooks.json")); !os.IsNotExist(err) {
-		t.Fatalf("worktree codex hooks should not be written: %v", err)
+		t.Fatalf("worktree codex hook file should not be written: %v", err)
 	}
 	if body, err := os.ReadFile(filepath.Join(repo, ".codex", "hooks.json")); err != nil {
 		t.Fatalf("codex hooks missing: %v", err)

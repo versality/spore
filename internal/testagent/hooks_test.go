@@ -188,6 +188,111 @@ func TestRunCodexLinkedWorktreeReadsRootHooks(t *testing.T) {
 	}
 }
 
+func TestRunCodexLinkedWorktreeRequiresWorktreeCodexDirectory(t *testing.T) {
+	root := t.TempDir()
+	worktree := filepath.Join(root, ".worktrees", "demo")
+	runGitForHooks(t, root, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("root\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForHooks(t, root, "add", "file.txt")
+	runGitForHooks(t, root, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "init")
+	runGitForHooks(t, root, "worktree", "add", "-q", "-b", "wt/demo", worktree)
+	trustCodexProject(t, root)
+
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(root, "hooks.out")
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"printf root >> ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(root, ".codex", "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withWorkingDir(t, worktree)
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, filepath.Join(root, "events.jsonl"))
+
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+		t.Fatalf("root hook ran without worktree .codex layer or stat failed: %v", err)
+	}
+}
+
+func TestRunCodexNestedWorktreeDirectoryReadsRootHooks(t *testing.T) {
+	root := t.TempDir()
+	worktree := filepath.Join(root, ".worktrees", "demo")
+	runGitForHooks(t, root, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("root\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForHooks(t, root, "add", "file.txt")
+	runGitForHooks(t, root, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "init")
+	runGitForHooks(t, root, "worktree", "add", "-q", "-b", "wt/demo", worktree)
+	trustCodexProject(t, root)
+
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(worktree, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(worktree, "nested", "subdir")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(root, "hooks.out")
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"printf root >> ` + outPath + `","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(root, ".codex", "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withWorkingDir(t, nested)
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, filepath.Join(root, "events.jsonl"))
+
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(body); got != "root" {
+		t.Fatalf("root hook output = %q", got)
+	}
+}
+
+func TestRunCodexStopExit2RecordsBlocked(t *testing.T) {
+	dir := t.TempDir()
+	trustCodexProject(t, dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hooks := `{"hooks":{"Stop":[{"hooks":[{"command":"echo continue >&2; exit 2","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(dir, ".codex", "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(dir, "events.jsonl")
+	withWorkingDir(t, dir)
+	t.Setenv(EnvMode, ModeOneTurn)
+	t.Setenv(EnvEventLog, logPath)
+
+	code := Run(context.Background(), Options{Provider: "codex", Argv: []string{"codex", "--dangerously-bypass-hook-trust"}, Now: fixedNow})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	events := readEvents(t, logPath)
+	if findEvent(events, "hook-blocked") == nil {
+		t.Fatalf("hook-blocked event missing: %s", eventTypes(events))
+	}
+	if findEvent(events, "stop-blocked") == nil {
+		t.Fatalf("stop-blocked event missing: %s", eventTypes(events))
+	}
+}
+
 func TestRunCodexUntrustedProjectDoesNotDiscoverHooks(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {

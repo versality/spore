@@ -222,7 +222,7 @@ func TestStop_Chain_PropagatesExit2(t *testing.T) {
 	}
 }
 
-func TestStop_Chain_TimeoutContinues(t *testing.T) {
+func TestStop_Chain_TimeoutBlocks(t *testing.T) {
 	cfg := StopConfig{
 		CommandTimeout: 200 * time.Millisecond,
 		Chain: []ChainHook{
@@ -231,15 +231,15 @@ func TestStop_Chain_TimeoutContinues(t *testing.T) {
 		},
 	}
 	res := Stop(cfg, strings.NewReader(`{}`))
-	if res.ExitCode != 0 {
-		t.Fatalf("exit = %d, want 0 (timeout should not propagate)", res.ExitCode)
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d, want lifecycle-blocking exit 2", res.ExitCode)
 	}
-	if !strings.Contains(res.Stderr, "exited") && !strings.Contains(res.Stderr, "timed out") {
-		t.Errorf("expected stderr note about non-zero exit: %q", res.Stderr)
+	if !strings.Contains(res.Stderr, "timed out") {
+		t.Errorf("expected stderr note about timeout: %q", res.Stderr)
 	}
 }
 
-func TestStop_Chain_NonZeroNon2_Continues(t *testing.T) {
+func TestStop_Chain_NonZeroNon2Blocks(t *testing.T) {
 	cfg := StopConfig{
 		Chain: []ChainHook{
 			{Argv: []string{"sh", "-c", "exit 1"}},
@@ -247,8 +247,11 @@ func TestStop_Chain_NonZeroNon2_Continues(t *testing.T) {
 		},
 	}
 	res := Stop(cfg, strings.NewReader(`{}`))
-	if res.ExitCode != 0 {
-		t.Fatalf("exit = %d, want 0 (rc=1 should not propagate)", res.ExitCode)
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d, want lifecycle-blocking exit 2", res.ExitCode)
+	}
+	if !strings.Contains(res.Stderr, "exited 1") {
+		t.Errorf("expected stderr note about rc=1: %q", res.Stderr)
 	}
 }
 
@@ -363,8 +366,11 @@ func TestStop_WorkerStopErrors_LogsTimeout(t *testing.T) {
 		},
 	}
 	res := Stop(cfg, strings.NewReader(`{}`))
-	if res.ExitCode != 0 {
-		t.Fatalf("exit = %d", res.ExitCode)
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d, want lifecycle-blocking exit 2", res.ExitCode)
+	}
+	if !strings.Contains(res.Stderr, "timed out") {
+		t.Fatalf("stderr = %q, want timeout continuation prompt", res.Stderr)
 	}
 	body, err := os.ReadFile(filepath.Join(wtState, "worker-stop-errors.jsonl"))
 	if err != nil {
@@ -393,8 +399,11 @@ func TestStop_WorkerStopErrors_LogsNonZeroExit(t *testing.T) {
 		},
 	}
 	res := Stop(cfg, strings.NewReader(`{}`))
-	if res.ExitCode != 0 {
-		t.Fatalf("exit = %d (non-2 exit should not propagate)", res.ExitCode)
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d, want lifecycle-blocking exit 2", res.ExitCode)
+	}
+	if !strings.Contains(res.Stderr, "exited 7") {
+		t.Fatalf("stderr = %q, want nonzero continuation prompt", res.Stderr)
 	}
 	body, _ := os.ReadFile(filepath.Join(wtState, "worker-stop-errors.jsonl"))
 	got := string(body)

@@ -61,7 +61,7 @@ func Run(ctx context.Context, opts Options) int {
 	recordLaunchContract(rec, opts.Provider, mode)
 	recordCoordinatorContract(rec, opts.Provider, mode)
 	if opts.Provider == "codex" {
-		runCodexHooks(ctx, rec, "SessionStart", opts.Argv)
+		_ = runCodexHooks(ctx, rec, "SessionStart", opts.Argv)
 	}
 	switch mode {
 	case ModeEvidence, ModeCommitChange, ModeRequestMerge, ModeSelfDone:
@@ -135,7 +135,7 @@ func Run(ctx context.Context, opts Options) int {
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
 		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "PreToolUse", opts.Argv)
+			_ = runCodexHooks(ctx, rec, "PreToolUse", opts.Argv)
 		}
 		fmt.Fprintf(opts.Stdout, "fake %s one turn\n", opts.Provider)
 		_ = rec.event(Event{Type: "progress", Provider: opts.Provider, Mode: mode, Message: "one-turn"})
@@ -148,7 +148,7 @@ func Run(ctx context.Context, opts Options) int {
 		touch(os.Getenv(EnvReadyFile))
 		_ = rec.event(Event{Type: "ready", Provider: opts.Provider, Mode: mode})
 		if opts.Provider == "codex" {
-			runCodexHooks(ctx, rec, "PreToolUse", opts.Argv)
+			_ = runCodexHooks(ctx, rec, "PreToolUse", opts.Argv)
 		}
 		turns := turnLimit()
 		for i := 1; i <= turns; i++ {
@@ -171,7 +171,9 @@ func Run(ctx context.Context, opts Options) int {
 func runStopHooks(ctx context.Context, rec recorder, provider string, argv []string) {
 	switch provider {
 	case "codex":
-		runCodexHooks(ctx, rec, "Stop", argv)
+		if runCodexHooks(ctx, rec, "Stop", argv) {
+			_ = rec.event(Event{Type: "stop-blocked", Provider: provider, Message: "Stop hook blocked turn"})
+		}
 	case "claude":
 		runClaudeHooks(ctx, rec, "Stop")
 	}

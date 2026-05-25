@@ -618,6 +618,9 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if _, _, err := inject.InjectCodex(projectRoot, projectRoot, SessionKindWorker); err != nil {
 		return "", fmt.Errorf("inject codex hooks: %w", err)
 	}
+	if err := ensureCodexWorktreeLayer(worktree); err != nil {
+		return "", err
+	}
 	// Wrap the agent command through sh -c so we can append the
 	// initial-prompt brief on launch (mirrors the old wt-task
 	// `agent_cmd -- "$(cat .wt/initial-prompt)"` pattern). Without
@@ -678,6 +681,19 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", fmt.Errorf("worker session %s has a dead pane after spawn (agent=%q)", session, agent)
 	}
 	return session, nil
+}
+
+func ensureCodexWorktreeLayer(worktree string) error {
+	// Codex linked-worktree discovery only considers a project layer if
+	// the worktree path itself has a .codex/ directory. Hook declarations
+	// still come from the root checkout .codex/hooks.json; this directory
+	// is intentionally just the layer marker.
+	// https://github.com/openai/codex/blob/9f42c89c0112771dc29100a6f3fc904049b2655f/codex-rs/config/src/loader/mod.rs#L1156-L1165
+	// https://github.com/openai/codex/blob/9f42c89c0112771dc29100a6f3fc904049b2655f/codex-rs/config/src/loader/mod.rs#L1267-L1322
+	if err := os.MkdirAll(filepath.Join(worktree, ".codex"), 0o755); err != nil {
+		return fmt.Errorf("ensure codex worktree layer: %w", err)
+	}
+	return nil
 }
 
 func readTaskMeta(tasksDir, slug string) (frontmatter.Meta, error) {

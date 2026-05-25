@@ -299,7 +299,11 @@ func TestStartRendersCodexHooksIntoWorktree(t *testing.T) {
 		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
-	worktreeHook := filepath.Join(repo, ".worktrees", slug, ".codex/hooks.json")
+	worktreeCodex := filepath.Join(repo, ".worktrees", slug, ".codex")
+	if info, err := os.Stat(worktreeCodex); err != nil || !info.IsDir() {
+		t.Fatalf("worker spawn did not create codex worktree layer: info=%v err=%v", info, err)
+	}
+	worktreeHook := filepath.Join(worktreeCodex, "hooks.json")
 	if _, err := os.Stat(worktreeHook); !os.IsNotExist(err) {
 		t.Fatalf("worker spawn wrote ignored worktree codex hooks: %v", err)
 	}
