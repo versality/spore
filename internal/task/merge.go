@@ -135,6 +135,18 @@ func pushAndVerifyMain(projectRoot string) error {
 	return nil
 }
 
+// taskPathIgnored reports whether rel (relative to projectRoot) is
+// covered by a .gitignore. Consumers that keep tasks/ as a local
+// ledger rather than a tracked artifact rely on this to let
+// closeMergedTask skip the add+commit step without erroring.
+func taskPathIgnored(projectRoot, rel string) bool {
+	err := gitCmd(projectRoot, "check-ignore", "-q", "--", rel).Run()
+	if err == nil {
+		return true
+	}
+	return false
+}
+
 func closeMergedTask(tasksDir, slug string) error {
 	path := filepath.Join(tasksDir, slug+".md")
 	raw, err := os.ReadFile(path)
@@ -170,6 +182,9 @@ func closeMergedTask(tasksDir, slug string) error {
 	rel, err := filepath.Rel(projectRoot, path)
 	if err != nil {
 		rel = path
+	}
+	if taskPathIgnored(projectRoot, rel) {
+		return nil
 	}
 	if out, err := gitCmd(projectRoot, "add", "--", rel).CombinedOutput(); err != nil {
 		return fmt.Errorf("git add task close: %w: %s", err, strings.TrimSpace(string(out)))
