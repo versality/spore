@@ -59,6 +59,14 @@ const (
 	// pre-date the matter/matter_id rename.
 	legacyIDKey  = "linear"
 	legacyURLKey = "linear_url"
+
+	// matterBlockerPrefix marks a blocker reason owned by the matter
+	// adapter: when a Linear ticket leaves Ready, future projection
+	// passes may stamp `blocker: matter:<state>` so the local task is
+	// no longer runnable. The same prefix is what lets a later pass
+	// edge-trigger a resume when the ticket returns to Ready. Blockers
+	// without this prefix are operator-set and stay sticky.
+	matterBlockerPrefix = "matter:"
 )
 
 func init() {
@@ -171,7 +179,14 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		return 0, 0, err
 	}
 	for _, issue := range ready {
-		if _, dup := known[issue.Identifier]; dup {
+		if slug, dup := known[issue.Identifier]; dup {
+			resumed, err := resumeIfMatterBlocked(tasksDir, slug)
+			if err != nil {
+				return created, updated, fmt.Errorf("matter.linear: resume %s: %w", issue.Identifier, err)
+			}
+			if resumed {
+				updated++
+			}
 			continue
 		}
 		slug, err := s.adoptIssue(tasksDir, issue)
@@ -409,6 +424,33 @@ func pendingDonePushes(tasksDir string) ([]linearTaskRow, error) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].slug < rows[j].slug })
 	return rows, nil
+}
+
+// resumeIfMatterBlocked flips slug back to active when the local task
+// is blocked with a matter-set blocker (one carrying matterBlockerPrefix).
+// Operator-set blockers (no prefix) are left untouched: matter must not
+// stomp a manual block reason. Edge-triggered: only fires when the local
+// task is in matter-owned blocked state, never resets an already-active
+// task. Returns true when a flip happened.
+func resumeIfMatterBlocked(tasksDir, slug string) (bool, error) {
+	path := filepath.Join(tasksDir, slug+".md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	m, body, err := frontmatter.Parse(raw)
+	if err != nil {
+		return false, err
+	}
+	if !task.IsBlocked(m.Status) {
+		return false, nil
+	}
+	if !strings.HasPrefix(m.Extra["blocker"], matterBlockerPrefix) {
+		return false, nil
+	}
+	m.Status = task.StatusActive
+	delete(m.Extra, "blocker")
+	return true, os.WriteFile(path, frontmatter.Write(m, body), 0o644)
 }
 
 // stampLinearDone re-writes tasks/<slug>.md with `linear_done: yes`
