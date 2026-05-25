@@ -174,6 +174,9 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		if _, dup := known[issue.Identifier]; dup {
 			continue
 		}
+		if isBlockedByOpenUpstream(issue) {
+			continue
+		}
 		slug, err := s.adoptIssue(tasksDir, issue)
 		if err != nil {
 			return created, updated, fmt.Errorf("matter.linear: adopt %s: %w", issue.Identifier, err)
@@ -515,12 +518,51 @@ func (s *Source) loadStateIDs() error {
 }
 
 type linearIssue struct {
-	ID          string  `json:"id"`
-	Identifier  string  `json:"identifier"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	URL         string  `json:"url"`
-	SortOrder   float64 `json:"sortOrder"`
+	ID          string          `json:"id"`
+	Identifier  string          `json:"identifier"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	URL         string          `json:"url"`
+	SortOrder   float64         `json:"sortOrder"`
+	Relations   linearRelations `json:"relations"`
+}
+
+type linearRelations struct {
+	Nodes []linearRelation `json:"nodes"`
+}
+
+type linearRelation struct {
+	Type         string             `json:"type"`
+	RelatedIssue linearRelatedIssue `json:"relatedIssue"`
+}
+
+type linearRelatedIssue struct {
+	ID    string                  `json:"id"`
+	State linearRelatedIssueState `json:"state"`
+}
+
+type linearRelatedIssueState struct {
+	Type string `json:"type"`
+}
+
+// isBlockedByOpenUpstream returns true when issue has at least one
+// blocked_by relation pointing to an upstream issue whose state.type
+// is not terminal. Linear's state.type enum tags terminal states
+// "completed" and "canceled"; the workflow-state name is
+// operator-customisable and not safe to key on.
+func isBlockedByOpenUpstream(issue linearIssue) bool {
+	for _, rel := range issue.Relations.Nodes {
+		if rel.Type != "blocked_by" {
+			continue
+		}
+		switch rel.RelatedIssue.State.Type {
+		case "completed", "canceled":
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // listIssuesByState returns the issues in stateID ordered by Linear's
@@ -533,7 +575,15 @@ type linearIssue struct {
 func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
 	const q = `query StateIssues($stateId: ID!) {
   issues(filter: {state: {id: {eq: $stateId}}}) {
-    nodes { id identifier title description url sortOrder }
+    nodes {
+      id identifier title description url sortOrder
+      relations {
+        nodes {
+          type
+          relatedIssue { id state { type } }
+        }
+      }
+    }
   }
 }`
 	var resp struct {
