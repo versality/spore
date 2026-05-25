@@ -28,6 +28,11 @@
         "kinds": ["worker"]
       },
       {
+        "command": "spore hooks worker-finish",
+        "timeout": 10,
+        "kinds": ["worker"]
+      },
+      {
         "command": "spore hooks watch-inbox",
         "timeout": 604800,
         "asyncRewake": true,

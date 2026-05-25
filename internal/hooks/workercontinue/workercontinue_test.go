@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -40,6 +41,13 @@ func TestCheck(t *testing.T) {
 				writeTask(t, env, "blocked", "")
 			},
 			wantReason: "not-active",
+		},
+		{
+			name: "awaiting operator suppresses",
+			setup: func(t *testing.T, env *testEnv) {
+				writeTaskWithExtra(t, env, "active", map[string]string{"worker-state": "awaiting-operator"}, "")
+			},
+			wantReason: "awaiting-operator",
 		},
 		{
 			name: "fleet disabled noop",
@@ -269,6 +277,26 @@ func writeTask(t *testing.T, env *testEnv, status, body string) {
 	content := "---\nslug: " + env.cfg.Slug + "\ntitle: test\nstatus: " + status + "\n---\n" + body
 	taskFile := filepath.Join(env.cfg.Worktree, "tasks", env.cfg.Slug+".md")
 	writeFile(t, taskFile, content)
+}
+
+func writeTaskWithExtra(t *testing.T, env *testEnv, status string, extra map[string]string, body string) {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("---\nslug: ")
+	b.WriteString(env.cfg.Slug)
+	b.WriteString("\ntitle: test\nstatus: ")
+	b.WriteString(status)
+	b.WriteByte('\n')
+	for k, v := range extra {
+		b.WriteString(k)
+		b.WriteString(": ")
+		b.WriteString(v)
+		b.WriteByte('\n')
+	}
+	b.WriteString("---\n")
+	b.WriteString(body)
+	taskFile := filepath.Join(env.cfg.Worktree, "tasks", env.cfg.Slug+".md")
+	writeFile(t, taskFile, b.String())
 }
 
 func writeInbox(t *testing.T, env *testEnv, name, body string) {

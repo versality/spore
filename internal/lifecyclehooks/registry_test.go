@@ -26,10 +26,34 @@ func TestRegistryHooksAreComplete(t *testing.T) {
 }
 
 func TestForDriver(t *testing.T) {
-	if got := ForDriver(DriverClaude); len(got) != 9 {
-		t.Fatalf("claude hooks = %d, want 9", len(got))
+	if got := ForDriver(DriverClaude); len(got) != 10 {
+		t.Fatalf("claude hooks = %d, want 10", len(got))
 	}
-	if got := ForDriver(DriverCodex); len(got) != 6 {
-		t.Fatalf("codex hooks = %d, want 6", len(got))
+	if got := ForDriver(DriverCodex); len(got) != 7 {
+		t.Fatalf("codex hooks = %d, want 7", len(got))
 	}
+}
+
+func TestWorkerFinishHookOrder(t *testing.T) {
+	claude := ForDriver(DriverClaude)
+	if indexCommand(claude, "spore hooks worker-finish") > indexCommand(claude, "spore hooks worker-continue") {
+		t.Fatal("claude worker-finish must run before worker-continue")
+	}
+	if indexCommand(claude, "spore hooks worker-finish") > indexCommand(claude, "spore hooks watch-inbox") {
+		t.Fatal("claude worker-finish must run before watch-inbox")
+	}
+
+	codex := ForDriver(DriverCodex)
+	if indexCommand(codex, "spore hooks worker-finish") > indexCommand(codex, "spore hooks watch-inbox") {
+		t.Fatal("codex worker-finish must run before watch-inbox")
+	}
+}
+
+func indexCommand(hooks []Hook, command string) int {
+	for i, hook := range hooks {
+		if hook.Command == command {
+			return i
+		}
+	}
+	return len(hooks) + 1
 }

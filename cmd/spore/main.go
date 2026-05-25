@@ -221,6 +221,12 @@ Subcommands:
                               worker-continue/<slug>.json suppresses
                               re-firing until the worker makes progress
                               (frontmatter mtime/size or HEAD changes).
+  worker-finish                Stop-hook: when a worker stops on a clean,
+                              evidenced active task, mark tasks/<slug>.md
+                              with worker-state: awaiting-operator and
+                              worker-result: ready-to-merge or no-code-change.
+                              Exit 2 when the tree is dirty or Evidence is
+                              insufficient.
   worker-stop-force-closing   Stop-hook: refuse to end a turn without a
                               closing move. Exit 2 unless any of these
                               fired since the previous Stop: status flip

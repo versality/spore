@@ -17,6 +17,7 @@ import (
 	"github.com/versality/spore/internal/hooks/settings"
 	"github.com/versality/spore/internal/hooks/stopwatchdog"
 	"github.com/versality/spore/internal/hooks/workercontinue"
+	"github.com/versality/spore/internal/hooks/workerfinish"
 	"github.com/versality/spore/internal/hooks/workerstopforceclosing"
 	"github.com/versality/spore/internal/hooks/wtmergemechanical"
 )
@@ -65,6 +66,8 @@ func runHooks(args []string) int {
 		return runHooksPlanReadyMechanical(rest)
 	case "worker-continue":
 		return runHooksWorkerContinue(rest)
+	case "worker-finish":
+		return runHooksWorkerFinish(rest)
 	case "worker-stop-force-closing":
 		return runHooksWorkerStopForceClosing(rest)
 	case "codex":
@@ -491,6 +494,22 @@ func runHooksWorkerContinue(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+func runHooksWorkerFinish(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "spore hooks worker-finish: takes no args")
+		return 2
+	}
+	res, err := workerfinish.RunEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore hooks worker-finish:", err)
+		return 1
+	}
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
 }
 
 func runHooksWorkerStopForceClosing(args []string) int {

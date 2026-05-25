@@ -27,6 +27,11 @@
         "kinds": ["worker"]
       },
       {
+        "command": "spore hooks worker-finish",
+        "timeout": 10,
+        "kinds": ["worker"]
+      },
+      {
         "command": "spore hooks worker-continue",
         "timeout": 10,
         "kinds": ["worker"]

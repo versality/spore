@@ -76,6 +76,9 @@ func Check(cfg Config) (Result, error) {
 	if meta.Status != "active" {
 		return Result{Reason: "not-active"}, nil
 	}
+	if meta.Extra != nil && meta.Extra["worker-state"] == "awaiting-operator" {
+		return Result{Reason: "awaiting-operator"}, nil
+	}
 
 	if cfg.FleetEnabled != nil {
 		on, err := cfg.FleetEnabled()
