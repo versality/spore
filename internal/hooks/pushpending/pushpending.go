@@ -6,7 +6,7 @@
 // Decision boundary (all must hold; else exit 0):
 //
 //  1. UnpushedMainCommits(projectRoot) > 0  (local main ahead of origin/main).
-//  2. git -C <worktree> status --porcelain is empty.
+//  2. the worktree is clean aside from Spore-managed worker-state metadata.
 //  3. <worktree>'s git-dir contains no MERGE_HEAD, rebase-merge, or rebase-apply.
 //  4. agentpane.Classify on the worker pane reports "idle".
 //
@@ -74,7 +74,7 @@ func Run(req hooks.Request, deps Deps) Result {
 		return Result{}
 	}
 
-	if !wtgit.WorkingTreeClean(worktree) {
+	if !wtgit.WorkingTreeCleanForWorker(worktree, slug) {
 		return Result{}
 	}
 	if wtgit.MidMergeOrRebase(worktree) {

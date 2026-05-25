@@ -116,7 +116,7 @@ func Run(req hooks.Request, deps Deps) Result {
 		worktree = filepath.Join(projectRoot, ".worktrees", slug)
 	}
 
-	if !wtgit.WorkingTreeClean(worktree) {
+	if !wtgit.WorkingTreeCleanForWorker(worktree, slug) {
 		return Result{}
 	}
 	if wtgit.MidMergeOrRebase(worktree) {

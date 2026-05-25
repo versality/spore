@@ -25,6 +25,66 @@ func WorkingTreeClean(worktree string) bool {
 	return strings.TrimSpace(string(out)) == ""
 }
 
+// WorkingTreeCleanForWorker reports whether a worker worktree is clean
+// enough for lifecycle hooks. A task file diff that only records
+// Spore-managed worker-state / worker-result frontmatter is treated as
+// runtime metadata rather than payload dirtiness.
+func WorkingTreeCleanForWorker(worktree, slug string) bool {
+	out, err := exec.Command("git", "-C", worktree, "status", "--porcelain").Output()
+	if err != nil {
+		return false
+	}
+	status := string(out)
+	if strings.TrimSpace(status) == "" {
+		return true
+	}
+	for _, raw := range strings.Split(status, "\n") {
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		path := statusPath(raw)
+		if path == "tasks/"+slug+".md" && taskDiffIsWorkerRuntimeOnly(worktree, path) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func taskDiffIsWorkerRuntimeOnly(worktree, path string) bool {
+	out, err := exec.Command("git", "-C", worktree, "diff", "--no-ext-diff", "--", path).Output()
+	if err != nil {
+		return false
+	}
+	sawRuntimeLine := false
+	for _, line := range strings.Split(string(out), "\n") {
+		if line == "" || strings.HasPrefix(line, "diff ") || strings.HasPrefix(line, "index ") ||
+			strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "--- ") || strings.HasPrefix(line, "+++ ") {
+			continue
+		}
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+			body := strings.TrimSpace(line[1:])
+			if strings.HasPrefix(body, "worker-state:") || strings.HasPrefix(body, "worker-result:") {
+				sawRuntimeLine = true
+				continue
+			}
+			return false
+		}
+	}
+	return sawRuntimeLine
+}
+
+func statusPath(line string) string {
+	if len(line) < 4 {
+		return ""
+	}
+	path := strings.TrimSpace(line[3:])
+	if i := strings.LastIndex(path, " -> "); i >= 0 {
+		path = path[i+4:]
+	}
+	return filepath.ToSlash(path)
+}
+
 // MidMergeOrRebase reports whether the worktree sits in the middle
 // of a merge or rebase: MERGE_HEAD, rebase-merge/, or rebase-apply/
 // present under .git. Hooks that auto-commit or push refuse to act
