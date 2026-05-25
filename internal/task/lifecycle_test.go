@@ -99,7 +99,7 @@ func TestLifecycleStartBlockDone(t *testing.T) {
 		t.Error("Block from blocked should error, got nil")
 	}
 
-	if err := Done(tasksDir, slug, false); err != nil {
+	if err := Done(tasksDir, slug, true); err != nil {
 		t.Fatalf("Done: %v", err)
 	}
 	if status := readStatus(t, taskPath); status != "done" {
@@ -115,7 +115,7 @@ func TestLifecycleStartBlockDone(t *testing.T) {
 		t.Errorf("tmux session %q still alive after Done", session)
 	}
 
-	if err := Done(tasksDir, slug, false); err != nil {
+	if err := Done(tasksDir, slug, true); err != nil {
 		t.Errorf("Done on already-done task should be no-op, got %v", err)
 	}
 }
@@ -181,7 +181,7 @@ func TestStartResumesBlocked(t *testing.T) {
 		t.Errorf("tmux has-session after resume: %v", err)
 	}
 
-	if err := Done(tasksDir, slug, false); err != nil {
+	if err := Done(tasksDir, slug, true); err != nil {
 		t.Fatalf("Done: %v", err)
 	}
 }
