@@ -10,6 +10,7 @@ type Hook struct {
 	Event   string
 	Command string
 	Timeout int
+	Async   bool
 	Kinds   []string
 	Docs    []string
 }
@@ -68,6 +69,7 @@ func Registry() []Hook {
 			Event:   "Stop",
 			Command: "spore hooks watch-inbox",
 			Timeout: 604800,
+			Async:   true,
 			Kinds:   []string{"coordinator", "worker"},
 			Docs:    []string{"https://developers.openai.com/codex/hooks"},
 		},
@@ -148,6 +150,7 @@ func Registry() []Hook {
 			Event:   "Stop",
 			Command: "spore hooks watch-inbox",
 			Timeout: 604800,
+			Async:   true,
 			Kinds:   []string{"coordinator", "worker"},
 			Docs:    []string{"https://code.claude.com/docs/en/hooks"},
 		},

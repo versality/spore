@@ -239,6 +239,59 @@ func TestStop_Chain_TimeoutBlocks(t *testing.T) {
 	}
 }
 
+func TestStop_Chain_AsyncDoesNotBlock(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "async-ran")
+	cfg := StopConfig{
+		CommandTimeout: 50 * time.Millisecond,
+		Chain: []ChainHook{
+			{Argv: []string{"sh", "-c", "printf blocking >> " + marker}},
+			{Argv: []string{"sh", "-c", "sleep 1; printf async >> " + marker}, Async: true},
+		},
+	}
+	start := time.Now()
+	res := Stop(cfg, strings.NewReader(`{}`))
+	if res.ExitCode != 0 {
+		t.Fatalf("exit = %d stderr=%q", res.ExitCode, res.Stderr)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("async chain blocked for %s", elapsed)
+	}
+	got, _ := os.ReadFile(marker)
+	if string(got) != "blocking" {
+		t.Fatalf("marker immediately = %q, want blocking only", got)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got, _ = os.ReadFile(marker)
+		if string(got) == "blockingasync" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("async hook did not finish, marker=%q", got)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestStop_Chain_BlockingFailureSkipsAsync(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "async-ran")
+	cfg := StopConfig{
+		Chain: []ChainHook{
+			{Argv: []string{"sh", "-c", "echo stop >&2; exit 2"}},
+			{Argv: []string{"sh", "-c", "printf async > " + marker}, Async: true},
+		},
+	}
+	res := Stop(cfg, strings.NewReader(`{}`))
+	if res.ExitCode != 2 {
+		t.Fatalf("exit = %d, want 2", res.ExitCode)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("async hook ran after blocking failure")
+	}
+}
+
 func TestStop_Chain_NonZeroNon2Blocks(t *testing.T) {
 	cfg := StopConfig{
 		Chain: []ChainHook{

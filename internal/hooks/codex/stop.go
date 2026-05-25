@@ -51,6 +51,7 @@ type StopConfig struct {
 type ChainHook struct {
 	Argv    []string
 	Timeout time.Duration
+	Async   bool
 }
 
 const (
@@ -308,6 +309,14 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 		if len(h.Argv) == 0 {
 			continue
 		}
+		if h.Async {
+			if err := startAsyncChainHook(h); err != nil {
+				fmt.Fprintf(&stderr, "spore hooks codex stop: async chain %v: %v\n", h.Argv, err)
+				appendWorkerStopError(cfg, "spawn-error", h.Argv, -1, err.Error())
+				return chainResult{ExitCode: 2, Stderr: stderr.String()}
+			}
+			continue
+		}
 		timeout := h.Timeout
 		if timeout <= 0 {
 			timeout = cfg.CommandTimeout
@@ -347,6 +356,14 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 		}
 	}
 	return chainResult{ExitCode: 0, Stderr: stderr.String()}
+}
+
+func startAsyncChainHook(h ChainHook) error {
+	cmd := exec.Command(h.Argv[0], h.Argv[1:]...)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Start()
 }
 
 // snapshotStateBeforeWrap merges a recent-events bullet into state.md

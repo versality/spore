@@ -168,6 +168,7 @@ func codexStopChainFromRegistry() ([]codex.ChainHook, bool) {
 		out = append(out, codex.ChainHook{
 			Argv:    argv,
 			Timeout: time.Duration(hook.Timeout) * time.Second,
+			Async:   hook.Async,
 		})
 	}
 	return out, true
