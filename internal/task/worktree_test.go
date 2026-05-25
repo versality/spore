@@ -96,6 +96,9 @@ func TestPrepareTaskBaselineCommitsOnlyCurrentTask(t *testing.T) {
 
 	worktree := filepath.Join(repo, ".worktrees", "demo")
 	runGit(t, repo, "worktree", "add", "-q", "-b", "wt/demo", worktree)
+	if err := os.WriteFile(filepath.Join(worktree, "worker-note.txt"), []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(worktree, "tasks", "other.md"), []byte("leaked other\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -115,9 +118,12 @@ func TestPrepareTaskBaselineCommitsOnlyCurrentTask(t *testing.T) {
 	if got := readFileString(t, filepath.Join(worktree, "tasks", "demo.md")); !strings.Contains(got, "brief") {
 		t.Fatalf("current task not copied: %q", got)
 	}
+	if got := readFileString(t, filepath.Join(worktree, "worker-note.txt")); got != "keep me\n" {
+		t.Fatalf("non-task file = %q, want preserved", got)
+	}
 	status := strings.TrimSpace(string(runGitOutput(t, worktree, "status", "--porcelain")))
-	if status != "" {
-		t.Fatalf("worktree status = %q, want clean", status)
+	if status != "?? worker-note.txt" {
+		t.Fatalf("worktree status = %q, want only non-task file preserved", status)
 	}
 	head := strings.TrimSpace(string(runGitOutput(t, worktree, "log", "-1", "--format=%s")))
 	if head != "task: start demo" {
