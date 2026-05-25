@@ -90,6 +90,13 @@ type Config struct {
 	APIKeyEnv       string
 	APIKeyFile      string
 	Endpoint        string
+	// ClaimLabel, when non-empty, restricts the Ready-state projection
+	// to issues bearing this Linear label. Lets multiple spore hosts
+	// share one upstream queue: each host filters on its own label,
+	// while a consumer-side process binds tickets to hosts by setting
+	// the label. Matter only reads the label; it never creates or
+	// modifies labels.
+	ClaimLabel string
 }
 
 // Source is the Linear adapter. Construct via New (with a parsed
@@ -253,6 +260,7 @@ func parseConfig(c matter.Config) (Config, error) {
 		APIKeyEnv:       c.Option("api_key_env", ""),
 		APIKeyFile:      c.Option("api_key_file", ""),
 		Endpoint:        c.Option("endpoint", "https://api.linear.app/graphql"),
+		ClaimLabel:      c.Option("claim_label", ""),
 	}
 	if cfg.APIKeyFile == "" {
 		cfg.APIKeyFile = c.Option("credential_api_key", "")
@@ -615,7 +623,7 @@ func isBlockedByOpenUpstream(issue linearIssue) bool {
 // Ready, get it picked next"; relying on default ordering would honour
 // createdAt instead.
 func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
-	const q = `query StateIssues($stateId: ID!) {
+	q := `query StateIssues($stateId: ID!) {
   issues(filter: {state: {id: {eq: $stateId}}}) {
     nodes {
       id identifier title description url sortOrder
@@ -628,6 +636,23 @@ func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
     }
   }
 }`
+	vars := map[string]any{"stateId": stateID}
+	if s.cfg.ClaimLabel != "" {
+		q = `query StateIssues($stateId: ID!, $label: String!) {
+  issues(filter: {state: {id: {eq: $stateId}}, labels: {some: {name: {eq: $label}}}}) {
+    nodes {
+      id identifier title description url sortOrder
+      relations {
+        nodes {
+          type
+          relatedIssue { id state { type } }
+        }
+      }
+    }
+  }
+}`
+		vars["label"] = s.cfg.ClaimLabel
+	}
 	var resp struct {
 		Data struct {
 			Issues struct {
@@ -635,7 +660,7 @@ func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
 			} `json:"issues"`
 		} `json:"data"`
 	}
-	if err := s.graphQL(q, map[string]any{"stateId": stateID}, &resp); err != nil {
+	if err := s.graphQL(q, vars, &resp); err != nil {
 		return nil, err
 	}
 	nodes := resp.Data.Issues.Nodes
