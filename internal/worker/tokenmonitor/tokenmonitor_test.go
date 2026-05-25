@@ -148,6 +148,38 @@ func TestCheckWrapMax(t *testing.T) {
 	}
 }
 
+// TestCheckWrapAdvisesDriverOnlyKill pins the scope of a wrap fire:
+// the result carries the driver-only WrapAction, the wrap message no
+// longer instructs a whole-session tmux kill, and the pkill snippet
+// that targets the pane's tty is what the worker is told to run.
+func TestCheckWrapAdvisesDriverOnlyKill(t *testing.T) {
+	dir := t.TempDir()
+	transcriptFile := filepath.Join(dir, "session.jsonl")
+	line := `{"role":"assistant","usage":{"input_tokens":190000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`
+	if err := os.WriteFile(transcriptFile, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := Config{
+		Inbox:               filepath.Join(dir, "workers", "wrap-slug", "inbox"),
+		CoordinatorStateDir: filepath.Join(dir, "coord"),
+		Tier:                "max",
+	}
+	got := Check(cfg, HookPayload{TranscriptPath: transcriptFile})
+	if got.Level != "wrap" {
+		t.Fatalf("Level = %s, want wrap", got.Level)
+	}
+	if got.WrapAction != WrapKillDriver {
+		t.Errorf("WrapAction = %q, want %q", got.WrapAction, WrapKillDriver)
+	}
+	if strings.Contains(got.Message, "kill-session") {
+		t.Errorf("Message must not instruct tmux kill-session; got:\n%s", got.Message)
+	}
+	if !strings.Contains(got.Message, DriverKillCommand()) {
+		t.Errorf("Message must embed DriverKillCommand %q; got:\n%s", DriverKillCommand(), got.Message)
+	}
+}
+
 func TestCheckWrapSubTier(t *testing.T) {
 	dir := t.TempDir()
 	transcriptFile := filepath.Join(dir, "session.jsonl")
