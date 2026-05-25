@@ -22,6 +22,9 @@ func TestCodexStopChainFromRegistryWorkerOrder(t *testing.T) {
 	if !ok {
 		t.Fatal("chain not active in spore worker context")
 	}
+	if len(chain) == 0 || !chain[len(chain)-1].Async {
+		t.Fatalf("watch-inbox chain hook must be async: %#v", chain)
+	}
 	got := chainCommands(chain)
 	want := []string{
 		"spore worker token-monitor",

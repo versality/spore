@@ -49,6 +49,16 @@ func TestWorkerFinishHookOrder(t *testing.T) {
 	}
 }
 
+func TestWatchInboxHooksAreAsync(t *testing.T) {
+	for _, driver := range []string{DriverClaude, DriverCodex} {
+		for _, hook := range ForDriver(driver) {
+			if hook.Command == "spore hooks watch-inbox" && !hook.Async {
+				t.Fatalf("%s watch-inbox hook must be async: %#v", driver, hook)
+			}
+		}
+	}
+}
+
 func indexCommand(hooks []Hook, command string) int {
 	for i, hook := range hooks {
 		if hook.Command == command {
