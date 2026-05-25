@@ -207,6 +207,66 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 	}
 }
 
+func TestStartKeepsFastExitWorkerSessionAlive(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeCodexReady(t, repo)
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: draft\nslug: x\ntitle: X\nagent: codex\neffort: high\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tmuxState := filepath.Join(t.TempDir(), "tmux-session")
+	tmuxArgs := filepath.Join(t.TempDir(), "tmux-args")
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{
+			"codex": "#!/bin/sh\nexit 0\n",
+			"spore": "#!/bin/sh\nexit 0\n",
+			"tmux": "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + shellQuote(tmuxArgs) + "\ncase \"$1\" in\n" +
+				"  has-session) test -f " + shellQuote(tmuxState) + " ;;\n" +
+				"  new-session) case \"$*\" in *'set-window-option -t \"$TMUX_PANE\" remain-on-exit on'*'; exec '*) echo alive > " + shellQuote(tmuxState) + " ;; *) exit 0 ;; esac ;;\n" +
+				"  set-option) exit 0 ;;\n" +
+				"  list-panes) echo 0 ;;\n" +
+				"  kill-session) rm -f " + shellQuote(tmuxState) + " ;;\n" +
+				"  *) exit 0 ;;\n" +
+				"esac\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
+	t.Setenv("SPORE_AGENT_BINARY", "")
+
+	session, err := Start(tasksDir, "x", nil)
+	if err != nil {
+		t.Fatalf("Start fast-exit worker: %v\ntmux args:\n%s", err, readFileString(t, tmuxArgs))
+	}
+	if !strings.Contains(session, "[codex_default_high]") {
+		t.Fatalf("session = %q, want tmux-safe codex tag", session)
+	}
+	if status := readStatus(t, filepath.Join(tasksDir, "x.md")); status != "active" {
+		t.Fatalf("status = %q, want active", status)
+	}
+	if head := strings.TrimSpace(string(runGitOutput(t, filepath.Join(repo, ".worktrees", "x"), "log", "-1", "--format=%s"))); head != "task: start x" {
+		t.Fatalf("worktree HEAD = %q, want task baseline commit", head)
+	}
+}
+
 func writeCodexReady(t *testing.T, repo string) {
 	t.Helper()
 	home := t.TempDir()
