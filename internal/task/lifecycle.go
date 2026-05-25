@@ -636,6 +636,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if os.Getenv(AgentBinaryEnv) == "" {
 		shellCmd += ` ${SPORE_BRIEF_FILE:+-- "$(cat "$SPORE_BRIEF_FILE")"}`
 	}
+	shellCmd = paneBootstrapCommand(shellCmd)
 	args := []string{
 		"new-session", "-d",
 		"-s", session,
@@ -683,6 +684,10 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", fmt.Errorf("worker session %s has a dead pane after spawn (agent=%q)", session, agent)
 	}
 	return session, nil
+}
+
+func paneBootstrapCommand(agentCmd string) string {
+	return `tmux set-option -t "$TMUX_PANE" remain-on-exit on >/dev/null 2>&1 || true; exec ` + agentCmd
 }
 
 func ensureCodexWorktreeLayer(worktree string) error {

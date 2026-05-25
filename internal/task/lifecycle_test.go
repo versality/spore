@@ -511,6 +511,16 @@ func TestWorkerAgentCommandOverrideWins(t *testing.T) {
 	}
 }
 
+func TestPaneBootstrapCommandSetsRemainOnExitBeforeAgent(t *testing.T) {
+	got := paneBootstrapCommand("codex --no-alt-screen")
+	if !strings.HasPrefix(got, `tmux set-option -t "$TMUX_PANE" remain-on-exit on`) {
+		t.Fatalf("bootstrap command = %q, want remain-on-exit first", got)
+	}
+	if !strings.Contains(got, "; exec codex --no-alt-screen") {
+		t.Fatalf("bootstrap command = %q, want exec agent command", got)
+	}
+}
+
 func TestBlockRequiresActive(t *testing.T) {
 	tasksDir := t.TempDir()
 	taskPath := filepath.Join(tasksDir, "x.md")
