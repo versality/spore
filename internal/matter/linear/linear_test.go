@@ -35,6 +35,17 @@ type stubIssue struct {
 	URL         string
 	StateID     string
 	SortOrder   float64
+	Relations   []stubRelation
+}
+
+// stubRelation mirrors an IssueRelation node. RelatedStateType is
+// Linear's state.type enum value (e.g. "started", "completed"); the
+// stub keeps a flat shape and embeds it directly rather than chasing
+// IDs through stub.issues.
+type stubRelation struct {
+	Type             string
+	RelatedID        string
+	RelatedStateType string
 }
 
 func newStub(t *testing.T) *stubLinear {
@@ -133,23 +144,49 @@ func (s *stubLinear) respondStates(w http.ResponseWriter) {
 
 func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 	stateID, _ := vars["stateId"].(string)
+	type stateNode struct {
+		Type string `json:"type"`
+	}
+	type relatedIssue struct {
+		ID    string    `json:"id"`
+		State stateNode `json:"state"`
+	}
+	type relation struct {
+		Type         string       `json:"type"`
+		RelatedIssue relatedIssue `json:"relatedIssue"`
+	}
+	type relations struct {
+		Nodes []relation `json:"nodes"`
+	}
 	type node struct {
-		ID          string  `json:"id"`
-		Identifier  string  `json:"identifier"`
-		Title       string  `json:"title"`
-		Description string  `json:"description"`
-		URL         string  `json:"url"`
-		SortOrder   float64 `json:"sortOrder"`
+		ID          string    `json:"id"`
+		Identifier  string    `json:"identifier"`
+		Title       string    `json:"title"`
+		Description string    `json:"description"`
+		URL         string    `json:"url"`
+		SortOrder   float64   `json:"sortOrder"`
+		Relations   relations `json:"relations"`
 	}
 	var nodes []node
 	for _, iss := range s.issues {
 		if iss.StateID != stateID {
 			continue
 		}
+		rels := make([]relation, 0, len(iss.Relations))
+		for _, r := range iss.Relations {
+			rels = append(rels, relation{
+				Type: r.Type,
+				RelatedIssue: relatedIssue{
+					ID:    r.RelatedID,
+					State: stateNode{Type: r.RelatedStateType},
+				},
+			})
+		}
 		nodes = append(nodes, node{
 			ID: iss.ID, Identifier: iss.Identifier, Title: iss.Title,
 			Description: iss.Description, URL: iss.URL,
 			SortOrder: iss.SortOrder,
+			Relations: relations{Nodes: rels},
 		})
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Identifier < nodes[j].Identifier })
