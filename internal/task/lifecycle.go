@@ -690,7 +690,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 }
 
 func paneBootstrapCommand(agentCmd string) string {
-	return `tmux set-option -t "$TMUX_PANE" remain-on-exit on >/dev/null 2>&1 || true; exec ` + agentCmd
+	return `tmux set-window-option -t "$TMUX_PANE" remain-on-exit on >/dev/null 2>&1 || true; exec ` + agentCmd
 }
 
 func ensureCodexWorktreeLayer(worktree string) error {
