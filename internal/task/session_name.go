@@ -123,7 +123,7 @@ func tierTag(projectRoot string, m frontmatter.Meta) (string, error) {
 		if model == "" {
 			model = "default"
 		}
-		return "codex:" + model + "/" + effort, nil
+		return "codex_" + tmuxTagPart(model) + "_" + tmuxTagPart(effort), nil
 	}
 	tag := modelTier(m.Extra["model"], agent)
 	if agent == "claude" {
@@ -157,6 +157,21 @@ func modelTier(model, agent string) string {
 	default:
 		return agent
 	}
+}
+
+func tmuxTagPart(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' ||
+			r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' ||
+			r == '-' || r == '.' || r == '_' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('_')
+	}
+	return strings.Trim(b.String(), "_")
 }
 
 // ParsedSession is the canonical decomposition of a tmux session

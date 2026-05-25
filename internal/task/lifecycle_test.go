@@ -233,7 +233,7 @@ func TestStartSpawnsWtStyleSessionForKnownProject(t *testing.T) {
 		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
-	want := "\U0001F41D spore/known [codex:default/high]"
+	want := "\U0001F41D spore/known [codex_default_high]"
 	if session != want {
 		t.Fatalf("session = %q, want %q", session, want)
 	}
