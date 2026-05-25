@@ -13,8 +13,14 @@ import (
 // collision; payload schema is {"slug","ts","msg"}. No agent wake
 // side effect: the Stop-hook drain that turns inbox writes into
 // resumed turns is downstream consumer territory.
+//
+// When slug names the singleton coordinator (CoordinatorTellTarget),
+// routing diverges from the per-project per-slug worker layout: the
+// envelope lands in the host-wide coordinator inbox at
+// <CoordinatorStateDir>/<project>/inbox/ so the coordinator session's
+// Stop-hook watcher (driven by $SPORE_TASK_INBOX) actually sees it.
 func Tell(slug, msg string) error {
-	dir, err := InboxDir(slug)
+	dir, err := tellDir(slug)
 	if err != nil {
 		return err
 	}
@@ -32,6 +38,13 @@ func Tell(slug, msg string) error {
 		return err
 	}
 	return writeUniqueInboxFile(dir, now.UnixNano(), b)
+}
+
+func tellDir(slug string) (string, error) {
+	if slug == CoordinatorTellTarget {
+		return CoordinatorInboxDirForProject("")
+	}
+	return InboxDir(slug)
 }
 
 func writeUniqueInboxFile(dir string, stamp int64, body []byte) error {
