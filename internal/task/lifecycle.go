@@ -649,6 +649,9 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 		"-e", "SPORE_COORDINATOR_STATE_DIR=" + coordinatorState,
 		"-e", SessionKindEnv + "=" + SessionKindWorker,
 	}
+	if pathEnv := os.Getenv("PATH"); pathEnv != "" {
+		args = append(args, "-e", "PATH="+pathEnv)
+	}
 	briefPath := filepath.Join(worktree, ".wt", "initial-prompt")
 	if _, err := os.Stat(briefPath); err == nil {
 		args = append(args, "-e", "SPORE_BRIEF_FILE="+briefPath)

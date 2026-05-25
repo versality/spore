@@ -175,12 +175,13 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmuxState := filepath.Join(t.TempDir(), "tmux-session")
+	tmuxArgs := filepath.Join(t.TempDir(), "tmux-args")
 	h := testpath.Install(t, testpath.Options{
 		RealTools: []string{"git"},
 		FakeTools: map[string]string{
 			"codex": "#!/bin/sh\nexit 0\n",
 			"spore": "#!/bin/sh\nexit 0\n",
-			"tmux":  "#!/bin/sh\ncase \"$1\" in\n  has-session) test -f " + shellQuote(tmuxState) + " ;;\n  new-session) echo ok > " + shellQuote(tmuxState) + " ;;\n  set-option) exit 0 ;;\n  list-panes) echo 0 ;;\n  kill-session) exit 0 ;;\n  *) exit 0 ;;\nesac\n",
+			"tmux":  "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + shellQuote(tmuxArgs) + "\ncase \"$1\" in\n  has-session) test -f " + shellQuote(tmuxState) + " ;;\n  new-session) echo ok > " + shellQuote(tmuxState) + " ;;\n  set-option) exit 0 ;;\n  list-panes) echo 0 ;;\n  kill-session) exit 0 ;;\n  *) exit 0 ;;\nesac\n",
 		},
 	})
 	t.Setenv("PATH", h.BinDir)
@@ -200,6 +201,9 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 		t.Fatalf("codex hooks missing: %v", err)
 	} else if !strings.Contains(string(body), "spore hooks codex stop") {
 		t.Fatalf("codex hooks missing stop adapter:\n%s", body)
+	}
+	if got := readFileString(t, tmuxArgs); !strings.Contains(got, "-e PATH="+h.BinDir) {
+		t.Fatalf("tmux args missing PATH injection:\n%s", got)
 	}
 }
 
