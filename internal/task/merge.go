@@ -140,11 +140,7 @@ func pushAndVerifyMain(projectRoot string) error {
 // ledger rather than a tracked artifact rely on this to let
 // closeMergedTask skip the add+commit step without erroring.
 func taskPathIgnored(projectRoot, rel string) bool {
-	err := gitCmd(projectRoot, "check-ignore", "-q", "--", rel).Run()
-	if err == nil {
-		return true
-	}
-	return false
+	return gitCmd(projectRoot, "check-ignore", "-q", "--", rel).Run() == nil
 }
 
 func closeMergedTask(tasksDir, slug string) error {
