@@ -127,6 +127,61 @@ func TestMergeFlipsTaskDoneAndCommitsClose(t *testing.T) {
 	}
 }
 
+func TestMergeWithGitignoredTasksSkipsCloseCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	repo := t.TempDir()
+	t.Chdir(repo)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+
+	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("/tasks/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", ".gitignore")
+	runGit(t, repo, "commit", "-q", "-m", "ignore tasks")
+
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	taskPath := filepath.Join(tasksDir, "demo.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: active\nslug: demo\ntitle: Demo\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	configureOrigin(t, repo)
+
+	runGit(t, repo, "checkout", "-q", "-b", "wt/demo")
+	if err := os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "feature.txt")
+	runGit(t, repo, "commit", "-q", "-m", "feat: demo work")
+	runGit(t, repo, "checkout", "-q", "main")
+
+	if err := Merge(tasksDir, "demo"); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if status := readStatus(t, taskPath); status != "done" {
+		t.Errorf("status = %q want done", status)
+	}
+	if branchExists(repo, "wt/demo") {
+		t.Error("wt/demo branch still exists after merge")
+	}
+	out, err := exec.Command("git", "-C", repo, "log", "--oneline", "-1").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "tasks/demo: status -> done") {
+		t.Errorf("close commit should be skipped when tasks/ is gitignored, got:\n%s", out)
+	}
+}
+
 func TestMergeNoDeltaStillClosesTask(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
