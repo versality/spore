@@ -52,6 +52,7 @@ func TestInboxHooksRegressionCodexStartRendersWatchInbox(t *testing.T) {
 	if code := runInstall([]string{"--root", root}); code != 0 {
 		t.Fatalf("runInstall exit = %d", code)
 	}
+	trustDoctorCodex(t, root)
 	runGitCmd(t, root, "add", ".")
 	runGitCmd(t, root, "commit", "-q", "-m", "fixture")
 	h := testpath.Install(t, testpath.Options{
@@ -71,9 +72,6 @@ func TestInboxHooksRegressionCodexStartRendersWatchInbox(t *testing.T) {
 		t.Fatalf("task start: %v", err)
 	}
 	t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run() })
-	if _, err := os.Stat(filepath.Join(root, ".worktrees", "codex-smoke", ".codex", "hooks.json")); !os.IsNotExist(err) {
-		t.Fatalf("worktree codex hooks should not be written: %v", err)
-	}
 	body, err := os.ReadFile(filepath.Join(root, ".codex", "hooks.json"))
 	if err != nil {
 		t.Fatalf("read rendered codex hooks: %v", err)
@@ -97,6 +95,7 @@ func TestInboxHooksRegressionCodexRenderedWatchInboxDrainsTell(t *testing.T) {
 	if code := runInstall([]string{"--root", root}); code != 0 {
 		t.Fatalf("runInstall exit = %d", code)
 	}
+	trustDoctorCodex(t, root)
 	runGitCmd(t, root, "add", ".")
 	runGitCmd(t, root, "commit", "-q", "-m", "fixture")
 	h := testpath.Install(t, testpath.Options{
@@ -128,21 +127,25 @@ func TestInboxHooksRegressionCodexRenderedWatchInboxDrainsTell(t *testing.T) {
 	if n, _, err := task.CountUnreadInboxForProject(root, "codex-inbox"); err != nil || n == 0 {
 		t.Fatalf("unread before hook = %d err=%v, want >0", n, err)
 	}
-	command := renderedWatchInboxCommand(t, filepath.Join(root, ".worktrees", "codex-inbox", ".codex", "hooks.json"))
+	command := renderedHookCommand(t, filepath.Join(root, ".codex", "hooks.json"), "Stop", "spore hooks codex stop")
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = filepath.Join(root, ".worktrees", "codex-inbox")
 	cmd.Env = append(os.Environ(),
 		"PATH="+h.BinDir,
 		"SPORE_TASK_INBOX="+inbox,
+		"SPORE_PROJECT_ROOT="+root,
+		"WT_SESSION_KIND=worker",
+		"WT_STATE="+filepath.Dir(filepath.Dir(inbox)),
 		"WATCH_TIMEOUT=1",
 		"WATCH_SETTLE=0",
 	)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"s"}`)
 	out, err := cmd.CombinedOutput()
 	if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 2 {
 		t.Fatalf("watch-inbox command err=%v out=%s, want exit 2 after drain", err, out)
 	}
-	if !strings.Contains(string(out), "hello from coordinator") {
-		t.Fatalf("watch-inbox output = %s", out)
+	if !strings.Contains(string(out), "CODEX WORKER INBOX") {
+		t.Fatalf("codex stop output = %s", out)
 	}
 	if n, _, err := task.CountUnreadInboxForProject(root, "codex-inbox"); err != nil || n != 0 {
 		t.Fatalf("unread after hook = %d err=%v, want 0", n, err)
@@ -257,6 +260,10 @@ func buildSporeForTest(t *testing.T) string {
 }
 
 func renderedWatchInboxCommand(t *testing.T, path string) string {
+	return renderedHookCommand(t, path, "Stop", "watch-inbox")
+}
+
+func renderedHookCommand(t *testing.T, path, event, contains string) string {
 	t.Helper()
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -275,18 +282,18 @@ func renderedWatchInboxCommand(t *testing.T, path string) string {
 	if err := json.Unmarshal(body, &cfg); err != nil {
 		t.Fatalf("parse rendered hooks: %v", err)
 	}
-	for _, hook := range cfg.Events["Stop"] {
-		if strings.Contains(hook.Command, "watch-inbox") {
+	for _, hook := range cfg.Events[event] {
+		if strings.Contains(hook.Command, contains) {
 			return hook.Command
 		}
 	}
-	for _, group := range cfg.Hooks["Stop"] {
+	for _, group := range cfg.Hooks[event] {
 		for _, hook := range group.Hooks {
-			if strings.Contains(hook.Command, "watch-inbox") {
+			if strings.Contains(hook.Command, contains) {
 				return hook.Command
 			}
 		}
 	}
-	t.Fatalf("rendered hooks missing watch-inbox:\n%s", body)
+	t.Fatalf("rendered hooks missing %s:\n%s", contains, body)
 	return ""
 }

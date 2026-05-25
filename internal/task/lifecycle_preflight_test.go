@@ -24,6 +24,13 @@ func TestStartMissingSelectedAgentLeavesDraft(t *testing.T) {
 	runGit(t, repo, "config", "user.email", "test@example.com")
 	runGit(t, repo, "config", "user.name", "Test")
 	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeCodexReady(t, repo)
 	tasksDir := filepath.Join(repo, "tasks")
 	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -61,6 +68,13 @@ func TestEnsureMissingSelectedAgentDoesNotCreateWorktree(t *testing.T) {
 	runGit(t, repo, "config", "user.email", "test@example.com")
 	runGit(t, repo, "config", "user.name", "Test")
 	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeCodexReady(t, repo)
 	tasksDir := filepath.Join(repo, "tasks")
 	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -294,6 +308,13 @@ func TestStartDetectsAgentExitDuringSettle(t *testing.T) {
 	runGit(t, repo, "config", "user.email", "test@example.com")
 	runGit(t, repo, "config", "user.name", "Test")
 	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeCodexReady(t, repo)
 	tasksDir := filepath.Join(repo, "tasks")
 	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -352,6 +373,14 @@ func TestEnsureExistingDeadPaneIsNotHealthy(t *testing.T) {
 		t.Fatalf("tmux send-keys: %v: %s", err, out)
 	}
 	waitForDeadPane(t, session)
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git", "tmux"},
+		FakeTools: map[string]string{
+			"claude": "#!/bin/sh\nexit 0\n",
+			"spore":  "#!/bin/sh\nexit 0\n",
+		},
+	})
+	t.Setenv("PATH", h.BinDir)
 
 	_, err = Ensure(tasksDir, "x", nil)
 	if err == nil || !strings.Contains(err.Error(), "dead pane") {

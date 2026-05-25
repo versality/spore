@@ -5,9 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/versality/spore/internal/hooks/settings"
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -400,6 +402,7 @@ mechanical = "codex"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeFleetCodexReady(t, dirs.project)
 
 	// alpha/beta/gamma have no agent set; the rule pins delta to codex
 	// regardless of ratio; epsilon already has agent: claude pinned and
@@ -584,6 +587,31 @@ func requireToolchain(t *testing.T) {
 func setTestAgentBinary(t *testing.T) {
 	t.Helper()
 	t.Setenv("SPORE_AGENT_BINARY", "sh -c 'sleep 30'")
+}
+
+func writeFleetCodexReady(t *testing.T, root string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[projects."+strconv.Quote(filepath.Clean(root))+"]\ntrust_level = \"trusted\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok, err := settings.RenderCodex(filepath.Join(root, "configs", "codex", "hooks-config.json"), task.SessionKindCoordinator)
+	if err != nil || !ok {
+		t.Fatalf("render codex hooks: ok=%v err=%v", ok, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".codex", "hooks.json"), rendered, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func killSporeSessions(projectRoot string) {
