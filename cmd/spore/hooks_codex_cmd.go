@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/versality/spore/internal/coordinator"
 	"github.com/versality/spore/internal/hooks/codex"
+	"github.com/versality/spore/internal/lifecyclehooks"
 )
 
 const hooksCodexUsage = `spore hooks codex - codex hook adapters
@@ -48,8 +48,6 @@ Events:
                   Codex calls per Stop. Reads $SPORE_DRIVER for the
                   context-monitor gate, $SPORE_TASK_INBOX,
                   $SPORE_COORDINATOR_STATE_DIR, $WT_STATE,
-                  $SPORE_CODEX_STOP_CHAIN (JSON file mapping argv lists
-                  to the post-monitor sub-hook chain),
                   $SPORE_CODEX_STOP_TIMEOUT (per-hook seconds, default 8).
   pre-tool-use    Codex PreToolUse hook: refuse a new tool dispatch
                   when the transcript still has at least one prior
@@ -126,11 +124,10 @@ func runHooksCodexStop(args []string) int {
 	if v := envInt("SPORE_CODEX_STOP_TIMEOUT"); v > 0 {
 		cfg.CommandTimeout = time.Duration(v) * time.Second
 	}
-	if chain, err := loadStopChainFromEnv(); err != nil {
-		fmt.Fprintln(os.Stderr, "spore hooks codex stop:", err)
-		return 1
-	} else {
+	if chain, ok := codexStopChainFromRegistry(); ok {
 		cfg.Chain = chain
+	} else {
+		return 0
 	}
 
 	res := codex.Stop(cfg, os.Stdin)
@@ -138,6 +135,79 @@ func runHooksCodexStop(args []string) int {
 		io.WriteString(os.Stderr, res.Stderr)
 	}
 	return res.ExitCode
+}
+
+func codexStopChainFromRegistry() ([]codex.ChainHook, bool) {
+	root := os.Getenv("SPORE_PROJECT_ROOT")
+	if root == "" {
+		var ok bool
+		root, ok = findSporeRoot(cwdOrDot())
+		if !ok {
+			return nil, false
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "spore.toml")); err != nil {
+		return nil, false
+	}
+	kind := os.Getenv("WT_SESSION_KIND")
+	if kind == "" {
+		return nil, false
+	}
+	var out []codex.ChainHook
+	for _, hook := range lifecyclehooks.ForDriver(lifecyclehooks.DriverCodex) {
+		if hook.Event != "Stop" || hook.Command == "spore hooks codex stop" {
+			continue
+		}
+		if !hookMatchesKind(hook.Kinds, kind) {
+			continue
+		}
+		argv := strings.Fields(hook.Command)
+		if len(argv) == 0 {
+			continue
+		}
+		out = append(out, codex.ChainHook{
+			Argv:    argv,
+			Timeout: time.Duration(hook.Timeout) * time.Second,
+		})
+	}
+	return out, true
+}
+
+func findSporeRoot(start string) (string, bool) {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", false
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "spore.toml")); err == nil {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
+func cwdOrDot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
+
+func hookMatchesKind(kinds []string, kind string) bool {
+	if len(kinds) == 0 {
+		return true
+	}
+	for _, k := range kinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func runHooksCodexPreToolUse(args []string) int {
@@ -155,35 +225,6 @@ func runHooksCodexPreToolUse(args []string) int {
 		io.WriteString(os.Stderr, res.Stderr)
 	}
 	return res.ExitCode
-}
-
-// loadStopChainFromEnv reads $SPORE_CODEX_STOP_CHAIN. The value is a
-// path to a JSON file with shape `[{"argv":["spore","worker","token-monitor"]}, ...]`.
-// Empty / missing env collapses to no chain (the codex-stop adapter
-// becomes a pure context monitor + inbox drain).
-func loadStopChainFromEnv() ([]codex.ChainHook, error) {
-	path := os.Getenv("SPORE_CODEX_STOP_CHAIN")
-	if path == "" {
-		return nil, nil
-	}
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read chain %s: %w", path, err)
-	}
-	var rows []struct {
-		Argv []string `json:"argv"`
-	}
-	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, fmt.Errorf("parse chain %s: %w", path, err)
-	}
-	out := make([]codex.ChainHook, 0, len(rows))
-	for _, r := range rows {
-		if len(r.Argv) == 0 {
-			continue
-		}
-		out = append(out, codex.ChainHook{Argv: r.Argv})
-	}
-	return out, nil
 }
 
 func runHooksCodexInboxWatcher(args []string) int {

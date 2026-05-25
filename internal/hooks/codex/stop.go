@@ -49,7 +49,8 @@ type StopConfig struct {
 // ChainHook is one step of the post-monitor sub-hook chain. Argv
 // is the command + args; stdin is piped from the original payload.
 type ChainHook struct {
-	Argv []string
+	Argv    []string
+	Timeout time.Duration
 }
 
 const (
@@ -306,7 +307,11 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 		if len(h.Argv) == 0 {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.CommandTimeout)
+		timeout := h.Timeout
+		if timeout <= 0 {
+			timeout = cfg.CommandTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		cmd := exec.CommandContext(ctx, h.Argv[0], h.Argv[1:]...)
 		cmd.Stdin = strings.NewReader(string(payload))
 		var combined strings.Builder
@@ -331,7 +336,7 @@ func runChain(cfg StopConfig, payload []byte) chainResult {
 			stderr.WriteString(combined.String())
 			return chainResult{ExitCode: 2, Stderr: stderr.String()}
 		case timedOut || rc == 124 || rc == 137:
-			fmt.Fprintf(&stderr, "spore hooks codex stop: timed out after %s: %v\n", cfg.CommandTimeout, h.Argv)
+			fmt.Fprintf(&stderr, "spore hooks codex stop: timed out after %s: %v\n", timeout, h.Argv)
 			appendWorkerStopError(cfg, "timeout", h.Argv, rc, combined.String())
 		default:
 			fmt.Fprintf(&stderr, "spore hooks codex stop: %v exited %d\n", h.Argv, rc)
