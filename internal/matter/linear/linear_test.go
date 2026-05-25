@@ -543,6 +543,114 @@ func TestParseConfigDefaultsAndValidation(t *testing.T) {
 	}
 }
 
+// TestSyncResumesMatterBlockedTaskOnReady exercises the edge-triggered
+// resume: a local task carrying a matter-set blocker flips back to
+// active when its linked ticket returns to Ready.
+func TestSyncResumesMatterBlockedTaskOnReady(t *testing.T) {
+	stub := newStub(t)
+	stub.addReady("issue-uuid-50", "MAR-77", "Resume me", "Was paused, now back.")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := frontmatter.Meta{
+		Status: "blocked", Slug: "resume-me", Title: "Resume me",
+		Extra: map[string]string{
+			matter.MatterKey:   "linear",
+			matter.MatterIDKey: "MAR-77",
+			"blocker":          "matter:Done",
+		},
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "resume-me.md"),
+		frontmatter.Write(m, []byte("\nbody\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	src := newSource(t, srv.URL)
+	created, updated, err := src.Sync(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if created != 0 {
+		t.Errorf("created = %d, want 0 (task already exists)", created)
+	}
+	if updated != 1 {
+		t.Errorf("updated = %d, want 1 (one resume)", updated)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(tasksDir, "resume-me.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, _, err := frontmatter.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m2.Status != "active" {
+		t.Errorf("status = %q, want active", m2.Status)
+	}
+	if _, ok := m2.Extra["blocker"]; ok {
+		t.Errorf("blocker still set: %q", m2.Extra["blocker"])
+	}
+}
+
+// TestSyncDoesNotStompOperatorBlocker locks in the stickiness side:
+// a blocker without the matter: prefix is operator-owned and matter
+// projection must leave the task alone even when its ticket sits in
+// Ready upstream.
+func TestSyncDoesNotStompOperatorBlocker(t *testing.T) {
+	stub := newStub(t)
+	stub.addReady("issue-uuid-51", "MAR-78", "Stay blocked", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := frontmatter.Meta{
+		Status: "blocked", Slug: "stay-blocked", Title: "Stay blocked",
+		Extra: map[string]string{
+			matter.MatterKey:   "linear",
+			matter.MatterIDKey: "MAR-78",
+			"blocker":          "manual-investigation",
+		},
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "stay-blocked.md"),
+		frontmatter.Write(m, []byte("\nbody\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	src := newSource(t, srv.URL)
+	if _, updated, err := src.Sync(context.Background(), root); err != nil {
+		t.Fatalf("Sync: %v", err)
+	} else if updated != 0 {
+		t.Errorf("updated = %d, want 0 (operator blocker must stick)", updated)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(tasksDir, "stay-blocked.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, _, err := frontmatter.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m2.Status != "blocked" {
+		t.Errorf("status = %q, want blocked", m2.Status)
+	}
+	if m2.Extra["blocker"] != "manual-investigation" {
+		t.Errorf("blocker = %q, want manual-investigation", m2.Extra["blocker"])
+	}
+}
+
 func TestRegisteredViaInit(t *testing.T) {
 	found := false
 	for _, n := range matter.Registered() {
