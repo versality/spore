@@ -42,6 +42,9 @@ func TestRunBlocksDirtyWorktree(t *testing.T) {
 	}
 	env.assertTaskHas("worker-state: needs-cleanup")
 	env.assertTaskHas("worker-result: dirty-worktree")
+	if !strings.Contains(res.Stderr, "Do not remove, edit, or commit these fields") {
+		t.Fatalf("stderr missing managed-field instruction:\n%s", res.Stderr)
+	}
 }
 
 func TestRunIgnoresSporeRuntimeAndOwnTaskDirtyEntries(t *testing.T) {

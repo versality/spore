@@ -98,7 +98,7 @@ func Run(cfg Config) (Result, error) {
 		}
 		return Result{
 			ExitCode: 2,
-			Stderr:   "WORKER FINISH BLOCKED: worktree has uncommitted changes. Commit/revert them and update Evidence before stopping.\n",
+			Stderr:   dirtyWorktreeMessage(),
 			Reason:   "dirty-worktree",
 		}, nil
 	}
@@ -132,6 +132,17 @@ func Run(cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("write task: %w", err)
 	}
 	return Result{Reason: result}, nil
+}
+
+func dirtyWorktreeMessage() string {
+	return "WORKER FINISH BLOCKED: worktree has uncommitted changes.\n" +
+		"\n" +
+		"Spore wrote managed task frontmatter:\n" +
+		"  worker-state: needs-cleanup\n" +
+		"  worker-result: dirty-worktree\n" +
+		"\n" +
+		"Do not remove, edit, or commit these fields. They are the lifecycle signal for the operator.\n" +
+		"Commit/revert only payload and Evidence changes, then stop again.\n"
 }
 
 func writeWorkerResult(taskFile string, meta frontmatter.Meta, body []byte, state, result string) error {
