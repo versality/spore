@@ -1,6 +1,7 @@
 package task
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func tmuxSessionName(projectRoot, slug string, m frontmatter.Meta) (string, error) {
-	tag, err := tierTag(m)
+	tag, err := tierTag(projectRoot, m)
 	if err != nil {
 		return "", err
 	}
@@ -91,8 +92,12 @@ func sessionPath(wrap, project, slug string) string {
 	return wrap + "/" + project + "/" + slug
 }
 
-func tierTag(m frontmatter.Meta) (string, error) {
-	agent := m.Agent
+func tierTag(projectRoot string, m frontmatter.Meta) (string, error) {
+	cfg, err := readWorkerAgentConfig(projectRoot)
+	if err != nil {
+		return "", err
+	}
+	agent := resolveWorkerAgentFromConfig(m, cfg)
 	if agent == "" {
 		agent = "claude"
 	}
@@ -100,11 +105,25 @@ func tierTag(m frontmatter.Meta) (string, error) {
 		agent = "claude"
 	}
 	if agent == "codex" {
-		effort, err := codexpolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
+		effortInput := m.Extra["effort"]
+		if effortInput == "" {
+			effortInput = cfg.codexEffort
+		}
+		effort, err := codexpolicy.EffortForTask(effortInput, m.Extra["complexity"])
 		if err != nil {
 			return "", err
 		}
-		return "codex-" + effort, nil
+		model := m.Extra["model"]
+		if model == "" {
+			model = os.Getenv(CodexModelEnv)
+		}
+		if model == "" {
+			model = cfg.codexModel
+		}
+		if model == "" {
+			model = "default"
+		}
+		return "codex:" + model + "/" + effort, nil
 	}
 	tag := modelTier(m.Extra["model"], agent)
 	if agent == "claude" {

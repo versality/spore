@@ -28,9 +28,11 @@ import (
 // Rules maps a task `complexity:` value to an agent name. When the task
 // frontmatter carries a matching complexity, the rule wins over Ratio.
 type WorkersConfig struct {
-	Default string
-	Ratio   map[string]int
-	Rules   map[string]string
+	Default     string
+	Ratio       map[string]int
+	Rules       map[string]string
+	CodexModel  string
+	CodexEffort string
 }
 
 // LoadWorkersConfig reads `[fleet.workers]` from <projectRoot>/spore.toml.
@@ -53,7 +55,7 @@ func LoadWorkersConfig(projectRoot string) (WorkersConfig, error) {
 }
 
 // parseWorkersTOML reads the [fleet.workers], [fleet.workers.ratio],
-// and [fleet.workers.rules] sections of the same tiny TOML subset the
+// [fleet.workers.rules], and [fleet.codex] sections of the same tiny TOML subset the
 // rest of the kernel parses: bare or quoted scalars, `# comment` lines,
 // blank lines. Anything outside those sections is ignored. Malformed
 // entries inside the sections are an error.
@@ -111,6 +113,21 @@ func parseWorkersTOML(content string) (WorkersConfig, error) {
 				cfg.Rules = map[string]string{}
 			}
 			cfg.Rules[key] = val
+		case "fleet.codex":
+			eq := strings.IndexByte(line, '=')
+			if eq <= 0 {
+				return WorkersConfig{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
+			}
+			key := strings.TrimSpace(line[:eq])
+			val := stripTOMLQuotes(strings.TrimSpace(line[eq+1:]))
+			switch key {
+			case "model":
+				cfg.CodexModel = val
+			case "effort":
+				cfg.CodexEffort = val
+			default:
+				return WorkersConfig{}, fmt.Errorf("line %d: unknown key %q in [fleet.codex]", lineNum, key)
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {

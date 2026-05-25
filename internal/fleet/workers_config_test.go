@@ -36,11 +36,17 @@ codex = 30
 [fleet.workers.rules]
 mechanical = "codex"
 deep = "claude"
+
+[fleet.codex]
+model = "gpt-5.5"
+effort = "high"
 `,
 			want: WorkersConfig{
-				Default: "claude",
-				Ratio:   map[string]int{"claude": 70, "codex": 30},
-				Rules:   map[string]string{"mechanical": "codex", "deep": "claude"},
+				Default:     "claude",
+				Ratio:       map[string]int{"claude": 70, "codex": 30},
+				Rules:       map[string]string{"mechanical": "codex", "deep": "claude"},
+				CodexModel:  "gpt-5.5",
+				CodexEffort: "high",
 			},
 		},
 		{
@@ -80,6 +86,11 @@ codex = 100 # full codex
 		{
 			name:    "malformed line",
 			input:   "[fleet.workers]\nnoequals\n",
+			wantErr: true,
+		},
+		{
+			name:    "unknown key in fleet.codex",
+			input:   "[fleet.codex]\nbogus = \"x\"\n",
 			wantErr: true,
 		},
 	}
@@ -210,6 +221,9 @@ func TestSelectAgentEmptyConfigDefaults(t *testing.T) {
 
 func workersEqual(a, b WorkersConfig) bool {
 	if a.Default != b.Default {
+		return false
+	}
+	if a.CodexModel != b.CodexModel || a.CodexEffort != b.CodexEffort {
 		return false
 	}
 	if len(a.Ratio) != len(b.Ratio) {

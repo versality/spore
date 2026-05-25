@@ -65,8 +65,11 @@ as aliases for `xhigh`). Without an explicit effort, `complexity:
 light|medium` maps to `medium`, and `complexity: heavy` or an absent
 complexity maps to `high`. `model:` pins the Codex model for that
 task; otherwise `SPORE_CODEX_MODEL` may provide a process-wide
-default, and an empty value lets Codex use its own default. The
-legacy `SPORE_AGENT_BINARY` override still wins over frontmatter.
+default. If both are empty, `[fleet.codex].model` in `spore.toml`
+is used. An empty value after that lets Codex use its own default.
+`[fleet.codex].effort` provides the same project-level fallback for
+reasoning effort when the task has no `effort:`. The legacy
+`SPORE_AGENT_BINARY` override still wins over frontmatter.
 
 ## Merge Close Path
 

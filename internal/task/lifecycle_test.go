@@ -233,7 +233,7 @@ func TestStartSpawnsWtStyleSessionForKnownProject(t *testing.T) {
 		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
-	want := "\U0001F41D spore/known [codex-high]"
+	want := "\U0001F41D spore/known [codex:default/high]"
 	if session != want {
 		t.Fatalf("session = %q, want %q", session, want)
 	}
@@ -439,6 +439,44 @@ func TestWorkerAgentCommandCodexUsesEffortPolicy(t *testing.T) {
 		t.Fatalf("workerAgentCommand: %v", err)
 	}
 	want := "codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --no-alt-screen --disable apps -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'"
+	if got != want {
+		t.Errorf("command = %q want %q", got, want)
+	}
+}
+
+func TestWorkerAgentCommandCodexUsesProjectDefaults(t *testing.T) {
+	t.Setenv("SPORE_AGENT_BINARY", "")
+	t.Setenv("SPORE_CODEX_MODEL", "")
+	dir := t.TempDir()
+	body := "[fleet.codex]\nmodel = \"gpt-5.5\"\neffort = \"medium\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "spore.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := frontmatter.Meta{Agent: "codex", Extra: map[string]string{}}
+	got, err := workerAgentCommand(m, dir)
+	if err != nil {
+		t.Fatalf("workerAgentCommand: %v", err)
+	}
+	want := "codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --no-alt-screen --disable apps -m gpt-5.5 -c 'model_reasoning_effort=\"medium\"'"
+	if got != want {
+		t.Errorf("command = %q want %q", got, want)
+	}
+}
+
+func TestWorkerAgentCommandCodexEnvModelWinsOverProjectDefault(t *testing.T) {
+	t.Setenv("SPORE_AGENT_BINARY", "")
+	t.Setenv("SPORE_CODEX_MODEL", "gpt-env")
+	dir := t.TempDir()
+	body := "[fleet.codex]\nmodel = \"gpt-project\"\neffort = \"medium\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "spore.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := frontmatter.Meta{Agent: "codex", Extra: map[string]string{}}
+	got, err := workerAgentCommand(m, dir)
+	if err != nil {
+		t.Fatalf("workerAgentCommand: %v", err)
+	}
+	want := "codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --no-alt-screen --disable apps -m gpt-env -c 'model_reasoning_effort=\"medium\"'"
 	if got != want {
 		t.Errorf("command = %q want %q", got, want)
 	}

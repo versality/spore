@@ -12,29 +12,35 @@ import (
 )
 
 func resolveWorkerAgent(m frontmatter.Meta, projectRoot string) (string, error) {
-	if m.Agent != "" {
-		return m.Agent, nil
-	}
 	cfg, err := readWorkerAgentConfig(projectRoot)
 	if err != nil {
 		return "", err
 	}
+	return resolveWorkerAgentFromConfig(m, cfg), nil
+}
+
+func resolveWorkerAgentFromConfig(m frontmatter.Meta, cfg workerAgentConfig) string {
+	if m.Agent != "" {
+		return m.Agent
+	}
 	if cfg.rules != nil {
 		if c := m.Extra["complexity"]; c != "" {
 			if agent := cfg.rules[c]; agent != "" {
-				return agent, nil
+				return agent
 			}
 		}
 	}
 	if cfg.defaultAgent != "" {
-		return cfg.defaultAgent, nil
+		return cfg.defaultAgent
 	}
-	return "", nil
+	return ""
 }
 
 type workerAgentConfig struct {
 	defaultAgent string
 	rules        map[string]string
+	codexModel   string
+	codexEffort  string
 }
 
 func readWorkerAgentConfig(projectRoot string) (workerAgentConfig, error) {
@@ -61,7 +67,7 @@ func readWorkerAgentConfig(projectRoot string) (workerAgentConfig, error) {
 		}
 		eq := strings.IndexByte(line, '=')
 		if eq <= 0 {
-			if section == "fleet.workers" || section == "fleet.workers.rules" {
+			if section == "fleet.workers" || section == "fleet.workers.rules" || section == "fleet.codex" {
 				return workerAgentConfig{}, fmt.Errorf("workers: line %d: malformed entry %q", lineNum+1, line)
 			}
 			continue
@@ -79,6 +85,15 @@ func readWorkerAgentConfig(projectRoot string) (workerAgentConfig, error) {
 				cfg.rules = map[string]string{}
 			}
 			cfg.rules[key] = val
+		case "fleet.codex":
+			switch key {
+			case "model":
+				cfg.codexModel = val
+			case "effort":
+				cfg.codexEffort = val
+			default:
+				return workerAgentConfig{}, fmt.Errorf("workers: line %d: unknown key %q in [fleet.codex]", lineNum+1, key)
+			}
 		}
 	}
 	return cfg, nil
@@ -110,10 +125,11 @@ func workerAgentCommand(m frontmatter.Meta, projectRoot string) (string, error) 
 	if override := os.Getenv(AgentBinaryEnv); override != "" {
 		return override, nil
 	}
-	agent, err := resolveWorkerAgent(m, projectRoot)
+	cfg, err := readWorkerAgentConfig(projectRoot)
 	if err != nil {
 		return "", err
 	}
+	agent := resolveWorkerAgentFromConfig(m, cfg)
 	if agent == "" || agent == "claude" || agent == "claude-code" {
 		effort, err := claudepolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
 		if err != nil {
@@ -125,13 +141,20 @@ func workerAgentCommand(m frontmatter.Meta, projectRoot string) (string, error) 
 		return agent, nil
 	}
 
-	effort, err := codexpolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
+	effortInput := m.Extra["effort"]
+	if effortInput == "" {
+		effortInput = cfg.codexEffort
+	}
+	effort, err := codexpolicy.EffortForTask(effortInput, m.Extra["complexity"])
 	if err != nil {
 		return "", err
 	}
 	model := m.Extra["model"]
 	if model == "" {
 		model = os.Getenv(CodexModelEnv)
+	}
+	if model == "" {
+		model = cfg.codexModel
 	}
 	return shellJoin(codexpolicy.InteractiveArgs(model, effort)), nil
 }

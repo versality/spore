@@ -1,6 +1,7 @@
 package task
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -52,7 +53,27 @@ func TestTmuxSessionNameUsesTierTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tmuxSessionName: %v", err)
 	}
-	want := "\U0001F41D spore/demo [codex-high]"
+	want := "\U0001F41D spore/demo [codex:default/high]"
+	if got != want {
+		t.Errorf("session = %q, want %q", got, want)
+	}
+}
+
+func TestTmuxSessionNameUsesCodexDefaults(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "spore")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[fleet.codex]\nmodel = \"gpt-5.5\"\neffort = \"medium\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "spore.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := frontmatter.Meta{Agent: "codex", Extra: map[string]string{}}
+	got, err := tmuxSessionName(dir, "demo", m)
+	if err != nil {
+		t.Fatalf("tmuxSessionName: %v", err)
+	}
+	want := "\U0001F41D spore/demo [codex:gpt-5.5/medium]"
 	if got != want {
 		t.Errorf("session = %q, want %q", got, want)
 	}
@@ -74,7 +95,7 @@ func TestParseSessionAcceptsCurrentAndLegacyShapes(t *testing.T) {
 		// Current wt-emoji shape.
 		{"\U0001F41D spore/demo [opus_high]", "spore", want{"demo", SessionKindWorker, false, "opus_high"}, true},
 		{"\U0001F41D spore/demo", "spore", want{"demo", SessionKindWorker, false, ""}, true},
-		{"\U0001F428 demo/foo-bar [codex-high]", "demo", want{"foo-bar", SessionKindWorker, false, "codex-high"}, true},
+		{"\U0001F428 demo/foo-bar [codex:default/high]", "demo", want{"foo-bar", SessionKindWorker, false, "codex:default/high"}, true},
 		// Legacy spore-prefixed worker.
 		{"spore/spore/demo", "spore", want{"demo", SessionKindWorker, true, ""}, true},
 		{"spore/demo/foo", "demo", want{"foo", SessionKindWorker, true, ""}, true},

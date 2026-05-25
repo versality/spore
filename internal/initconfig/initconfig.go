@@ -60,6 +60,11 @@ codex = 33
 # [fleet.workers.rules]
 # mechanical = "codex"
 # deep = "claude"
+
+# [fleet.codex] - Codex worker defaults when task frontmatter is silent.
+# Task ` + "`model:`" + ` wins over SPORE_CODEX_MODEL, which wins over this value.
+# model = "gpt-5.5"
+# effort = "high"
 `,
 		},
 		{
