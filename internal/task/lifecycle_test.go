@@ -27,6 +27,12 @@ func TestLifecycleStartBlockDone(t *testing.T) {
 	runGit(t, repo, "config", "user.email", "test@example.com")
 	runGit(t, repo, "config", "user.name", "Test")
 	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	tasksDir := filepath.Join(repo, "tasks")
 	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
@@ -204,6 +210,7 @@ func TestStartSpawnsWtStyleSessionForKnownProject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tasksDir, slug+".md"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeCodexReady(t, repo)
 
 	t.Setenv("SPORE_AGENT_BINARY", "sleep 30")
 	session, err := Start(tasksDir, slug, nil)
@@ -259,6 +266,7 @@ func TestStartRendersCodexHooksIntoWorktree(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(configsDir, "hooks-config.json"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeCodexReady(t, repo)
 
 	tasksDir := filepath.Join(repo, "tasks")
 	if err := os.MkdirAll(tasksDir, 0o755); err != nil {

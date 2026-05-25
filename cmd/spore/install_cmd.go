@@ -9,8 +9,11 @@ import (
 
 	spore "github.com/versality/spore"
 	"github.com/versality/spore/internal/agentpreflight"
+	"github.com/versality/spore/internal/codextrust"
 	"github.com/versality/spore/internal/fleet"
+	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/install"
+	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -77,6 +80,11 @@ func runInstall(args []string) int {
 		fmt.Fprintln(os.Stderr, "spore install:", err)
 		return 1
 	}
+	codexRuntime, codexWrote, err := inject.InjectCodex(dest, dest, task.SessionKindCoordinator)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spore install:", err)
+		return 1
+	}
 	for _, p := range skills.Written {
 		rel, _ := filepath.Rel(dest, p)
 		fmt.Printf("wrote %s\n", rel)
@@ -89,7 +97,14 @@ func runInstall(args []string) int {
 		rel, _ := filepath.Rel(dest, p)
 		fmt.Printf("wrote %s\n", rel)
 	}
+	if codexWrote {
+		rel, _ := filepath.Rel(dest, codexRuntime)
+		fmt.Printf("wrote %s\n", rel)
+	}
 	total := len(skills.Written) + len(scripts.Written) + len(configs.Written)
+	if codexWrote {
+		total++
+	}
 	if total == 0 {
 		fmt.Println("install: already up to date")
 	} else {
@@ -112,6 +127,13 @@ func installReadinessWarnings(root string) []string {
 		meta.Agent = cfg.Default
 	}
 	issues = append(issues, checker.CheckWorkerAgent(meta, root)...)
+	if meta.Agent == "codex" {
+		if st, err := codextrust.Inspect(root); err != nil {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "codex-trust-read-failed", Tool: "codex", Message: err.Error()})
+		} else if !st.Trusted {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "codex-project-untrusted", Tool: "codex", Message: "trust Codex root project " + st.Root + " before starting Codex tasks"})
+		}
+	}
 	issues = append(issues, checker.CheckSetupToolHints()...)
 	return agentpreflight.WarningLines(dedupeIssues(issues))
 }

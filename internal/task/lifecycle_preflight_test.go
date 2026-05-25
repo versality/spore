@@ -4,10 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/versality/spore/internal/hooks/settings"
 	"github.com/versality/spore/internal/testagent"
 	"github.com/versality/spore/internal/testpath"
 )
@@ -82,6 +84,55 @@ func TestEnsureMissingSelectedAgentDoesNotCreateWorktree(t *testing.T) {
 	}
 }
 
+func TestStartCodexUntrustedProjectDoesNotCreateWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, repo, "init", "-q", "-b", "main")
+	runGit(t, repo, "config", "user.email", "test@example.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".codex", "hooks.json"), []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"spore hooks codex stop","timeout":30}]}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", t.TempDir())
+	tasksDir := filepath.Join(repo, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	taskPath := filepath.Join(tasksDir, "x.md")
+	if err := os.WriteFile(taskPath, []byte("---\nstatus: draft\nslug: x\ntitle: X\nagent: codex\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testpath.Install(t, testpath.Options{
+		RealTools: []string{"git"},
+		FakeTools: map[string]string{"codex": "#!/bin/sh\nexit 0\n", "tmux": "#!/bin/sh\nexit 1\n", "spore": "#!/bin/sh\nexit 0\n"},
+	})
+	t.Setenv("PATH", h.BinDir)
+
+	_, err := Start(tasksDir, "x", nil)
+	if err == nil || !strings.Contains(err.Error(), "codex-project-untrusted:codex") {
+		t.Fatalf("Start err = %v, want codex trust preflight", err)
+	}
+	if status := readStatus(t, taskPath); status != "draft" {
+		t.Fatalf("status = %q, want draft", status)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree stat err = %v, want not exist", err)
+	}
+}
+
 func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git not available: %v", err)
@@ -101,6 +152,7 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeCodexReady(t, repo)
 	tasksDir := filepath.Join(repo, "tasks")
 	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -131,6 +183,25 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 		t.Fatalf("codex hooks missing: %v", err)
 	} else if !strings.Contains(string(body), "spore hooks codex stop") {
 		t.Fatalf("codex hooks missing stop adapter:\n%s", body)
+	}
+}
+
+func writeCodexReady(t *testing.T, repo string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[projects."+strconv.Quote(filepath.Clean(repo))+"]\ntrust_level = \"trusted\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body, ok, err := settings.RenderCodex(filepath.Join(repo, "configs", "codex", "hooks-config.json"), SessionKindCoordinator)
+	if err != nil || !ok {
+		t.Fatalf("render codex hooks: ok=%v err=%v", ok, err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".codex", "hooks.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

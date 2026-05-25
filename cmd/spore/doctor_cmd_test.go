@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -101,8 +102,9 @@ func TestDoctorReportsCodexRuntimeHookDrift(t *testing.T) {
 		}
 	}
 	write("spore.toml", "[fleet.workers]\ndefault = \"codex\"\n")
-	write(filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"Stop":[{"command":"spore hooks watch-inbox","timeout":10}]}}`)
+	write(filepath.Join("configs", "codex", "hooks-config.json"), string(mustReadRepoFile(t, filepath.Join("configs", "codex", "hooks-config.json"))))
 	write(filepath.Join(".codex", "hooks.json"), `{"events":{"Stop":[{"command":"stale"}]}}`)
+	trustDoctorCodex(t, root)
 	h := testpath.Install(t, testpath.Options{
 		FakeTools: map[string]string{
 			"git":   "#!/bin/sh\nexit 0\n",
@@ -136,29 +138,8 @@ func TestDoctorAcceptsCoordinatorRuntimeHooks(t *testing.T) {
     ],
     "Stop": [
       {
-        "command": "spore coordinator token-monitor",
-        "timeout": 10,
-        "kinds": ["coordinator"]
-      },
-      {
-        "command": "spore fleet replenish-hook",
-        "timeout": 30,
-        "kinds": ["coordinator"]
-      },
-      {
-        "command": "spore hooks plan-ready-mechanical",
-        "timeout": 10,
-        "kinds": ["worker"]
-      },
-      {
-        "command": "spore hooks watch-inbox",
-        "timeout": 604800,
-        "kinds": ["coordinator", "worker"]
-      },
-      {
-        "command": "spore worker token-monitor",
-        "timeout": 10,
-        "kinds": ["worker"]
+        "command": "spore hooks codex stop",
+        "timeout": 30
       }
     ]
   }
@@ -184,12 +165,13 @@ func TestDoctorReportsMissingLifecycleHook(t *testing.T) {
 	writeDoctorFile(t, "spore.toml", "[fleet.workers]\ndefault = \"codex\"\n")
 	writeDoctorFile(t, filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"Stop":[{"command":"custom hook","timeout":10}]}}`)
 	installDoctorTools(t, "codex")
+	trustDoctorCodex(t, root)
 
 	code, stdout, _ := captureFn(t, func() int { return runDoctor([]string{"--json"}) })
 	if code == 0 {
 		t.Fatal("doctor exit = 0, want lifecycle warning")
 	}
-	if !strings.Contains(stdout, `"code": "missing-lifecycle-hook"`) || !strings.Contains(stdout, `spore hooks watch-inbox`) {
+	if !strings.Contains(stdout, `"code": "missing-codex-adapter-hook"`) || !strings.Contains(stdout, `spore hooks codex stop`) {
 		t.Fatalf("stdout = %s", stdout)
 	}
 }
@@ -198,14 +180,15 @@ func TestDoctorReportsLifecycleHookEventDrift(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	writeDoctorFile(t, "spore.toml", "[fleet.workers]\ndefault = \"codex\"\n")
-	writeDoctorFile(t, filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"SessionStart":[{"command":"spore hooks watch-inbox","timeout":604800,"kinds":["coordinator","worker"]}]}}`)
+	writeDoctorFile(t, filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"SessionStart":[{"command":"spore hooks codex stop","timeout":30}]}}`)
 	installDoctorTools(t, "codex")
+	trustDoctorCodex(t, root)
 
 	code, stdout, _ := captureFn(t, func() int { return runDoctor([]string{"--json"}) })
 	if code == 0 {
 		t.Fatal("doctor exit = 0, want lifecycle warning")
 	}
-	if !strings.Contains(stdout, `"code": "lifecycle-hook-event-drift"`) {
+	if !strings.Contains(stdout, `"code": "codex-adapter-event-drift"`) {
 		t.Fatalf("stdout = %s", stdout)
 	}
 }
@@ -214,14 +197,15 @@ func TestDoctorReportsLifecycleHookTimeoutAndKindsDrift(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	writeDoctorFile(t, "spore.toml", "[fleet.workers]\ndefault = \"codex\"\n")
-	writeDoctorFile(t, filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"Stop":[{"command":"spore hooks watch-inbox","timeout":10,"kinds":["worker"]}]}}`)
+	writeDoctorFile(t, filepath.Join("configs", "codex", "hooks-config.json"), `{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":10,"kinds":["worker"]}]}}`)
 	installDoctorTools(t, "codex")
+	trustDoctorCodex(t, root)
 
 	code, stdout, _ := captureFn(t, func() int { return runDoctor([]string{"--json"}) })
 	if code == 0 {
 		t.Fatal("doctor exit = 0, want lifecycle warning")
 	}
-	if !strings.Contains(stdout, `"code": "lifecycle-hook-timeout-drift"`) || !strings.Contains(stdout, `"code": "lifecycle-hook-kinds-drift"`) {
+	if !strings.Contains(stdout, `"code": "codex-adapter-source-drift"`) {
 		t.Fatalf("stdout = %s", stdout)
 	}
 }
@@ -236,9 +220,7 @@ func TestInstallPreservesPartialLifecycleConfigAndDoctorWarns(t *testing.T) {
 		"    \"Stop\": [\n" +
 		"      {\n" +
 		"        \"command\": \"spore hooks watch-inbox\",\n" +
-		"        \"timeout\": 604800,\n" +
-		"        \"asyncRewake\": true,\n" +
-		"        \"kinds\": [\"coordinator\", \"worker\"]\n" +
+		"        \"timeout\": 604800\n" +
 		"      }\n" +
 		"    ]\n" +
 		"  }\n" +
@@ -261,14 +243,11 @@ func TestInstallPreservesPartialLifecycleConfigAndDoctorWarns(t *testing.T) {
 	if code == 0 {
 		t.Fatal("doctor exit = 0, want lifecycle warning")
 	}
-	if !strings.Contains(stdout, `"code": "missing-lifecycle-hook"`) {
+	if !strings.Contains(stdout, `"code": "missing-codex-adapter-hook"`) {
 		t.Fatalf("stdout = %s", stdout)
 	}
-	if !strings.Contains(stdout, "spore coordinator token-monitor") {
+	if !strings.Contains(stdout, "spore hooks codex stop") {
 		t.Fatalf("stdout = %s", stdout)
-	}
-	if strings.Contains(stdout, "missing spore hooks watch-inbox") {
-		t.Fatalf("watch-inbox hook reported as missing:\n%s", stdout)
 	}
 }
 
@@ -338,4 +317,14 @@ func installDoctorTools(t *testing.T, agent string) {
 	}
 	h := testpath.Install(t, testpath.Options{FakeTools: fakeTools})
 	t.Setenv("PATH", h.BinDir)
+}
+
+func trustDoctorCodex(t *testing.T, root string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	body := "[projects." + strconv.Quote(filepath.Clean(root)) + "]\ntrust_level = \"trusted\"\n"
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

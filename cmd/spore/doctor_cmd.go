@@ -11,6 +11,7 @@ import (
 	"sort"
 
 	"github.com/versality/spore/internal/agentpreflight"
+	"github.com/versality/spore/internal/codextrust"
 	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/hooks/settings"
 	"github.com/versality/spore/internal/lifecyclehooks"
@@ -127,12 +128,18 @@ func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
 	if workerAgent == "codex" {
 		source := filepath.Join(root, "configs", "codex", "hooks-config.json")
 		runtime := filepath.Join(root, ".codex", "hooks.json")
+		if st, err := codextrust.Inspect(root); err != nil {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "codex-trust-read-failed", Tool: "codex", Message: err.Error()})
+		} else if !st.Trusted {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityError, Code: "codex-project-untrusted", Tool: "codex", Message: "trust Codex root project " + st.Root + " before starting Codex tasks"})
+		}
 		if _, err := os.Stat(source); os.IsNotExist(err) {
 			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-codex-hooks-config", Tool: "codex", Message: "configs/codex/hooks-config.json is missing"})
 		} else {
-			issues = append(issues, lifecycleSourceIssues("codex", source)...)
+			issues = append(issues, codexAdapterSourceIssues(source)...)
 			issues = append(issues, runtimeDriftIssue("codex", source, "", runtime, task.SessionKindCoordinator)...)
 		}
+		issues = append(issues, codexIgnoredWorktreeHookIssues(root)...)
 	}
 	if workerAgent == "" || workerAgent == "claude" || workerAgent == "claude-code" {
 		source := filepath.Join(root, "configs", "claude", "hooks-config.json")
@@ -146,6 +153,57 @@ func hookConfigIssues(root, workerAgent string) []agentpreflight.Issue {
 		}
 	}
 	return issues
+}
+
+func codexAdapterSourceIssues(source string) []agentpreflight.Issue {
+	cfg, ok, err := settings.LoadConfig(source)
+	if err != nil {
+		return []agentpreflight.Issue{{Severity: agentpreflight.SeverityWarn, Code: "lifecycle-hooks-source-invalid", Tool: "codex", Message: err.Error()}}
+	}
+	if !ok {
+		return nil
+	}
+	want := map[string]string{
+		"PreToolUse": "spore hooks codex pre-tool-use",
+		"Stop":       "spore hooks codex stop",
+	}
+	var issues []agentpreflight.Issue
+	for event, command := range want {
+		got, found := lifecycleSourceFind(cfg, command)
+		if !found {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "missing-codex-adapter-hook", Tool: "codex", Message: source + " missing " + command})
+			continue
+		}
+		if got.event != event {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "codex-adapter-event-drift", Tool: "codex", Message: command + " is under " + got.event + ", want " + event})
+		}
+		wantTimeout := 10
+		if event == "Stop" {
+			wantTimeout = 30
+		}
+		if got.bin.Timeout != wantTimeout || len(got.bin.Kinds) != 0 {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "codex-adapter-source-drift", Tool: "codex", Message: source + " event " + event + " must contain only the Codex adapter"})
+		}
+	}
+	for event, bins := range cfg.Events {
+		if len(bins) != 1 || bins[0].Command != want[event] {
+			issues = append(issues, agentpreflight.Issue{Severity: agentpreflight.SeverityWarn, Code: "codex-adapter-source-drift", Tool: "codex", Message: source + " event " + event + " must contain only the Codex adapter"})
+		}
+	}
+	return issues
+}
+
+func codexIgnoredWorktreeHookIssues(root string) []agentpreflight.Issue {
+	matches, err := filepath.Glob(filepath.Join(root, ".worktrees", "*", ".codex", "hooks.json"))
+	if err != nil || len(matches) == 0 {
+		return nil
+	}
+	return []agentpreflight.Issue{{
+		Severity: agentpreflight.SeverityWarn,
+		Code:     "codex-worktree-hooks-ignored",
+		Tool:     "codex",
+		Message:  "Codex ignores linked-worktree hook declarations; remove " + matches[0] + " and use root .codex/hooks.json",
+	}}
 }
 
 func lifecycleSourceIssues(driver, source string) []agentpreflight.Issue {
