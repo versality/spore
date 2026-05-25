@@ -143,6 +143,61 @@ func TestReconcileRespectsMaxWorkers(t *testing.T) {
 	}
 }
 
+func TestReconcileKeptDoesNotConsumeMaxWorkers(t *testing.T) {
+	requireToolchain(t)
+
+	dirs := newTestDirs(t)
+	gitInit(t, dirs.project)
+	mustEnable(t)
+	setTestAgentBinary(t)
+
+	writeTask(t, dirs.tasks, "alpha", "active")
+	writeTask(t, dirs.tasks, "bravo", "active")
+	writeTask(t, dirs.tasks, "charlie", "active")
+
+	t.Cleanup(func() { killSporeSessions(dirs.project) })
+
+	r1, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  1,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile pass 1: %v", err)
+	}
+	if got, want := r1.Spawned, []string{"alpha"}; !equalSlices(got, want) {
+		t.Fatalf("Spawned (pass 1) = %v, want %v", got, want)
+	}
+	if got, want := r1.Skipped, []string{"bravo", "charlie"}; !equalSlices(got, want) {
+		t.Fatalf("Skipped (pass 1) = %v, want %v", got, want)
+	}
+	if len(r1.Kept) != 0 {
+		t.Fatalf("Kept (pass 1) = %v, want []", r1.Kept)
+	}
+
+	// Pass 2: alpha is still alive (Kept). Under the pre-fix accounting
+	// len(runningSet) >= MaxWorkers would skip every active task; with
+	// the per-pass counter the cap applies only to new launches, so
+	// exactly one of the remaining actives spawns.
+	r2, err := Reconcile(Config{
+		TasksDir:    dirs.tasks,
+		ProjectRoot: dirs.project,
+		MaxWorkers:  1,
+	})
+	if err != nil {
+		t.Fatalf("Reconcile pass 2: %v", err)
+	}
+	if got, want := r2.Kept, []string{"alpha"}; !equalSlices(got, want) {
+		t.Errorf("Kept (pass 2) = %v, want %v", got, want)
+	}
+	if got, want := r2.Spawned, []string{"bravo"}; !equalSlices(got, want) {
+		t.Errorf("Spawned (pass 2) = %v, want %v", got, want)
+	}
+	if got, want := r2.Skipped, []string{"charlie"}; !equalSlices(got, want) {
+		t.Errorf("Skipped (pass 2) = %v, want %v", got, want)
+	}
+}
+
 func TestReconcileSpawnsByMatterSortOrder(t *testing.T) {
 	requireToolchain(t)
 
