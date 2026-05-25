@@ -46,7 +46,7 @@ func TestInjectCodexWorkerFiltersKinds(t *testing.T) {
 	if !wrote {
 		t.Fatalf("first inject reported no write")
 	}
-	want := filepath.Join(target, ".codex/hooks.json")
+	want := filepath.Join(root, ".codex/hooks.json")
 	if path != want {
 		t.Errorf("path = %q, want %q", path, want)
 	}
@@ -73,7 +73,7 @@ func TestInjectCodexCoordinatorFiltersKinds(t *testing.T) {
 	if _, _, err := InjectCodex(root, target, "coordinator"); err != nil {
 		t.Fatalf("InjectCodex: %v", err)
 	}
-	got := commandsForEvent(readCodexHooks(t, filepath.Join(target, ".codex/hooks.json")), "Stop")
+	got := commandsForEvent(readCodexHooks(t, filepath.Join(root, ".codex/hooks.json")), "Stop")
 	if !equalStrings(got, []string{"coord-only", "everywhere"}) {
 		t.Errorf("coordinator Stop commands = %v, want [coord-only everywhere]", got)
 	}
@@ -107,7 +107,7 @@ func TestInjectCodexOperatorInteractiveDropsFleetHooks(t *testing.T) {
 	if _, _, err := InjectCodex(root, target, "worker"); err != nil {
 		t.Fatalf("InjectCodex: %v", err)
 	}
-	got := commandsForEvent(readCodexHooks(t, filepath.Join(target, ".codex/hooks.json")), "Stop")
+	got := commandsForEvent(readCodexHooks(t, filepath.Join(root, ".codex/hooks.json")), "Stop")
 	if !equalStrings(got, []string{"worker-only"}) {
 		t.Errorf("worker Stop must drop coordinator-only binding, got %v", got)
 	}
@@ -124,7 +124,7 @@ func TestInjectCodexNoConfigIsNoop(t *testing.T) {
 	if wrote || path != "" {
 		t.Errorf("InjectCodex without hooks-config.json should be no-op, got path=%q wrote=%v", path, wrote)
 	}
-	if _, err := os.Stat(filepath.Join(target, ".codex/hooks.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".codex/hooks.json")); !os.IsNotExist(err) {
 		t.Errorf("expected no .codex/hooks.json, got err=%v", err)
 	}
 }
@@ -147,7 +147,7 @@ func TestInjectCodexSkipEnv(t *testing.T) {
 	if wrote || path != "" {
 		t.Errorf("SkipEnv should suppress write, got path=%q wrote=%v", path, wrote)
 	}
-	if _, err := os.Stat(filepath.Join(target, ".codex/hooks.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".codex/hooks.json")); !os.IsNotExist(err) {
 		t.Errorf("expected no .codex/hooks.json under SkipEnv, err=%v", err)
 	}
 }
@@ -185,7 +185,7 @@ func TestInjectCodexHooksConfigEnvOverride(t *testing.T) {
 	if _, _, err := InjectCodexWithEnv(root, target, "coordinator", getenv); err != nil {
 		t.Fatalf("InjectCodex: %v", err)
 	}
-	got := commandsForEvent(readCodexHooks(t, filepath.Join(target, ".codex/hooks.json")), "Stop")
+	got := commandsForEvent(readCodexHooks(t, filepath.Join(root, ".codex/hooks.json")), "Stop")
 	if !equalStrings(got, []string{"coord-only", "everywhere"}) {
 		t.Errorf("override path not honoured, got %v", got)
 	}

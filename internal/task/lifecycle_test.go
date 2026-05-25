@@ -255,7 +255,7 @@ func TestStartRendersCodexHooksIntoWorktree(t *testing.T) {
 	if err := os.MkdirAll(configsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	src := `{"events":{"Stop":[{"command":"coord-only","kinds":["coordinator"]},{"command":"worker-only","kinds":["worker"]}]}}`
+	src := `{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`
 	if err := os.WriteFile(filepath.Join(configsDir, "hooks-config.json"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -279,17 +279,20 @@ func TestStartRendersCodexHooksIntoWorktree(t *testing.T) {
 		_ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run()
 	})
 
-	worktree := filepath.Join(repo, ".worktrees", slug)
-	out, err := os.ReadFile(filepath.Join(worktree, ".codex/hooks.json"))
+	worktreeHook := filepath.Join(repo, ".worktrees", slug, ".codex/hooks.json")
+	if _, err := os.Stat(worktreeHook); !os.IsNotExist(err) {
+		t.Fatalf("worker spawn wrote ignored worktree codex hooks: %v", err)
+	}
+	out, err := os.ReadFile(filepath.Join(repo, ".codex/hooks.json"))
 	if err != nil {
-		t.Fatalf("worker spawn did not render .codex/hooks.json: %v", err)
+		t.Fatalf("worker spawn did not render root .codex/hooks.json: %v", err)
 	}
 	body2 := string(out)
-	if !strings.Contains(body2, "worker-only") {
-		t.Errorf("rendered .codex/hooks.json missing worker-only: %s", body2)
+	if !strings.Contains(body2, "spore hooks codex stop") {
+		t.Errorf("rendered .codex/hooks.json missing codex stop adapter: %s", body2)
 	}
-	if strings.Contains(body2, "coord-only") {
-		t.Errorf("rendered .codex/hooks.json leaked coordinator binding into worker render: %s", body2)
+	if strings.Contains(body2, "worker-finish") || strings.Contains(body2, "watch-inbox") {
+		t.Errorf("rendered .codex/hooks.json contains expanded lifecycle hooks: %s", body2)
 	}
 }
 

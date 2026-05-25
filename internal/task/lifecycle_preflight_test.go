@@ -98,7 +98,7 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "configs", "codex"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks watch-inbox","timeout":604800,"kinds":["coordinator","worker"]}]}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "configs", "codex", "hooks-config.json"), []byte(`{"events":{"Stop":[{"command":"spore hooks codex stop","timeout":30}]}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tasksDir := filepath.Join(repo, "tasks")
@@ -124,10 +124,13 @@ func TestStartUsesFleetDefaultAgentForUnpinnedTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if body, err := os.ReadFile(filepath.Join(repo, ".worktrees", "x", ".codex", "hooks.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(repo, ".worktrees", "x", ".codex", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("worktree codex hooks should not be written: %v", err)
+	}
+	if body, err := os.ReadFile(filepath.Join(repo, ".codex", "hooks.json")); err != nil {
 		t.Fatalf("codex hooks missing: %v", err)
-	} else if !strings.Contains(string(body), "spore hooks watch-inbox") {
-		t.Fatalf("codex hooks missing watch-inbox:\n%s", body)
+	} else if !strings.Contains(string(body), "spore hooks codex stop") {
+		t.Fatalf("codex hooks missing stop adapter:\n%s", body)
 	}
 }
 

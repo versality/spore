@@ -605,7 +605,7 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if _, _, err := inject.Inject(projectRoot, worktree, SessionKindWorker); err != nil {
 		return "", fmt.Errorf("inject settings: %w", err)
 	}
-	if _, _, err := inject.InjectCodex(projectRoot, worktree, SessionKindWorker); err != nil {
+	if _, _, err := inject.InjectCodex(projectRoot, projectRoot, SessionKindWorker); err != nil {
 		return "", fmt.Errorf("inject codex hooks: %w", err)
 	}
 	// Wrap the agent command through sh -c so we can append the

@@ -20,17 +20,17 @@ const (
 )
 
 // InjectCodex renders <projectRoot>/configs/codex/hooks-config.json
-// with kind-scoping kind and writes the result atomically to
-// <targetDir>/.codex/hooks.json.
+// and writes the result atomically to <projectRoot>/.codex/hooks.json.
 //
 // Return semantics mirror Inject:
 //   - (path, true, nil) on a fresh write or refresh,
 //   - (path, false, nil) when the existing content already matches,
 //   - ("", false, nil) when SkipEnv is "1" or the source is absent.
 //
-// projectRoot is the source of the hooks config (the spore-managed
-// project root). targetDir is where .codex/hooks.json is written
-// (worktree for a worker, project root for the coordinator).
+// targetDir is accepted for the older call shape but ignored. Codex
+// resolves hook declarations for linked worktrees from the root
+// checkout layer, so workers and coordinators share the same project
+// root adapter file.
 func InjectCodex(projectRoot, targetDir, kind string) (string, bool, error) {
 	return InjectCodexWithEnv(projectRoot, targetDir, kind, os.Getenv)
 }
@@ -55,7 +55,7 @@ func InjectCodexWithEnv(projectRoot, targetDir, kind string, getenv func(string)
 		return "", false, nil
 	}
 
-	target := filepath.Join(targetDir, codexTargetRel)
+	target := filepath.Join(projectRoot, codexTargetRel)
 	if existing, err := os.ReadFile(target); err == nil && bytes.Equal(existing, rendered) {
 		return target, false, nil
 	}

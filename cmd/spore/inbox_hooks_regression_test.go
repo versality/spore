@@ -71,12 +71,15 @@ func TestInboxHooksRegressionCodexStartRendersWatchInbox(t *testing.T) {
 		t.Fatalf("task start: %v", err)
 	}
 	t.Cleanup(func() { _ = exec.Command("tmux", "-L", testTmuxSocket, "kill-session", "-t", session).Run() })
-	body, err := os.ReadFile(filepath.Join(root, ".worktrees", "codex-smoke", ".codex", "hooks.json"))
+	if _, err := os.Stat(filepath.Join(root, ".worktrees", "codex-smoke", ".codex", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("worktree codex hooks should not be written: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, ".codex", "hooks.json"))
 	if err != nil {
 		t.Fatalf("read rendered codex hooks: %v", err)
 	}
-	if !strings.Contains(string(body), "watch-inbox") {
-		t.Fatalf("codex hooks missing watch-inbox:\n%s", body)
+	if !strings.Contains(string(body), "spore hooks codex stop") {
+		t.Fatalf("codex hooks missing stop adapter:\n%s", body)
 	}
 }
 
