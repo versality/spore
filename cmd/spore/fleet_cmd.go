@@ -200,7 +200,7 @@ func runFleetReconcile(args []string) error {
 	if err != nil {
 		return err
 	}
-	resolved, err := resolveMaxWorkers(*maxWorkers, root)
+	resolved, err := resolveMaxWorkers(*maxWorkers, root, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -423,16 +423,23 @@ func runFleetListSessions(args []string) error {
 	return nil
 }
 
-func resolveMaxWorkers(flagVal int, projectRoot string) (int, error) {
-	if flagVal > 0 {
-		return flagVal, nil
-	}
+func resolveMaxWorkers(flagVal int, projectRoot string, warn io.Writer) (int, error) {
+	var envVal int
 	if env := os.Getenv("SPORE_FLEET_MAX_WORKERS"); env != "" {
 		n, err := strconv.Atoi(env)
 		if err != nil || n < 1 {
 			return 0, fmt.Errorf("SPORE_FLEET_MAX_WORKERS=%q: want positive integer", env)
 		}
-		return n, nil
+		envVal = n
+	}
+	if flagVal > 0 {
+		if envVal > 0 && envVal != flagVal && warn != nil {
+			fmt.Fprintf(warn, "spore fleet: --max-workers=%d wins over SPORE_FLEET_MAX_WORKERS=%d (env ignored)\n", flagVal, envVal)
+		}
+		return flagVal, nil
+	}
+	if envVal > 0 {
+		return envVal, nil
 	}
 	if env := os.Getenv("WT_FLEET_FLOOR"); env != "" {
 		n, err := strconv.Atoi(env)
@@ -480,7 +487,7 @@ func runFleetReplenishHook(args []string) error {
 		fmt.Fprintln(os.Stderr, "replenish-hook:", err)
 		return nil
 	}
-	resolved, err := resolveMaxWorkers(0, root)
+	resolved, err := resolveMaxWorkers(0, root, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "replenish-hook:", err)
 		return nil
