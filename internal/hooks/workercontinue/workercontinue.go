@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/versality/spore/internal/fleet"
+	"github.com/versality/spore/internal/hooks"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -95,7 +96,7 @@ func Check(cfg Config) (Result, error) {
 		}
 	}
 
-	if cfg.Project != "" && bodyHasPlan(body) {
+	if cfg.Project != "" && hooks.HasPlanSection(body) {
 		pending, err := planPendingAck(cfg.coordinatorInbox(), cfg.Slug)
 		if err != nil {
 			return Result{}, fmt.Errorf("scan coord inbox: %w", err)
@@ -157,7 +158,7 @@ func RunEnv() (Result, error) {
 		Slug:          slug,
 		Worktree:      wd,
 		Project:       project,
-		WtStateDir:    wtStateDir(),
+		WtStateDir:    hooks.WtStateDir(),
 		LedgerDir:     defaultLedgerDir(),
 		TokenStateDir: os.Getenv("SPORE_WORKER_TOKEN_DIR"),
 		FleetEnabled:  fleet.Enabled,
@@ -181,25 +182,7 @@ func (c Config) ledgerPath() string {
 }
 
 func (c Config) coordinatorInbox() string {
-	base := os.Getenv("SPORE_COORDINATOR_STATE_DIR")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		base = filepath.Join(home, ".local", "state", "spore", "coordinator")
-	}
-	return filepath.Join(base, c.Project, "inbox")
-}
-
-func wtStateDir() string {
-	if v := os.Getenv("WT_STATE"); v != "" {
-		return v
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".local", "state", "wt")
-	}
-	return ""
+	return hooks.CoordinatorInbox(c.Project)
 }
 
 func defaultLedgerDir() string {
@@ -239,38 +222,6 @@ func hasUnreadInbox(dir string) (bool, error) {
 	return false, nil
 }
 
-func bodyHasPlan(body []byte) bool {
-	inFence := false
-	for _, ln := range bytes.Split(body, []byte("\n")) {
-		trim := bytes.TrimSpace(ln)
-		if bytes.HasPrefix(trim, []byte("```")) || bytes.HasPrefix(trim, []byte("~~~")) {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-		if !bytes.HasPrefix(trim, []byte("##")) {
-			continue
-		}
-		rest := bytes.TrimLeft(trim, "#")
-		rest = bytes.TrimSpace(rest)
-		if len(rest) < 4 {
-			continue
-		}
-		if bytes.EqualFold(rest[:4], []byte("plan")) {
-			if len(rest) == 4 || !isWord(rest[4]) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func isWord(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
-}
-
 // planPendingAck returns true when a `plan ready: <slug>` tell sits
 // in the coordinator inbox (top or read/) and no matching
 // `plan ack: <slug>` reply has been recorded yet.
@@ -294,7 +245,7 @@ func planPendingAck(inbox, slug string) (bool, error) {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 				continue
 			}
-			body, ok := readTellBody(filepath.Join(dir, e.Name()))
+			body, ok := hooks.ReadTellBody(filepath.Join(dir, e.Name()))
 			if !ok {
 				continue
 			}
@@ -307,27 +258,6 @@ func planPendingAck(inbox, slug string) (bool, error) {
 		}
 	}
 	return ready && !ack, nil
-}
-
-func readTellBody(path string) (string, bool) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
-	}
-	var ev struct {
-		Body string `json:"body"`
-		Msg  string `json:"msg"`
-	}
-	if err := json.Unmarshal(bytes.TrimSpace(b), &ev); err != nil {
-		return "", false
-	}
-	if ev.Body != "" {
-		return ev.Body, true
-	}
-	if ev.Msg != "" {
-		return ev.Msg, true
-	}
-	return "", false
 }
 
 // tokenWrapFresh returns true when the worker token-monitor wrote a

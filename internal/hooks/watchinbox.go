@@ -215,17 +215,7 @@ func readTellFile(path string) (ts, source, body string) {
 }
 
 func workerInbox(slug string) string {
-	return filepath.Join(wtStateDir(), slug, "inbox")
-}
-
-func wtStateDir() string {
-	if v := os.Getenv("WT_STATE"); v != "" {
-		return v
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".local", "state", "wt")
-	}
-	return ""
+	return filepath.Join(WtStateDir(), slug, "inbox")
 }
 
 func ensureInbox(inbox string) error {

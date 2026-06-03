@@ -1,13 +1,12 @@
 package workerwatch
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/versality/spore/internal/coordinator/verify"
+	"github.com/versality/spore/internal/fleet"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -29,12 +28,12 @@ func DefaultStateFile() string {
 }
 
 // DefaultProjectsFile returns the projects-list path:
-// $WT_CFG/projects when WT_CFG is set, else
-// $HOME/.config/wt/projects. Mirrors internal/fleet so the watcher
-// scans the same project set the fleet liveness pass sees.
+// $WT_CFG/projects when WT_CFG is set, else $HOME/.config/wt/projects.
+// Delegates to internal/fleet so the watcher scans the same project set
+// the fleet liveness pass sees.
 func DefaultProjectsFile() string {
-	if v := os.Getenv("WT_CFG"); v != "" {
-		return filepath.Join(v, "projects")
+	if p := fleet.ProjectsFilePath(); p != "" {
+		return p
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "wt", "projects")
@@ -44,31 +43,7 @@ func DefaultProjectsFile() string {
 // comments are skipped. Missing file is empty, not an error. Order
 // is preserved.
 func ReadProjects(path string) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-	var out []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if i := strings.IndexByte(line, '#'); i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		out = append(out, line)
-	}
-	if err := scanner.Err(); err != nil {
-		return out, err
-	}
-	return out, nil
+	return fleet.ReadProjects(path)
 }
 
 // ScanActive walks every projectRoot, lists tasks/*.md, filters to

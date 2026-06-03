@@ -8,24 +8,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/versality/spore/internal/task"
 )
 
 func resolveRepoRoot() string {
-	out, err := exec.Command("git", "rev-parse", "--git-common-dir").Output()
-	if err != nil {
-		wd, _ := os.Getwd()
-		return wd
-	}
-	common := strings.TrimSpace(string(out))
-	if common == "" {
-		wd, _ := os.Getwd()
-		return wd
-	}
-	if !filepath.IsAbs(common) {
-		wd, _ := os.Getwd()
-		common = filepath.Join(wd, common)
-	}
-	root := filepath.Dir(common)
+	wd, _ := os.Getwd()
+	root := task.MainCheckoutRoot(wd)
 	if real, err := filepath.EvalSymlinks(root); err == nil {
 		return real
 	}

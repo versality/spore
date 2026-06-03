@@ -47,26 +47,9 @@ type Deps struct {
 func Run(req hooks.Request, deps Deps) Result {
 	deps = deps.withDefaults()
 
-	slug, ok := deps.LookupEnv("SPORE_TASK_SLUG")
-	if !ok || slug == "" {
+	slug, projectRoot, worktree, ok := wtgit.ResolveRoots(req.CWD, deps.LookupEnv)
+	if !ok {
 		return Result{}
-	}
-
-	projectRoot, _ := deps.LookupEnv("SPORE_PROJECT_ROOT")
-	if projectRoot == "" {
-		root, err := wtgit.TopLevel(req.CWD)
-		if err != nil {
-			return Result{}
-		}
-		if main, ok := wtgit.MainCheckoutFromWorktree(root); ok {
-			projectRoot = main
-		} else {
-			projectRoot = root
-		}
-	}
-	worktree := req.CWD
-	if worktree == "" {
-		worktree = filepath.Join(projectRoot, ".worktrees", slug)
 	}
 
 	unpushed, err := deps.UnpushedCount(projectRoot)
@@ -74,19 +57,11 @@ func Run(req hooks.Request, deps Deps) Result {
 		return Result{}
 	}
 
-	if !wtgit.WorkingTreeClean(worktree) {
-		return Result{}
-	}
-	if wtgit.MidMergeOrRebase(worktree) {
-		return Result{}
-	}
-
-	session := deps.SessionName(projectRoot, slug)
-	if session == "" {
-		return Result{}
-	}
-	state, _ := agentpane.Classify(deps.Capture, session+":claude", "claude")
-	if state != "idle" {
+	if !wtgit.IdleGate(projectRoot, worktree, slug, wtgit.GateDeps{
+		LookupEnv:   deps.LookupEnv,
+		Capture:     deps.Capture,
+		SessionName: deps.SessionName,
+	}) {
 		return Result{}
 	}
 
