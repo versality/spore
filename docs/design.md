@@ -72,7 +72,7 @@ operator from an unprepared repo to a worker-ready one.
 
 ## Hard parts (named, not solved)
 
-### Packaging: Nix-first
+### Packaging: Nix-required
 
 v1 ships as a Nix flake: a derivation that builds the spore binary,
 a dev shell carrying the full agent tool set (Go toolchain, lints,
@@ -87,10 +87,11 @@ without polluting the host; the dev shell is reproducible across
 hosts; install / uninstall is atomic; binary cache hits make every
 agent session fast. Spore inherits all of that, intentionally.
 
-Consumers without Nix can vendor the binary out and replace the
-packaging layer with whatever fits (Homebrew bottle, plain make
-install, container image). Spore does not commit to supporting that
-path as a first-class story; the surface is left replaceable.
+Nix is a hard requirement, not an optional packaging convenience.
+The bootstrap gate rejects a project root without a `flake.nix`, the
+dev shell and CI both run through `nix develop`, and the version /
+audit machinery reads from `nix eval`. There is no supported non-Nix
+path; a consumer that cannot run Nix cannot run spore.
 
 Secrets and activation stay project-local (operator-bound). The
 kernel does not prescribe them. The bootstrap flow records what the

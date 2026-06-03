@@ -6,9 +6,12 @@ point at `spore compose`.
 
 ## Detect
 
-`internal/bootstrap/repo_mapped.go`. Looks for any of:
+`internal/bootstrap/repo_mapped.go`. `flake.nix` is mandatory: Nix is
+a hard requirement for spore, so a project root without one is
+rejected before any other marker is considered. The remaining markers
+only enrich the detected language label:
 
-- `flake.nix` (nix)
+- `flake.nix` (nix, required)
 - `Cargo.toml` (rust)
 - `go.mod` (go)
 - `package.json` (node)
@@ -22,17 +25,17 @@ point at `spore compose`.
 
 ## Exit criteria
 
-1. At least one marker present at the project root.
+1. `flake.nix` present at the project root.
 2. `CLAUDE.md` and `AGENTS.md` exist. The detector writes starters
    when absent; the operator edits them during the rest of the
    bootstrap.
 
 ## Blocker
 
-`no recognised project marker (...)`. The project has no language
-or build system spore can hook. Either it is empty (run the
-project's own scaffolding first) or it uses a marker spore does not
-yet recognise (extend `repoMarkers` in `repo_mapped.go`).
+`no flake.nix at project root: Nix is a hard requirement for spore`.
+The project has no flake. Add one (see the flake template under
+`bootstrap/flake/`) before re-running the gate; spore does not
+support a non-Nix project layout.
 
 ## Notes recorded
 

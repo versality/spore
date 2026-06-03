@@ -20,29 +20,29 @@ func TestDetectRepoMapped(t *testing.T) {
 			wantNote: "detected: nix",
 		},
 		{
-			name:     "rust crate",
-			files:    map[string]string{"Cargo.toml": "[package]\n"},
-			wantNote: "detected: rust",
-		},
-		{
-			name:     "go module",
-			files:    map[string]string{"go.mod": "module x\n"},
-			wantNote: "detected: go",
-		},
-		{
-			name:     "node package",
-			files:    map[string]string{"package.json": "{}\n"},
-			wantNote: "detected: node",
-		},
-		{
 			name:     "polyglot rust+nix",
 			files:    map[string]string{"flake.nix": "{}\n", "Cargo.toml": "[package]\n"},
 			wantNote: "detected: nix,rust",
 		},
 		{
+			name:     "polyglot go+nix",
+			files:    map[string]string{"flake.nix": "{}\n", "go.mod": "module x\n"},
+			wantNote: "detected: go,nix",
+		},
+		{
+			name:     "polyglot node+nix",
+			files:    map[string]string{"flake.nix": "{}\n", "package.json": "{}\n"},
+			wantNote: "detected: nix,node",
+		},
+		{
+			name:    "rust crate without flake rejected",
+			files:   map[string]string{"Cargo.toml": "[package]\n"},
+			wantErr: "Nix is a hard requirement",
+		},
+		{
 			name:    "no markers",
 			files:   map[string]string{"random.txt": "x\n"},
-			wantErr: "no recognised project marker",
+			wantErr: "Nix is a hard requirement",
 		},
 	}
 	for _, tc := range cases {

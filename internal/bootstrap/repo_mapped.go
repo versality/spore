@@ -15,6 +15,8 @@ import (
 // repoMarkers maps a marker file (project root relative) to a short
 // language / build-system label. Order is irrelevant; the detector
 // reports every marker it finds, sorted, so notes are deterministic.
+// flake.nix is the one mandatory marker (see detectRepoMapped); the
+// rest only enrich the language label.
 var repoMarkers = map[string]string{
 	"flake.nix":      "nix",
 	"Cargo.toml":     "rust",
@@ -50,6 +52,12 @@ func detectRepoMapped(root string) (string, error) {
 	if root == "" {
 		return "", errors.New("repo-mapped: empty root")
 	}
+	if _, err := os.Stat(filepath.Join(root, "flake.nix")); err != nil {
+		if os.IsNotExist(err) {
+			return "", errors.New("no flake.nix at project root: Nix is a hard requirement for spore")
+		}
+		return "", fmt.Errorf("repo-mapped: stat flake.nix: %w", err)
+	}
 	var hits []string
 	seenLabel := map[string]bool{}
 	for marker, label := range repoMarkers {
@@ -59,9 +67,6 @@ func detectRepoMapped(root string) (string, error) {
 				seenLabel[label] = true
 			}
 		}
-	}
-	if len(hits) == 0 {
-		return "", errors.New("no recognised project marker (flake.nix / Cargo.toml / go.mod / package.json / pyproject.toml / Gemfile / deps.edn / pom.xml / Makefile / justfile)")
 	}
 	sort.Strings(hits)
 
