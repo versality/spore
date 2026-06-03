@@ -82,3 +82,20 @@ does not pause another.
 There is no cross-host lock layer in v0. Races on `tasks/<slug>.md`
 frontmatter are tolerated by Spore's file-based communication shape,
 not arbitrated.
+
+## Graceful deployment
+
+When the module is enabled with `gracefulDeploy.enable = true` (the
+default), pre and post activation hooks drain active workers around
+`nixos-rebuild switch` and colmena deploys:
+
+- pre-activation disables the kill-switch, drops a wrap-up message into
+  every active worker's inbox, waits up to `gracefulDeploy.timeout`
+  seconds for them to flush, then kills any holdouts;
+- post-activation re-enables the kill-switch so the next reconcile pass
+  repopulates the fleet.
+
+The `preScript` and `postScript` paths are also exposed as read-only
+options so a colmena `deployment.preActivation` / `postActivation` hook
+can drive the same drain remotely. Set `gracefulDeploy.enable = false`
+for one-off worker tiers whose tasks should never see a wrap-up signal.
