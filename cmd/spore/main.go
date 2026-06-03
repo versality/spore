@@ -177,13 +177,14 @@ Subcommands:
                          deterministic settings.json to stdout. --kind
                          (or $SPORE_RENDER_KIND) drops bindings whose
                          "kinds" list omits K; empty omits no bindings.
-  render [--kind K] [--hooks-config P] [--extras P] [--out P] [--claude-dir D]
+  render [--kind K] [--hooks-config P] [--extras P] [--out P] [--claude-dir D] [--codex]
                          End-to-end: load hooks-config.json, render for
                          --kind, overlay settings-extras.json, write to
                          --out (stdout if omitted). --claude-dir defaults
                          the three paths to <dir>/{hooks-config,
                          settings-extras,settings}.json. Missing extras
-                         is treated as no overlay.
+                         is treated as no overlay. --codex emits the
+                         .codex/hooks.json shape instead (no extras).
   gate-kind K... -- CMD ARGS
                          Read $WT_SESSION_KIND. If unset or not in K...,
                          exit 0 silently. Otherwise exec CMD ARGS. Use

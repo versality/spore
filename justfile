@@ -36,6 +36,20 @@ vuln:
 nix-check:
     nix flake check
 
+# Regenerate the local agent hook configs from their tracked sources
+# under configs/. Both rendered outputs (.claude/settings.json,
+# .codex/hooks.json) are gitignored: spawn-time injection rewrites them
+# kind-scoped per session, this recipe writes the unscoped baseline an
+# operator-interactive shell reads at rest.
+hooks-render:
+    go run ./cmd/spore hooks render \
+      --hooks-config configs/claude/hooks-config.json \
+      --extras configs/claude/settings-extras.json \
+      --out .claude/settings.json
+    go run ./cmd/spore hooks render --codex \
+      --hooks-config configs/codex/hooks-config.json \
+      --out .codex/hooks.json
+
 build: go-build nix-build
 
 go-build:

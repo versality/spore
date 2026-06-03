@@ -70,6 +70,9 @@ spore/
 |   |-- stages/                 One runbook per stage gate.
 |   |-- mcp/                    MCP server config templates.
 |   `-- flake/                  Minimal NixOS flake used by `spore infect`.
+|-- configs/                    Per-agent hook render sources (claude, codex).
+|   |-- claude/                 hooks-config.json + settings-extras.json.
+|   `-- codex/                  hooks-config.json.
 `-- docs/                       Design notes, rationale.
 ```
 

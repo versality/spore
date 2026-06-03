@@ -1,0 +1,15 @@
+{
+  "events": {
+    "Stop": [
+      { "command": "spore coordinator token-monitor", "timeout": 10, "kinds": ["coordinator"] },
+      { "command": "spore worker token-monitor", "timeout": 10, "kinds": ["worker"] },
+      { "command": "spore fleet replenish-hook", "timeout": 30, "kinds": ["coordinator"] },
+      { "command": "spore hooks wtmerge-mechanical", "timeout": 10, "kinds": ["worker"] },
+      { "command": "spore hooks plan-ready-mechanical", "timeout": 10, "kinds": ["worker"] },
+      { "command": "spore hooks worker-continue", "timeout": 10, "kinds": ["worker"] },
+      { "command": "spore hooks push-pending", "timeout": 10, "kinds": ["worker"] },
+      { "command": "spore hooks pr-finish", "timeout": 20, "kinds": ["worker"] },
+      { "command": "bash -c 'if [ -n \"$SPORE_TASK_INBOX\" ]; then exec spore hooks watch-inbox; fi'", "timeout": 604800, "asyncRewake": true, "kinds": ["coordinator", "worker"] }
+    ]
+  }
+}

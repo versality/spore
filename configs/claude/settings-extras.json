@@ -1,0 +1,7 @@
+{
+  "enabledPlugins": { "gopls-lsp@claude-plugins-official": true },
+  "effortLevel": "xhigh",
+  "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark"
+}

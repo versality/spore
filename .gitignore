@@ -23,10 +23,12 @@
 /.codex/hooks.json
 
 # Claude Code per-machine runtime state living under <repo>/.claude/.
-# Tracked: settings.json, settings.local.json. Ignored: everything else
-# Claude writes here (sessions, history, plugins, caches, etc.).
+# settings.json is a rendered output (configs/claude/ -> `just
+# hooks-render`), mirroring how .codex/hooks.json renders from
+# configs/codex/; both are gitignored because spawn-time injection
+# rewrites them kind-scoped. Tracked: settings.local.json (operator
+# overrides). Ignored: everything else Claude writes here.
 /.claude/*
-!/.claude/settings.json
 !/.claude/settings.local.json
 
 # spore-sandbox redteam scratch

@@ -299,6 +299,7 @@ func runHooksRender(args []string) int {
 		extrasPath      string
 		outPath         string
 		claudeDir       string
+		codex           bool
 		kind            = os.Getenv("SPORE_RENDER_KIND")
 	)
 	for i := 0; i < len(args); i++ {
@@ -352,6 +353,8 @@ func runHooksRender(args []string) int {
 			claudeDir = v
 		case strings.HasPrefix(a, "--claude-dir="):
 			claudeDir = strings.TrimPrefix(a, "--claude-dir=")
+		case a == "--codex":
+			codex = true
 		default:
 			fmt.Fprintln(os.Stderr, "spore hooks render: unexpected arg:", a)
 			return 2
@@ -376,7 +379,16 @@ func runHooksRender(args []string) int {
 		fmt.Fprintln(os.Stderr, "spore hooks render: missing", hooksConfigPath)
 		return 2
 	}
-	merged, ok, err := settings.RenderClaude(hooksConfigPath, extrasPath, kind)
+	var (
+		merged []byte
+		ok     bool
+		err    error
+	)
+	if codex {
+		merged, ok, err = settings.RenderCodex(hooksConfigPath, kind)
+	} else {
+		merged, ok, err = settings.RenderClaude(hooksConfigPath, extrasPath, kind)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spore hooks render:", err)
 		return 1
