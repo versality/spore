@@ -3,6 +3,12 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Go toolchain only. nixpkgs-unstable still carries go_1_25 at
+    # 1.25.10, which is affected by GO-2026-5037 / GO-2026-5039; the
+    # fix lands in go_1_25 1.25.11, currently only on master. Pin a
+    # second nixpkgs solely for the Go derivation so the rest of the
+    # toolchain stays on the stable unstable pin.
+    nixpkgs-go.url = "github:NixOS/nixpkgs/master";
     flake-utils.url = "github:numtide/flake-utils";
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -14,7 +20,7 @@
   };
 
   outputs =
-    { self, nixpkgs, flake-utils, home-manager, claude-code }:
+    { self, nixpkgs, nixpkgs-go, flake-utils, home-manager, claude-code }:
     let
       perSystem = flake-utils.lib.eachDefaultSystem (system:
         let
@@ -23,8 +29,9 @@
           # devShell. nixpkgs.go currently tracks 1.26.3; the latest
           # stdlib advisories (GO-2026-5037, GO-2026-5039) are still
           # unfixed there until 1.26.4, which has not landed in this
-          # channel yet. 1.25.11 carries the same fixes.
-          ciGo = pkgs.go_1_25;
+          # channel yet. 1.25.11 carries the same fixes but only exists
+          # on master, so ciGo comes from the nixpkgs-go pin.
+          ciGo = nixpkgs-go.legacyPackages.${system}.go_1_25;
           # Consumer-facing build uses `pkgs.buildGoModule` (and its
           # default `pkgs.go`) so a downstream toolchain overlay (e.g.
           # mapping `go` to a newer release) reaches us. CI keeps the

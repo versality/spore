@@ -91,6 +91,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-go": {
+      "locked": {
+        "lastModified": 1780504645,
+        "narHash": "sha256-bOekm57FjhXpyhe+nerBf05QZekQsDJ3EXstM9RYVdA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ed96a58ad37d8797d0435475c51e201afaf81c57",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs_2": {
       "locked": {
         "lastModified": 1780336545,
@@ -112,7 +128,8 @@
         "claude-code": "claude-code",
         "flake-utils": "flake-utils_2",
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_2",
+        "nixpkgs-go": "nixpkgs-go"
       }
     },
     "systems": {
