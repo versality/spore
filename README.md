@@ -63,12 +63,6 @@ For an ephemeral shell with `spore` on PATH:
 nix shell github:versality/spore
 ```
 
-Or build from a checkout with Go 1.25+:
-
-```sh
-go build -o ~/.local/bin/spore ./cmd/spore
-```
-
 `nix profile install github:versality/spore` also works if you prefer
 imperative management.
 
