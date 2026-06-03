@@ -1,15 +1,10 @@
 package hooks
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
-	"time"
 
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -45,11 +40,11 @@ func PlanReadyMechanical(slug, worktree, project string) error {
 	if meta.Status != "active" {
 		return nil
 	}
-	if !hasPlanSection(body) {
+	if !HasPlanSection(body) {
 		return nil
 	}
 
-	inbox := coordinatorInbox(project)
+	inbox := CoordinatorInbox(project)
 	already, err := planReadyRecorded(inbox, slug)
 	if err != nil {
 		return fmt.Errorf("plan-ready-mechanical: scan inbox: %w", err)
@@ -62,7 +57,7 @@ func PlanReadyMechanical(slug, worktree, project string) error {
 		"plan ready: %s (auto-emitted by plan-ready-mechanical hook; worker wrote Plan but did not post)",
 		slug,
 	)
-	return writeCoordinatorTell(inbox, body_)
+	return writeTellEnvelope(inbox, "plan-ready-mechanical", body_, "plan-ready")
 }
 
 // PlanReadyMechanicalEnv is the env-driven entry point for the Stop
@@ -80,32 +75,6 @@ func PlanReadyMechanicalEnv() error {
 		return nil
 	}
 	return PlanReadyMechanical(slug, wd, project)
-}
-
-var planHeading = regexp.MustCompile(`(?im)^##+\s*plan\b`)
-
-// hasPlanSection looks for a markdown heading at H2 or deeper whose
-// title starts with "Plan" (case-insensitive). Headings inside fenced
-// code blocks are ignored.
-func hasPlanSection(body []byte) bool {
-	inFence := false
-	sc := bufio.NewScanner(bytes.NewReader(body))
-	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-	for sc.Scan() {
-		line := sc.Text()
-		trim := strings.TrimSpace(line)
-		if strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~") {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-		if planHeading.MatchString(line) {
-			return true
-		}
-	}
-	return false
 }
 
 // planReadyRecorded reports whether the coordinator's inbox already
@@ -127,7 +96,7 @@ func planReadyRecorded(inbox, slug string) (bool, error) {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 				continue
 			}
-			body, ok := readTellBody(filepath.Join(dir, e.Name()))
+			body, ok := ReadTellBody(filepath.Join(dir, e.Name()))
 			if !ok {
 				continue
 			}
@@ -137,52 +106,4 @@ func planReadyRecorded(inbox, slug string) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func readTellBody(path string) (string, bool) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
-	}
-	var ev struct {
-		Body string `json:"body"`
-		Msg  string `json:"msg"`
-	}
-	if err := json.Unmarshal(bytes.TrimSpace(b), &ev); err != nil {
-		return "", false
-	}
-	if ev.Body != "" {
-		return ev.Body, true
-	}
-	if ev.Msg != "" {
-		return ev.Msg, true
-	}
-	return "", false
-}
-
-func writeCoordinatorTell(inbox, body string) error {
-	if err := ensureInbox(inbox); err != nil {
-		return fmt.Errorf("plan-ready-mechanical: ensure inbox: %w", err)
-	}
-	ev := tellEvent{
-		Ts:     time.Now().Format("2006-01-02T15:04:05-07:00"),
-		Source: "plan-ready-mechanical",
-		Body:   body,
-	}
-	b, err := json.Marshal(ev)
-	if err != nil {
-		return err
-	}
-	b = append(b, '\n')
-	name := fmt.Sprintf("%d-%d-plan-ready.json", time.Now().UnixMilli(), os.Getpid())
-	tmp := filepath.Join(inbox, ".tmp", name)
-	dst := filepath.Join(inbox, name)
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return fmt.Errorf("plan-ready-mechanical: write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("plan-ready-mechanical: rename: %w", err)
-	}
-	return nil
 }

@@ -105,6 +105,32 @@ func ProjectName(projectRoot string) (string, error) {
 	return filepath.Base(projectRoot), nil
 }
 
+// MainCheckoutRoot returns the main checkout that owns projectRoot's
+// repo: the parent of `git -C projectRoot rev-parse --git-common-dir`.
+// In a linked worktree this resolves to the main checkout (the source
+// of truth for spore.toml and tasks/), regardless of cwd. Falls back to
+// projectRoot for non-git layouts or any git error so callers outside a
+// repo keep current behaviour. Does not resolve symlinks; callers that
+// need a canonical path apply filepath.EvalSymlinks themselves.
+func MainCheckoutRoot(projectRoot string) string {
+	out, err := gitCmd(projectRoot, "rev-parse", "--git-common-dir").Output()
+	if err != nil {
+		return projectRoot
+	}
+	common := strings.TrimSpace(string(out))
+	if common == "" {
+		return projectRoot
+	}
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(projectRoot, common)
+	}
+	main := filepath.Dir(common)
+	if main == "" {
+		return projectRoot
+	}
+	return main
+}
+
 // CountUnreadInbox returns the number of *.json files sitting at the
 // top level of slug's inbox (unread). Returns 0 when the directory
 // does not exist. Mirrors wt-go internal/inbox.CountUnread.

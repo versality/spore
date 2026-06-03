@@ -39,7 +39,7 @@ func defaultLivenessEnv() livenessEnv {
 	return livenessEnv{
 		hostname:     defaultHostname,
 		now:          time.Now,
-		projectsFile: projectsFilePath(),
+		projectsFile: ProjectsFilePath(),
 		tmuxRunner:   realTmux{},
 	}
 }
@@ -55,9 +55,9 @@ func defaultHostname() string {
 	return h
 }
 
-// projectsFilePath returns $WT_CFG/projects (default
+// ProjectsFilePath returns $WT_CFG/projects (default
 // ~/.config/wt/projects). Mirrors wt-go.
-func projectsFilePath() string {
+func ProjectsFilePath() string {
 	if v := os.Getenv("WT_CFG"); v != "" {
 		return filepath.Join(v, "projects")
 	}
@@ -68,7 +68,10 @@ func projectsFilePath() string {
 	return filepath.Join(home, ".config", "wt", "projects")
 }
 
-func readProjects(path string) ([]string, error) {
+// ReadProjects parses a projects-list file: one project root per line,
+// `#` comments and blank lines stripped, order preserved. A missing
+// file is empty, not an error.
+func ReadProjects(path string) ([]string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -93,7 +96,7 @@ func readProjects(path string) ([]string, error) {
 // projectScanPaths returns the project roots from the projects file,
 // deduplicated by realpath.
 func projectScanPaths(projectsFile string) ([]string, error) {
-	projects, err := readProjects(projectsFile)
+	projects, err := ReadProjects(projectsFile)
 	if err != nil {
 		return nil, err
 	}
@@ -397,38 +400,20 @@ func runStatus(stdout, stderr io.Writer, e livenessEnv) (int, error) {
 }
 
 func writeAgentDetail(stdout io.Writer, rt workerRuntime) {
-	switch rt.agent {
-	case "codex":
-		if rt.state == "idle" && rt.unread > 0 && rt.wakeStuck {
-			fmt.Fprintf(stdout, "codex-idle-wake-stuck: %s (session=%s, unread-inbox=%d, wake-pending-age=%s)\n", rt.slug, rt.session, rt.unread, rt.wakePendingAge)
-		} else if rt.state == "idle" && rt.unread > 0 && !rt.wakePending {
-			fmt.Fprintf(stdout, "codex-idle-unread: %s (session=%s, unread-inbox=%d)\n", rt.slug, rt.session, rt.unread)
-		} else if rt.state == "idle" && rt.unread > 0 && rt.wakePending {
-			fmt.Fprintf(stdout, "codex-idle-wake-pending: %s (session=%s, unread-inbox=%d)\n", rt.slug, rt.session, rt.unread)
-		} else {
-			fmt.Fprintf(stdout, "codex-%s: %s (session=%s)\n", rt.state, rt.slug, rt.session)
-		}
-	case "claude":
-		if rt.state == "idle" {
-			if rt.unread > 0 && rt.wakeStuck {
-				fmt.Fprintf(stdout, "claude-idle-wake-stuck: %s (session=%s, unread-inbox=%d, wake-pending-age=%s)\n", rt.slug, rt.session, rt.unread, rt.wakePendingAge)
-			} else if rt.unread > 0 && !rt.wakePending {
-				fmt.Fprintf(stdout, "claude-idle-unread: %s (session=%s, unread-inbox=%d)\n", rt.slug, rt.session, rt.unread)
-			} else if rt.unread > 0 && rt.wakePending {
-				fmt.Fprintf(stdout, "claude-idle-wake-pending: %s (session=%s, unread-inbox=%d)\n", rt.slug, rt.session, rt.unread)
-			} else {
-				fmt.Fprintf(stdout, "claude-idle: %s (session=%s)\n", rt.slug, rt.session)
-			}
-		}
-	case "opencode":
-		if rt.state == "idle" && rt.unread > 0 && rt.wakeStuck {
-			fmt.Fprintf(stdout, "opencode-idle-wake-stuck: %s (session=%s, unread-inbox=%d, wake-pending-age=%s)\n", rt.slug, rt.session, rt.unread, rt.wakePendingAge)
-		} else if rt.state == "idle" && rt.unread > 0 && !rt.wakePending {
-			fmt.Fprintf(stdout, "opencode-idle-unread: %s (session=%s, unread-inbox=%d)\n", rt.slug, rt.session, rt.unread)
-		} else if rt.state == "idle" && rt.unread > 0 && rt.wakePending {
-			fmt.Fprintf(stdout, "opencode-idle-wake-pending: %s (session=%s, unread-inbox=%d)\n", rt.slug, rt.session, rt.unread)
-		} else {
-			fmt.Fprintf(stdout, "opencode-%s: %s (session=%s)\n", rt.state, rt.slug, rt.session)
-		}
+	a := rt.agent
+	switch {
+	case rt.state == "idle" && rt.unread > 0 && rt.wakeStuck:
+		fmt.Fprintf(stdout, "%s-idle-wake-stuck: %s (session=%s, unread-inbox=%d, wake-pending-age=%s)\n", a, rt.slug, rt.session, rt.unread, rt.wakePendingAge)
+	case rt.state == "idle" && rt.unread > 0 && !rt.wakePending:
+		fmt.Fprintf(stdout, "%s-idle-unread: %s (session=%s, unread-inbox=%d)\n", a, rt.slug, rt.session, rt.unread)
+	case rt.state == "idle" && rt.unread > 0 && rt.wakePending:
+		fmt.Fprintf(stdout, "%s-idle-wake-pending: %s (session=%s, unread-inbox=%d)\n", a, rt.slug, rt.session, rt.unread)
+	case rt.state == "idle":
+		fmt.Fprintf(stdout, "%s-idle: %s (session=%s)\n", a, rt.slug, rt.session)
+	case a == "claude":
+		// claude emits nothing for a non-idle state; codex/opencode
+		// print the bare <agent>-<state> line.
+	default:
+		fmt.Fprintf(stdout, "%s-%s: %s (session=%s)\n", a, rt.state, rt.slug, rt.session)
 	}
 }

@@ -49,7 +49,7 @@ func (defaultReapTmux) killSession(name string) error {
 
 func defaultReapEnv() reapEnv {
 	return reapEnv{
-		projectsFile: projectsFilePath(),
+		projectsFile: ProjectsFilePath(),
 		currentRoot:  func() (string, error) { return os.Getwd() },
 		gitRunner:    defaultReapGit,
 		tmuxRunner:   defaultReapTmux{},
@@ -114,7 +114,7 @@ func runReap(forcePublished bool, stdout, stderr io.Writer, e reapEnv) (int, err
 }
 
 func reapRoots(e reapEnv) ([]string, error) {
-	projects, err := readProjects(e.projectsFile)
+	projects, err := ReadProjects(e.projectsFile)
 	if err != nil {
 		return nil, err
 	}

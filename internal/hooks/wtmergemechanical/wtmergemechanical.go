@@ -47,31 +47,9 @@ type Deps struct {
 func Run(req hooks.Request, deps Deps) Result {
 	deps = deps.withDefaults()
 
-	slug, ok := deps.LookupEnv("SPORE_TASK_SLUG")
-	if !ok || slug == "" {
+	slug, projectRoot, worktree, ok := wtgit.ResolveRoots(req.CWD, deps.LookupEnv)
+	if !ok {
 		return Result{}
-	}
-
-	projectRoot, _ := deps.LookupEnv("SPORE_PROJECT_ROOT")
-	if projectRoot == "" {
-		// Fallback: derive from the worktree (req.CWD) via git.
-		root, err := wtgit.TopLevel(req.CWD)
-		if err != nil {
-			return Result{}
-		}
-		// req.CWD points at the worktree; the project root we want for
-		// UnmergedCommits is the main checkout. Walk up: a worktree's
-		// .git file lists `gitdir: <main>/.git/worktrees/<slug>`.
-		if main, ok := wtgit.MainCheckoutFromWorktree(root); ok {
-			projectRoot = main
-		} else {
-			projectRoot = root
-		}
-	}
-	worktree := req.CWD
-	if worktree == "" {
-		// Last-resort: assume the worker is running inside its worktree.
-		worktree = filepath.Join(projectRoot, ".worktrees", slug)
 	}
 
 	branch := "wt/" + slug
@@ -80,20 +58,11 @@ func Run(req hooks.Request, deps Deps) Result {
 		return Result{}
 	}
 
-	if !wtgit.WorkingTreeClean(worktree) {
-		return Result{}
-	}
-
-	if wtgit.MidMergeOrRebase(worktree) {
-		return Result{}
-	}
-
-	session := deps.SessionName(projectRoot, slug)
-	if session == "" {
-		return Result{}
-	}
-	state, _ := agentpane.Classify(deps.Capture, session+":claude", "claude")
-	if state != "idle" {
+	if !wtgit.IdleGate(projectRoot, worktree, slug, wtgit.GateDeps{
+		LookupEnv:   deps.LookupEnv,
+		Capture:     deps.Capture,
+		SessionName: deps.SessionName,
+	}) {
 		return Result{}
 	}
 
