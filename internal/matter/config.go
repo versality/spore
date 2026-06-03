@@ -1,12 +1,13 @@
 package matter
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/versality/spore/internal/sporetoml"
 )
 
 // EnvPrefix is the leading segment of every env-var override:
@@ -81,23 +82,16 @@ func sortedConfigs(byName map[string]*Config) []Config {
 // misconfiguration surfaces loudly.
 func parseMatterTOML(content string) (map[string]*Config, error) {
 	out := map[string]*Config{}
-	var current *Config
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		raw := scanner.Text()
-		line := strings.TrimSpace(stripComment(raw))
-		if line == "" {
-			continue
+	sections := map[string]*Config{}
+	err := sporetoml.ScanSections(content, func(l sporetoml.Line) error {
+		name, ok := matterSectionName(l.Section)
+		if !ok {
+			return nil
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section := strings.TrimSpace(line[1 : len(line)-1])
-			name, ok := matterSectionName(section)
-			if !ok {
-				current = nil
-				continue
-			}
+		current := sections[l.Section]
+		if current == nil {
 			if name == "" {
-				return nil, fmt.Errorf("line %d: empty matter name in %q", lineNum, section)
+				return fmt.Errorf("line %d: empty matter name in %q", l.LineNum, l.Section)
 			}
 			c, exists := out[name]
 			if !exists {
@@ -105,31 +99,28 @@ func parseMatterTOML(content string) (map[string]*Config, error) {
 				out[name] = c
 			}
 			current = c
-			continue
+			sections[l.Section] = c
 		}
-		if current == nil {
-			continue
+		key, raw, ok := sporetoml.SplitKeyValue(l.Text)
+		if !ok {
+			return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 		}
-		eq := strings.IndexByte(line, '=')
-		if eq <= 0 {
-			return nil, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
-		}
-		key := strings.TrimSpace(line[:eq])
-		val := stripQuotes(strings.TrimSpace(line[eq+1:]))
+		val := sporetoml.StripQuotes(raw)
 		if key == "" {
-			return nil, fmt.Errorf("line %d: empty key in %q", lineNum, line)
+			return fmt.Errorf("line %d: empty key in %q", l.LineNum, l.Text)
 		}
 		if key == "enabled" {
 			b, err := parseBool(val)
 			if err != nil {
-				return nil, fmt.Errorf("line %d: enabled: %w", lineNum, err)
+				return fmt.Errorf("line %d: enabled: %w", l.LineNum, err)
 			}
 			current.Enabled = b
-			continue
+			return nil
 		}
 		current.Options[key] = val
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -207,35 +198,6 @@ func lookupOrCreateByEnvName(configs map[string]*Config, envName string) *Config
 // same Config. Other characters pass through.
 func normalizeName(s string) string {
 	return strings.ReplaceAll(s, "-", "_")
-}
-
-func stripQuotes(v string) string {
-	if len(v) >= 2 {
-		first, last := v[0], v[len(v)-1]
-		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-			return v[1 : len(v)-1]
-		}
-	}
-	return v
-}
-
-func stripComment(line string) string {
-	// '#' inside a quoted value is allowed; bare '#' starts a comment.
-	inQuote := byte(0)
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-		switch {
-		case inQuote != 0:
-			if ch == inQuote {
-				inQuote = 0
-			}
-		case ch == '"' || ch == '\'':
-			inQuote = ch
-		case ch == '#':
-			return line[:i]
-		}
-	}
-	return line
 }
 
 func parseBool(v string) (bool, error) {

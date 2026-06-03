@@ -1,12 +1,13 @@
 package lints
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/versality/spore/internal/sporetoml"
 )
 
 type Config struct {
@@ -55,43 +56,30 @@ func LoadProjectConfig(root string) (Config, error) {
 
 func ParseConfig(content string) (Config, error) {
 	cfg := Config{ByName: map[string]LintConfig{}}
-	current := ""
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		line := strings.TrimSpace(stripComment(scanner.Text()))
-		if line == "" {
-			continue
+	err := sporetoml.ScanSections(content, func(l sporetoml.Line) error {
+		name, ok := strings.CutPrefix(l.Section, "lint.")
+		if !ok {
+			return nil
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section := strings.TrimSpace(line[1 : len(line)-1])
-			current = ""
-			if name, ok := strings.CutPrefix(section, "lint."); ok {
-				current = strings.TrimSpace(name)
-				if current == "" {
-					return Config{}, fmt.Errorf("line %d: empty lint name in %q", lineNum, section)
-				}
-				if _, ok := cfg.ByName[current]; !ok {
-					cfg.ByName[current] = LintConfig{}
-				}
-			}
-			continue
-		}
+		current := strings.TrimSpace(name)
 		if current == "" {
-			continue
+			return fmt.Errorf("line %d: empty lint name in %q", l.LineNum, l.Section)
 		}
-		eq := strings.IndexByte(line, '=')
-		if eq <= 0 {
-			return Config{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
+		if _, ok := cfg.ByName[current]; !ok {
+			cfg.ByName[current] = LintConfig{}
 		}
-		key := strings.TrimSpace(line[:eq])
-		raw := strings.TrimSpace(line[eq+1:])
+		key, raw, ok := sporetoml.SplitKeyValue(l.Text)
+		if !ok {
+			return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
+		}
 		lc := cfg.ByName[current]
-		if err := setLintConfigValue(&lc, key, raw, lineNum); err != nil {
-			return Config{}, err
+		if err := setLintConfigValue(&lc, key, raw, l.LineNum); err != nil {
+			return err
 		}
 		cfg.ByName[current] = lc
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -309,15 +297,15 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 		cfg.Allowlist = v
 		return errAt(lineNum, key, err)
 	case "consumers_dir":
-		cfg.ConsumersDir = stripQuotes(raw)
+		cfg.ConsumersDir = sporetoml.StripQuotes(raw)
 	case "rules_dir":
-		cfg.RulesDir = stripQuotes(raw)
+		cfg.RulesDir = sporetoml.StripQuotes(raw)
 	case "render_cmd":
-		cfg.RenderCmd = stripQuotes(raw)
+		cfg.RenderCmd = sporetoml.StripQuotes(raw)
 	case "consumers_cmd":
-		cfg.ConsumersCmd = stripQuotes(raw)
+		cfg.ConsumersCmd = sporetoml.StripQuotes(raw)
 	case "limit":
-		v, err := strconv.Atoi(stripQuotes(raw))
+		v, err := strconv.Atoi(sporetoml.StripQuotes(raw))
 		if err != nil {
 			return fmt.Errorf("line %d: %s must be an integer", lineNum, key)
 		}
@@ -331,25 +319,25 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 		cfg.SkipPath = v
 		return errAt(lineNum, key, err)
 	case "root_line_limit":
-		v, err := strconv.Atoi(stripQuotes(raw))
+		v, err := strconv.Atoi(sporetoml.StripQuotes(raw))
 		if err != nil {
 			return fmt.Errorf("line %d: %s must be an integer", lineNum, key)
 		}
 		cfg.RootLineLimit = v
 	case "root_char_limit":
-		v, err := strconv.Atoi(stripQuotes(raw))
+		v, err := strconv.Atoi(sporetoml.StripQuotes(raw))
 		if err != nil {
 			return fmt.Errorf("line %d: %s must be an integer", lineNum, key)
 		}
 		cfg.RootCharLimit = v
 	case "subdir_line_limit":
-		v, err := strconv.Atoi(stripQuotes(raw))
+		v, err := strconv.Atoi(sporetoml.StripQuotes(raw))
 		if err != nil {
 			return fmt.Errorf("line %d: %s must be an integer", lineNum, key)
 		}
 		cfg.SubdirLineLimit = v
 	case "flake_path":
-		cfg.FlakePath = stripQuotes(raw)
+		cfg.FlakePath = sporetoml.StripQuotes(raw)
 	case "scan_dirs":
 		v, err := parseStringList(raw)
 		cfg.ScanDirs = v
@@ -359,9 +347,9 @@ func setLintConfigValue(cfg *LintConfig, key, raw string, lineNum int) error {
 		cfg.Hosts = v
 		return errAt(lineNum, key, err)
 	case "agent_session":
-		cfg.AgentSession = stripQuotes(raw)
+		cfg.AgentSession = sporetoml.StripQuotes(raw)
 	case "agent_service":
-		cfg.AgentService = stripQuotes(raw)
+		cfg.AgentService = sporetoml.StripQuotes(raw)
 	case "agent_service_allow":
 		v, err := parseStringList(raw)
 		cfg.AgentServiceAllow = v
@@ -436,68 +424,7 @@ func parseStringList(raw string) ([]string, error) {
 		if raw == "" {
 			return nil, nil
 		}
-		return splitList(raw), nil
+		return sporetoml.SplitList(raw), nil
 	}
-	return splitList(stripQuotes(raw)), nil
-}
-
-func splitList(raw string) []string {
-	var out []string
-	var b strings.Builder
-	quote := byte(0)
-	for i := 0; i < len(raw); i++ {
-		ch := raw[i]
-		switch {
-		case quote != 0:
-			if ch == quote {
-				quote = 0
-				continue
-			}
-			b.WriteByte(ch)
-		case ch == '"' || ch == '\'':
-			quote = ch
-		case ch == ',':
-			addListPart(&out, b.String())
-			b.Reset()
-		default:
-			b.WriteByte(ch)
-		}
-	}
-	addListPart(&out, b.String())
-	return out
-}
-
-func addListPart(out *[]string, part string) {
-	part = strings.TrimSpace(part)
-	if part != "" {
-		*out = append(*out, part)
-	}
-}
-
-func stripComment(line string) string {
-	inQuote := byte(0)
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-		switch {
-		case inQuote != 0:
-			if ch == inQuote {
-				inQuote = 0
-			}
-		case ch == '"' || ch == '\'':
-			inQuote = ch
-		case ch == '#':
-			return line[:i]
-		}
-	}
-	return line
-}
-
-func stripQuotes(v string) string {
-	if len(v) >= 2 {
-		first, last := v[0], v[len(v)-1]
-		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-			return v[1 : len(v)-1]
-		}
-	}
-	return v
+	return sporetoml.SplitList(sporetoml.StripQuotes(raw)), nil
 }

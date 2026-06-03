@@ -1,12 +1,13 @@
 package fleet
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/versality/spore/internal/sporetoml"
 )
 
 // CoordinatorConfig captures the [coordinator] section from a project's
@@ -65,26 +66,15 @@ func LoadCoordinatorConfig(projectRoot string) (CoordinatorConfig, error) {
 // surfaces loudly.
 func parseCoordinatorTOML(content string) (CoordinatorConfig, error) {
 	var cfg CoordinatorConfig
-	inSection := false
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
-		if line == "" {
-			continue
+	err := sporetoml.ScanSections(content, func(l sporetoml.Line) error {
+		if l.Section != "coordinator" {
+			return nil
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			inSection = strings.TrimSpace(line[1:len(line)-1]) == "coordinator"
-			continue
+		key, raw, ok := sporetoml.SplitKeyValue(l.Text)
+		if !ok {
+			return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 		}
-		if !inSection {
-			continue
-		}
-		eq := strings.IndexByte(line, '=')
-		if eq <= 0 {
-			return CoordinatorConfig{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
-		}
-		key := strings.TrimSpace(line[:eq])
-		val := stripTOMLQuotes(strings.TrimSpace(line[eq+1:]))
+		val := sporetoml.StripQuotes(raw)
 		switch key {
 		case "driver":
 			cfg.Driver = val
@@ -95,31 +85,14 @@ func parseCoordinatorTOML(content string) (CoordinatorConfig, error) {
 		case "external_session_pattern":
 			cfg.ExternalSessionPattern = val
 		default:
-			return CoordinatorConfig{}, fmt.Errorf("line %d: unknown key %q in [coordinator]", lineNum, key)
+			return fmt.Errorf("line %d: unknown key %q in [coordinator]", l.LineNum, key)
 		}
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return CoordinatorConfig{}, err
 	}
 	return cfg, nil
-}
-
-func stripTOMLComment(line string) string {
-	inQuote := byte(0)
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-		switch {
-		case inQuote != 0:
-			if ch == inQuote {
-				inQuote = 0
-			}
-		case ch == '"' || ch == '\'':
-			inQuote = ch
-		case ch == '#':
-			return line[:i]
-		}
-	}
-	return line
 }
 
 // mainCheckoutRoot returns the project root that owns spore.toml. When
@@ -146,14 +119,4 @@ func mainCheckoutRoot(projectRoot string) string {
 		return projectRoot
 	}
 	return main
-}
-
-func stripTOMLQuotes(v string) string {
-	if len(v) >= 2 {
-		first, last := v[0], v[len(v)-1]
-		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-			return v[1 : len(v)-1]
-		}
-	}
-	return v
 }

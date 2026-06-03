@@ -14,11 +14,12 @@
 package sandboxcfg
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/versality/spore/internal/sporetoml"
 )
 
 // Config carries the three list-valued sandbox knobs. All fields are
@@ -115,30 +116,17 @@ func loadFile(path string) (Config, error) {
 // double-quoted strings; multi-line arrays are not supported.
 func parseSandboxTOML(content string) (Config, error) {
 	var cfg Config
-	inSandbox := false
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		line := strings.TrimSpace(stripComment(scanner.Text()))
-		if line == "" {
-			continue
+	err := sporetoml.ScanSections(content, func(l sporetoml.Line) error {
+		if l.Section != "sandbox" {
+			return nil
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section := strings.TrimSpace(line[1 : len(line)-1])
-			inSandbox = section == "sandbox"
-			continue
+		key, val, ok := sporetoml.SplitKeyValue(l.Text)
+		if !ok {
+			return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 		}
-		if !inSandbox {
-			continue
-		}
-		eq := strings.IndexByte(line, '=')
-		if eq <= 0 {
-			return Config{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
-		}
-		key := strings.TrimSpace(line[:eq])
-		val := strings.TrimSpace(line[eq+1:])
 		items, err := parseStringList(val)
 		if err != nil {
-			return Config{}, fmt.Errorf("line %d: key %q: %w", lineNum, key, err)
+			return fmt.Errorf("line %d: key %q: %w", l.LineNum, key, err)
 		}
 		switch key {
 		case "allow_hosts":
@@ -148,10 +136,11 @@ func parseSandboxTOML(content string) (Config, error) {
 		case "ro":
 			cfg.RO = append(cfg.RO, items...)
 		default:
-			return Config{}, fmt.Errorf("line %d: unknown key %q in [sandbox] (known: allow_hosts, rw, ro)", lineNum, key)
+			return fmt.Errorf("line %d: unknown key %q in [sandbox] (known: allow_hosts, rw, ro)", l.LineNum, key)
 		}
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -180,22 +169,4 @@ func parseStringList(s string) ([]string, error) {
 		out = append(out, raw[1:len(raw)-1])
 	}
 	return out, nil
-}
-
-func stripComment(line string) string {
-	inQuote := byte(0)
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-		switch {
-		case inQuote != 0:
-			if ch == inQuote {
-				inQuote = 0
-			}
-		case ch == '"':
-			inQuote = ch
-		case ch == '#':
-			return line[:i]
-		}
-	}
-	return line
 }

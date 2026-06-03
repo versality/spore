@@ -200,35 +200,6 @@ func keys(m map[string]Config) []string {
 	return out
 }
 
-func TestStripComment(t *testing.T) {
-	cases := map[string]string{
-		`key = "value # not a comment" # comment`: `key = "value # not a comment" `,
-		`key = bare # tail`:                       `key = bare `,
-		`# whole line`:                            ``,
-		`'single # quoted' # tail`:                `'single # quoted' `,
-	}
-	for in, want := range cases {
-		if got := stripComment(in); got != want {
-			t.Errorf("stripComment(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestStripQuotes(t *testing.T) {
-	cases := map[string]string{
-		`"x"`: `x`,
-		`'x'`: `x`,
-		`x`:   `x`,
-		`""`:  ``,
-		`"`:   `"`,
-	}
-	for in, want := range cases {
-		if got := stripQuotes(in); got != want {
-			t.Errorf("stripQuotes(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // Sanity check: confirm the key constants we promise the rest of the
 // codebase keep their expected names. Frontmatter keys are part of the
 // task-file format contract.

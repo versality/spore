@@ -1,14 +1,13 @@
 package fleet
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
+	"github.com/versality/spore/internal/sporetoml"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -59,61 +58,46 @@ func LoadWorkersConfig(projectRoot string) (WorkersConfig, error) {
 // entries inside the sections are an error.
 func parseWorkersTOML(content string) (WorkersConfig, error) {
 	var cfg WorkersConfig
-	section := ""
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(line[1 : len(line)-1])
-			continue
-		}
-		switch section {
+	err := sporetoml.ScanSections(content, func(l sporetoml.Line) error {
+		switch l.Section {
 		case "fleet.workers":
-			eq := strings.IndexByte(line, '=')
-			if eq <= 0 {
-				return WorkersConfig{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
+			key, raw, ok := sporetoml.SplitKeyValue(l.Text)
+			if !ok {
+				return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 			}
-			key := strings.TrimSpace(line[:eq])
-			val := stripTOMLQuotes(strings.TrimSpace(line[eq+1:]))
 			if key != "default" {
-				return WorkersConfig{}, fmt.Errorf("line %d: unknown key %q in [fleet.workers]", lineNum, key)
+				return fmt.Errorf("line %d: unknown key %q in [fleet.workers]", l.LineNum, key)
 			}
-			cfg.Default = val
+			cfg.Default = sporetoml.StripQuotes(raw)
 		case "fleet.workers.ratio":
-			eq := strings.IndexByte(line, '=')
-			if eq <= 0 {
-				return WorkersConfig{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
+			key, val, ok := sporetoml.SplitKeyValue(l.Text)
+			if !ok {
+				return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 			}
-			key := strings.TrimSpace(line[:eq])
-			val := strings.TrimSpace(line[eq+1:])
 			n, err := strconv.Atoi(val)
 			if err != nil {
-				return WorkersConfig{}, fmt.Errorf("line %d: ratio %q: want integer, got %q", lineNum, key, val)
+				return fmt.Errorf("line %d: ratio %q: want integer, got %q", l.LineNum, key, val)
 			}
 			if n < 0 {
-				return WorkersConfig{}, fmt.Errorf("line %d: ratio %q must be >= 0, got %d", lineNum, key, n)
+				return fmt.Errorf("line %d: ratio %q must be >= 0, got %d", l.LineNum, key, n)
 			}
 			if cfg.Ratio == nil {
 				cfg.Ratio = map[string]int{}
 			}
 			cfg.Ratio[key] = n
 		case "fleet.workers.rules":
-			eq := strings.IndexByte(line, '=')
-			if eq <= 0 {
-				return WorkersConfig{}, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
+			key, raw, ok := sporetoml.SplitKeyValue(l.Text)
+			if !ok {
+				return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 			}
-			key := strings.TrimSpace(line[:eq])
-			val := stripTOMLQuotes(strings.TrimSpace(line[eq+1:]))
 			if cfg.Rules == nil {
 				cfg.Rules = map[string]string{}
 			}
-			cfg.Rules[key] = val
+			cfg.Rules[key] = sporetoml.StripQuotes(raw)
 		}
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return WorkersConfig{}, err
 	}
 	return cfg, nil

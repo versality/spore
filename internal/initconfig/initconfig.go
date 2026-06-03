@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/versality/spore/internal/sporetoml"
 )
 
 // Block is one logical section of the rendered template. Headers lists
@@ -262,7 +264,7 @@ func presentSections(content string) map[string]bool {
 	out := map[string]bool{}
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
-		line := strings.TrimSpace(stripComment(scanner.Text()))
+		line := strings.TrimSpace(sporetoml.StripComment(scanner.Text()))
 		if line == "" {
 			continue
 		}
@@ -293,25 +295,4 @@ func appendBlock(existing, block string) string {
 		existing += "\n"
 	}
 	return existing + block
-}
-
-// stripComment trims everything after a bare `#`. A `#` inside a
-// quoted value is preserved so spore.toml string values that contain
-// `#` parse as a single token.
-func stripComment(line string) string {
-	inQuote := byte(0)
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-		switch {
-		case inQuote != 0:
-			if ch == inQuote {
-				inQuote = 0
-			}
-		case ch == '"' || ch == '\'':
-			inQuote = ch
-		case ch == '#':
-			return line[:i]
-		}
-	}
-	return line
 }

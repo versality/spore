@@ -12,7 +12,6 @@
 package fleet
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -20,10 +19,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/versality/spore/internal/matter"
+	"github.com/versality/spore/internal/sporetoml"
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -327,36 +326,22 @@ func LoadMaxWorkers(projectRoot string) (int, error) {
 
 func parseFleetTOML(content string) (map[string]int, error) {
 	out := map[string]int{}
-	inFleet := false
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for lineNum := 1; scanner.Scan(); lineNum++ {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	err := sporetoml.ScanSections(content, func(l sporetoml.Line) error {
+		if l.Section != "fleet" {
+			return nil
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			inFleet = strings.TrimSpace(line[1:len(line)-1]) == "fleet"
-			continue
-		}
-		if !inFleet {
-			continue
-		}
-		eq := strings.IndexByte(line, '=')
-		if eq <= 0 {
-			return nil, fmt.Errorf("line %d: malformed entry %q", lineNum, line)
-		}
-		key := strings.TrimSpace(line[:eq])
-		val := strings.TrimSpace(line[eq+1:])
-		if i := strings.IndexByte(val, '#'); i >= 0 {
-			val = strings.TrimSpace(val[:i])
+		key, val, ok := sporetoml.SplitKeyValue(l.Text)
+		if !ok {
+			return fmt.Errorf("line %d: malformed entry %q", l.LineNum, l.Text)
 		}
 		n, err := strconv.Atoi(val)
 		if err != nil {
-			return nil, fmt.Errorf("line %d: key %q: want integer, got %q", lineNum, key, val)
+			return fmt.Errorf("line %d: key %q: want integer, got %q", l.LineNum, key, val)
 		}
 		out[key] = n
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return out, nil
