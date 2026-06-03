@@ -2,21 +2,14 @@
 // sessions for the current user on this host into rolling short (5h)
 // and long (7d) windows.
 //
-// Two collection modes:
+// The primary signal is Anthropic's OAuth /usage endpoint (account-wide,
+// sees every host's claude-code activity). It falls back to
+// ~/.claude/projects/*/*.jsonl cost-weighted transcript aggregation when
+// /usage is unreachable.
 //
-//	subscription  primary signal is Anthropic's OAuth /usage endpoint
-//	              (account-wide, sees every host's claude-code activity).
-//	              Falls back to ~/.claude/projects/*/*.jsonl cost-weighted
-//	              transcript aggregation when /usage is unreachable.
-//	api           short window read from response-header spool
-//	              ($AGENT_BUDGET_STATE_DIR/api-headers.jsonl); long
-//	              window falls back to transcript-est until Anthropic
-//	              exposes a weekly header.
-//
-// Mode is picked from $AGENT_BUDGET_MODE or auto-detected (recent
-// api-headers line wins). State at $AGENT_BUDGET_STATE_DIR/state.json
-// is byte-compatible with the basecamp agent-budget binary so the two
-// can shadow-soak against the same file.
+// State at $AGENT_BUDGET_STATE_DIR/state.json is byte-compatible with
+// the basecamp agent-budget binary so the two can shadow-soak against
+// the same file.
 package budget
 
 import (
@@ -68,20 +61,16 @@ type windowState struct {
 	ResetAt         *time.Time `json:"reset_at,omitempty"`
 	MessageCount    int        `json:"message_count"`
 	Source          string     `json:"source,omitempty"`
-	TokensRemaining *int64     `json:"tokens_remaining,omitempty"`
-	TokensLimit     *int64     `json:"tokens_limit,omitempty"`
-	TokensBucket    string     `json:"tokens_bucket,omitempty"`
 }
 
 type state struct {
-	Mode             string                    `json:"mode"`
-	UpdatedAt        time.Time                 `json:"updated_at"`
-	Short            windowState               `json:"short"`
-	Long             windowState               `json:"long"`
-	Advice           string                    `json:"advice"`
-	Cache            map[string]*fileEntry     `json:"cache"`
-	UsageSnapshot    *usageSnapshot            `json:"usage_snapshot,omitempty"`
-	AccountSnapshots map[string]*usageSnapshot `json:"account_snapshots,omitempty"`
+	Mode          string                `json:"mode"`
+	UpdatedAt     time.Time             `json:"updated_at"`
+	Short         windowState           `json:"short"`
+	Long          windowState           `json:"long"`
+	Advice        string                `json:"advice"`
+	Cache         map[string]*fileEntry `json:"cache"`
+	UsageSnapshot *usageSnapshot        `json:"usage_snapshot,omitempty"`
 }
 
 func stateDir() (string, error) {
@@ -172,10 +161,9 @@ func writeState(s *state) error {
 	return os.Rename(tmp, p)
 }
 
-// Refresh recomputes state.json from the configured collection mode.
-// In subscription mode it polls /usage (subject to a freshness gate)
-// and walks ~/.claude/projects/*/*.jsonl as a transcript fallback. In
-// api mode it reads the most recent api-headers.jsonl line.
+// Refresh recomputes state.json. It polls /usage (subject to a
+// freshness gate) and walks ~/.claude/projects/*/*.jsonl as a
+// transcript fallback.
 func Refresh() error {
 	s, err := loadState()
 	if err != nil {
@@ -252,20 +240,6 @@ func Refresh() error {
 const usageMinInterval = 60 * time.Second
 
 func refreshUsageSnapshot(s *state, now time.Time) {
-	mode, err := resolveMode(now)
-	if err != nil {
-		mode = "subscription"
-	}
-	if mode != "subscription" {
-		return
-	}
-
-	storeDir, serr := accountsStoreDir()
-	if serr == nil && hasAccountFiles(storeDir) {
-		refreshAllAccountSnapshots(s, now, storeDir)
-		return
-	}
-
 	if s.UsageSnapshot != nil && !s.UsageSnapshot.Stale {
 		minInterval := usageMinInterval
 		if v := os.Getenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC"); v != "" {
@@ -305,12 +279,11 @@ func Query() error {
 	}
 	computeAggregates(s, now)
 	out := map[string]any{
-		"mode":              s.Mode,
-		"updated_at":        s.UpdatedAt,
-		"short":             s.Short,
-		"long":              s.Long,
-		"advice":            s.Advice,
-		"account_snapshots": s.AccountSnapshots,
+		"mode":       s.Mode,
+		"updated_at": s.UpdatedAt,
+		"short":      s.Short,
+		"long":       s.Long,
+		"advice":     s.Advice,
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -393,42 +366,21 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
-// computeAggregates fills s.Mode / s.Short / s.Long / s.Advice. Mode is
-// resolved per call so the same on-disk cache supports both
-// subscription (transcript-cost-weighted) and api (header-driven short
-// window + transcript-est long window) consumers without a separate
-// state file. Idempotent; safe to run on each query.
+// computeAggregates fills s.Mode / s.Short / s.Long / s.Advice. It
+// prefers the /usage snapshot and falls back to the transcript-cost
+// aggregate. Idempotent; safe to run on each query.
 func computeAggregates(s *state, now time.Time) {
 	short, long := transcriptWindows(s, now)
 
-	mode, err := resolveMode(now)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "spore budget: %v; falling back to subscription\n", err)
-		mode = "subscription"
-	}
-
 	s.UpdatedAt = now
-	s.Mode = mode
+	s.Mode = "subscription"
 
-	switch mode {
-	case "api":
-		shortAPI, ok := apiShortWindow(now)
-		if ok {
-			s.Short = shortAPI
-		} else {
-			s.Short = short.finalize("transcript-est")
-		}
-		s.Long = long.finalize("transcript-est")
-	default:
-		if len(s.AccountSnapshots) > 0 {
-			s.Short, s.Long = aggregateAccountSnapshots(s.AccountSnapshots)
-		} else if s.UsageSnapshot != nil {
-			s.Short = usageWindowState(s.UsageSnapshot.Short, shortWindow, s.UsageSnapshot.Stale)
-			s.Long = usageWindowState(s.UsageSnapshot.Long, longWindow, s.UsageSnapshot.Stale)
-		} else {
-			s.Short = short.finalize("transcript")
-			s.Long = long.finalize("transcript")
-		}
+	if s.UsageSnapshot != nil {
+		s.Short = usageWindowState(s.UsageSnapshot.Short, shortWindow, s.UsageSnapshot.Stale)
+		s.Long = usageWindowState(s.UsageSnapshot.Long, longWindow, s.UsageSnapshot.Stale)
+	} else {
+		s.Short = short.finalize("transcript")
+		s.Long = long.finalize("transcript")
 	}
 	s.Advice = adviceFor(s.Short.Frac, s.Long.Frac)
 }
@@ -459,35 +411,6 @@ func transcriptWindows(s *state, now time.Time) (windowAccum, windowAccum) {
 		}
 	}
 	return short, long
-}
-
-func apiShortWindow(now time.Time) (windowState, bool) {
-	hl, err := readLatestHeaderLine(os.Getenv("AGENT_BUDGET_IDENTITY"))
-	if err != nil || hl == nil {
-		return windowState{}, false
-	}
-	r, ok := parseRateLimitReading(hl.Headers)
-	if !ok {
-		return windowState{}, false
-	}
-	dur := shortWindow
-	if r.ResetAt != nil {
-		left := r.ResetAt.Sub(now)
-		if left > 0 {
-			dur = left
-		}
-	}
-	rem := r.TokensRemaining
-	lim := r.TokensLimit
-	return windowState{
-		DurationSeconds: int(dur.Seconds()),
-		Frac:            r.Frac,
-		ResetAt:         r.ResetAt,
-		Source:          "api-headers",
-		TokensRemaining: &rem,
-		TokensLimit:     &lim,
-		TokensBucket:    r.Bucket,
-	}, true
 }
 
 type windowAccum struct {

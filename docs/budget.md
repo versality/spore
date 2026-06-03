@@ -8,12 +8,12 @@ and long (7d) windows, then surfaces threshold-band advice
 ## Subcommands
 
 ```
-spore budget refresh       Recompute state.json from the configured collection mode.
+spore budget refresh       Recompute state.json from /usage + transcripts.
 spore budget query         Print state.json with a fresh advice band.
 spore budget summary       Human one-liner. Default when no subcommand is given.
-spore budget capture       Read one JSON header line from stdin, append to spool.
 spore budget stop-hook     Stop-hook helper: exit 2 with stderr reminder on a
                            fresh band crossing, exit 0 otherwise.
+spore budget active-tier   Print the live credential's tier (max|pro|team|free).
 spore budget debug-usage   Hit /usage once and print raw + parsed response
                            (bypasses the freshness throttle; diagnostic).
 ```
@@ -32,10 +32,10 @@ The advice band is the OR of the two windows: if either window is in
 are tracked separately for the stop-hook fresh-crossing detector.
 
 Caps are configurable via `AGENT_BUDGET_SHORT_CAP` and
-`AGENT_BUDGET_LONG_CAP` (USD floats). Caps only matter in transcript
-mode: the subscription mode `/usage` endpoint reports utilization
-percent directly, so the cost/cap fields round-trip as zero in
-state.json under that mode.
+`AGENT_BUDGET_LONG_CAP` (USD floats). Caps only matter on the
+transcript fallback: the `/usage` endpoint reports utilization percent
+directly, so the cost/cap fields round-trip as zero in state.json when
+the snapshot is the live signal.
 
 ## Pricing-table convention
 
@@ -68,24 +68,12 @@ The basecamp `agent-budget` binary inlines its pricing in code; spore
 extracts it as part of this port so spore-side updates are decoupled
 from a Go release.
 
-## Collection modes
+## Collection
 
-```
-subscription  primary signal is the OAuth /usage endpoint
-              (account-wide, sees every host's claude-code activity).
-              Falls back to ~/.claude/projects/*/*.jsonl cost-weighted
-              transcript aggregation when /usage is unreachable.
-api           short window read from response-header spool
-              ($AGENT_BUDGET_STATE_DIR/api-headers.jsonl); long window
-              falls back to transcript-est until Anthropic exposes a
-              weekly header.
-```
-
-Mode is picked from `AGENT_BUDGET_MODE` (`subscription` or `api`);
-unset means auto-detect, where a recent api-headers spool line (newer
-than 30 minutes) flips into api mode.
-
-### Subscription mode
+The primary signal is the OAuth /usage endpoint (account-wide, sees
+every host's claude-code activity). It falls back to
+`~/.claude/projects/*/*.jsonl` cost-weighted transcript aggregation
+when /usage is unreachable.
 
 `refresh` reads `~/.claude/.credentials.json`, hits
 `https://api.anthropic.com/api/oauth/usage` with `Authorization: Bearer
@@ -100,22 +88,6 @@ whether to trust it.
 A freshness gate prevents hammering `/usage`: successive `refresh`
 calls within 60 seconds reuse the cached snapshot. Override with
 `AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC` (0 disables the gate).
-
-### API mode
-
-Producers append filtered headerLine records to
-`$AGENT_BUDGET_STATE_DIR/api-headers.jsonl` (mode 0600, append-only via
-`O_APPEND`). The capture surface keeps only `anthropic-ratelimit-*`
-and `anthropic-priority-*` headers to avoid leaking request metadata.
-
-`refresh` in api mode reads the most recent line, picks the bucket
-with the lowest remaining/limit ratio (the one closest to 429), and
-emits a windowState carrying that frac plus the bucket name and reset
-clock. Long window falls back to transcript-est until Anthropic
-exposes a weekly header.
-
-`spore budget capture` is a stdin shim for shell-script callers and
-tests; in-process callers should write the line directly.
 
 ## Stop-hook contract
 
@@ -189,10 +161,7 @@ fields are internal):
     "oldest_event_at": "...",
     "reset_at": "...",
     "message_count": 7,
-    "source": "transcript",
-    "tokens_remaining": null,
-    "tokens_limit": null,
-    "tokens_bucket": ""
+    "source": "transcript"
   },
   "long":  { ... same shape as short ... },
   "advice": "ok",
@@ -206,6 +175,5 @@ fields are internal):
 }
 ```
 
-`source` is one of `transcript`, `transcript-est`, `usage`,
-`usage-stale`, or `api-headers`, depending on which collection path
-filled the window.
+`source` is one of `transcript`, `usage`, or `usage-stale`, depending
+on which collection path filled the window.

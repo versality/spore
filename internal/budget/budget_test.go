@@ -108,7 +108,6 @@ func TestRefreshAndAggregate(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", filepath.Join(dir, "state"))
 	t.Setenv("AGENT_BUDGET_CREDS", filepath.Join(dir, "no-such-credentials.json"))
-	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 
 	if err := Refresh(); err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -162,19 +161,14 @@ func TestStateRoundTrip(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_STATE_DIR", dir)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	reset := now.Add(2 * time.Hour)
-	rem := int64(8000)
-	lim := int64(10000)
 	want := &state{
-		Mode:      "api",
+		Mode:      "subscription",
 		UpdatedAt: now,
 		Short: windowState{
 			DurationSeconds: int(shortWindow.Seconds()),
 			Frac:            0.42,
 			ResetAt:         &reset,
-			Source:          "api-headers",
-			TokensRemaining: &rem,
-			TokensLimit:     &lim,
-			TokensBucket:    "tokens",
+			Source:          "usage",
 		},
 		Long: windowState{
 			DurationSeconds: int(longWindow.Seconds()),
@@ -182,7 +176,7 @@ func TestStateRoundTrip(t *testing.T) {
 			CapUSD:          2000.0,
 			Frac:            0.00625,
 			MessageCount:    3,
-			Source:          "transcript-est",
+			Source:          "transcript",
 		},
 		Advice: "ok",
 		Cache: map[string]*fileEntry{
@@ -204,11 +198,8 @@ func TestStateRoundTrip(t *testing.T) {
 	if got.Mode != want.Mode || got.Advice != want.Advice {
 		t.Errorf("mode/advice mismatch: got %+v", got)
 	}
-	if got.Short.Source != "api-headers" || got.Short.TokensBucket != "tokens" {
+	if got.Short.Source != "usage" {
 		t.Errorf("short window mismatch: got %+v", got.Short)
-	}
-	if got.Short.TokensRemaining == nil || *got.Short.TokensRemaining != 8000 {
-		t.Errorf("tokens_remaining round-trip: %+v", got.Short.TokensRemaining)
 	}
 	if got.UsageSnapshot == nil || got.UsageSnapshot.Short.Utilization != 42.0 {
 		t.Errorf("usage_snapshot round-trip: %+v", got.UsageSnapshot)
@@ -353,7 +344,6 @@ func TestStopHookFiresOnceThenSilent(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", filepath.Join(dir, "state"))
 	t.Setenv("AGENT_BUDGET_CREDS", filepath.Join(dir, "no-such-credentials.json"))
-	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 	t.Setenv("AGENT_BUDGET_SHORT_CAP", "0.045")
 	t.Setenv("AGENT_BUDGET_LONG_CAP", "10000")
 
@@ -400,7 +390,6 @@ func TestStopHookUnderCapExitsZero(t *testing.T) {
 	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects-empty"))
 	t.Setenv("AGENT_BUDGET_STATE_DIR", filepath.Join(dir, "state"))
 	t.Setenv("AGENT_BUDGET_CREDS", filepath.Join(dir, "no-such-credentials.json"))
-	t.Setenv("AGENT_BUDGET_ACCOUNTS_DIR", filepath.Join(dir, "no-accounts"))
 	t.Setenv("AGENT_BUDGET_SHORT_CAP", "1000")
 	t.Setenv("AGENT_BUDGET_LONG_CAP", "10000")
 
