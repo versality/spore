@@ -29,12 +29,14 @@ spore/
 |   `-- spore-sandbox/          bwrap+proxy sandbox launcher for worker agents.
 |-- internal/                   Go internal packages, kernel implementation.
 |   |-- agentpane/              tmux pane capture + classify (idle/typing/tool).
+|   |-- agentpolicy/            Per-agent effort + interactive-argv policy (claude, codex).
 |   |-- align/                  Pilot-agent alignment-mode tracker.
 |   |-- auditversions/          Compare deployed agent binaries to lockfiles.
 |   |-- bootstrap/              Stage-gate driver + per-stage detectors.
 |   |-- budget/                 Account-tier + token-budget gating for coordinator + workers.
 |   |-- composer/               Instruction composer: rule-pool to rendered files.
 |   |-- coordinator/            Coordinator lifecycle (spawn, workerwatch, tokenmonitor, verify).
+|   |-- evidence/               Parse + verify the task-close evidence contract.
 |   |-- evictor/                Idle-worker eviction sweep.
 |   |-- fleet/                  Worker fleet: coordinator + workers consuming the task queue.
 |   |-- gh/                     gh-cli wrapper (PR view/create/merge, run lists).

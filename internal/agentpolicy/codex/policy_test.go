@@ -1,4 +1,4 @@
-package claudepolicy
+package codex
 
 import (
 	"reflect"
@@ -13,11 +13,9 @@ func TestNormalizeEffort(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "default", def: DefaultAgentEffort, want: "default"},
-		{name: "explicit default", input: "default", def: "high", want: "default"},
+		{name: "default", def: DefaultCoordinatorEffort, want: "high"},
 		{name: "low", input: "low", def: DefaultAgentEffort, want: "low"},
 		{name: "xhigh", input: "xhigh", def: DefaultAgentEffort, want: "xhigh"},
-		{name: "max", input: "max", def: DefaultAgentEffort, want: "max"},
 		{name: "very high hyphen", input: "very-high", def: DefaultAgentEffort, want: "xhigh"},
 		{name: "very high underscore", input: "very_high", def: DefaultAgentEffort, want: "xhigh"},
 		{name: "invalid", input: "turbo", def: DefaultAgentEffort, wantErr: true},
@@ -47,13 +45,11 @@ func TestEffortForTask(t *testing.T) {
 		complexity string
 		want       string
 	}{
-		{effort: "default", complexity: "heavy", want: "default"},
 		{effort: "very-high", complexity: "light", want: "xhigh"},
-		{effort: "max", want: "max"},
 		{complexity: "light", want: "medium"},
 		{complexity: "medium", want: "medium"},
 		{complexity: "heavy", want: "high"},
-		{complexity: "", want: "default"},
+		{complexity: "", want: "high"},
 	}
 	for _, tt := range tests {
 		got, err := EffortForTask(tt.effort, tt.complexity)
@@ -67,21 +63,16 @@ func TestEffortForTask(t *testing.T) {
 }
 
 func TestInteractiveArgs(t *testing.T) {
-	tests := []struct {
-		name   string
-		effort string
-		want   []string
-	}{
-		{name: "missing effort", want: []string{"claude", "--dangerously-skip-permissions"}},
-		{name: "default effort", effort: "default", want: []string{"claude", "--dangerously-skip-permissions"}},
-		{name: "high effort", effort: "high", want: []string{"claude", "--dangerously-skip-permissions", "--effort", "high"}},
+	got := InteractiveArgs("gpt-5.5", "high")
+	want := []string{
+		"codex",
+		"--dangerously-bypass-approvals-and-sandbox",
+		"--no-alt-screen",
+		"--disable", "apps",
+		"-m", "gpt-5.5",
+		"-c", `model_reasoning_effort="high"`,
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := InteractiveArgs("ignored-model", tt.effort)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("args = %#v want %#v", got, tt.want)
-			}
-		})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("args = %#v want %#v", got, want)
 	}
 }

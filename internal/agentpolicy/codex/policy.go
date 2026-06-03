@@ -1,4 +1,4 @@
-package codexpolicy
+package codex
 
 import "fmt"
 

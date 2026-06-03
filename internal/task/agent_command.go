@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/versality/spore/claudepolicy"
-	"github.com/versality/spore/codexpolicy"
+	"github.com/versality/spore/internal/agentpolicy/claude"
+	"github.com/versality/spore/internal/agentpolicy/codex"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
@@ -15,17 +15,17 @@ func workerAgentCommand(m frontmatter.Meta) (string, error) {
 	}
 	agent := m.Agent
 	if agent == "" || agent == "claude" || agent == "claude-code" {
-		effort, err := claudepolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
+		effort, err := claude.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
 		if err != nil {
 			return "", err
 		}
-		return shellJoin(claudepolicy.InteractiveArgs(m.Extra["model"], effort)), nil
+		return shellJoin(claude.InteractiveArgs(m.Extra["model"], effort)), nil
 	}
 	if agent != "codex" {
 		return agent, nil
 	}
 
-	effort, err := codexpolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
+	effort, err := codex.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
 	if err != nil {
 		return "", err
 	}
@@ -33,7 +33,7 @@ func workerAgentCommand(m frontmatter.Meta) (string, error) {
 	if model == "" {
 		model = os.Getenv(CodexModelEnv)
 	}
-	return shellJoin(codexpolicy.InteractiveArgs(model, effort)), nil
+	return shellJoin(codex.InteractiveArgs(model, effort)), nil
 }
 
 func shellJoin(args []string) string {

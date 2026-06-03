@@ -1,4 +1,4 @@
-package claudepolicy
+package claude
 
 import "fmt"
 

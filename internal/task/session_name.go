@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/versality/spore/codexpolicy"
+	"github.com/versality/spore/internal/agentpolicy/codex"
 	"github.com/versality/spore/internal/sessionkind"
 	"github.com/versality/spore/internal/task/frontmatter"
 )
@@ -95,7 +95,7 @@ func tierTag(m frontmatter.Meta) (string, error) {
 		agent = "claude"
 	}
 	if agent == "codex" {
-		effort, err := codexpolicy.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
+		effort, err := codex.EffortForTask(m.Extra["effort"], m.Extra["complexity"])
 		if err != nil {
 			return "", err
 		}

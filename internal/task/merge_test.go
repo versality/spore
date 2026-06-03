@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/versality/spore/evidence"
+	"github.com/versality/spore/internal/evidence"
 )
 
 func TestMergeNoBranch(t *testing.T) {

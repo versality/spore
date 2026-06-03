@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/versality/spore/evidence"
+	"github.com/versality/spore/internal/evidence"
 	"github.com/versality/spore/internal/hooks/inject"
 	"github.com/versality/spore/internal/matter"
 	"github.com/versality/spore/internal/task/consumerclaim"
