@@ -3,64 +3,65 @@
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
-  "effortLevel": "xhigh",
-  "skipDangerousModePermissionPrompt": true,
-  "autoMemoryEnabled": false,
-  "enabledPlugins": {
-    "gopls-lsp@claude-plugins-official": true
-  },
   "hooks": {
     "Stop": [
       {
         "hooks": [
           {
+            "type": "command",
             "command": "spore coordinator token-monitor",
-            "timeout": 10,
-            "type": "command"
+            "timeout": 10
           },
           {
+            "type": "command",
             "command": "spore worker token-monitor",
-            "timeout": 10,
-            "type": "command"
+            "timeout": 10
           },
           {
+            "type": "command",
             "command": "spore fleet replenish-hook",
-            "timeout": 30,
-            "type": "command"
+            "timeout": 30
           },
           {
+            "type": "command",
             "command": "spore hooks wtmerge-mechanical",
-            "timeout": 10,
-            "type": "command"
+            "timeout": 10
           },
           {
+            "type": "command",
             "command": "spore hooks plan-ready-mechanical",
-            "timeout": 10,
-            "type": "command"
+            "timeout": 10
           },
           {
+            "type": "command",
             "command": "spore hooks worker-continue",
-            "timeout": 10,
-            "type": "command"
+            "timeout": 10
           },
           {
+            "type": "command",
             "command": "spore hooks push-pending",
-            "timeout": 10,
-            "type": "command"
+            "timeout": 10
           },
           {
+            "type": "command",
             "command": "spore hooks pr-finish",
-            "timeout": 20,
-            "type": "command"
+            "timeout": 20
           },
           {
-            "asyncRewake": true,
+            "type": "command",
             "command": "bash -c 'if [ -n \"$SPORE_TASK_INBOX\" ]; then exec spore hooks watch-inbox; fi'",
             "timeout": 604800,
-            "type": "command"
+            "asyncRewake": true
           }
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {
+    "gopls-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "xhigh",
+  "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark"
 }
