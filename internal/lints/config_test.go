@@ -90,7 +90,7 @@ ext = [".sh"]
 	}
 }
 
-func TestLintConfig_ClaudeTotalSizeLimitsAndLegacyMarker(t *testing.T) {
+func TestLintConfig_ClaudeTotalSizeLimitsAndMarker(t *testing.T) {
 	root := newTestRepo(t, map[string]string{
 		"spore.toml": `[lint.claude-totalsize]
 root_line_limit = 2
@@ -99,7 +99,7 @@ subdir_line_limit = 2
 `,
 		"AGENTS.md":      "a\nb\nc\n",
 		"sub/AGENTS.md":  "a\nb\nc\n",
-		"sub2/AGENTS.md": "a\nb\nc\n<!-- lint: file-size-ok -->\n",
+		"sub2/AGENTS.md": "a\nb\nc\n<!-- lint: totalsize-ok -->\n",
 		"sub3/AGENTS.md": "a\nb\n",
 		"sub4/README.md": "a\nb\nc\n",
 	})

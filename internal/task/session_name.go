@@ -36,7 +36,7 @@ func taskTmuxSession(tasksDir, projectRoot, slug string) string {
 	}
 	session, err := tmuxSessionName(projectRoot, slug, frontmatter.Meta{})
 	if err != nil {
-		return LegacySessionName(projectRoot, slug)
+		return wtSessionName(projectNameOrBase(projectRoot), slug, "")
 	}
 	return session
 }
@@ -79,16 +79,11 @@ func wtSessionName(project, slug, tag string) string {
 	return name
 }
 
-func LegacySessionName(projectRoot, slug string) string {
-	project := projectNameOrBase(projectRoot)
-	return sessionPath("spore", project, slug)
-}
-
-func sessionPath(wrap, project, slug string) string {
-	if wrap == project {
-		return wrap + "/" + slug
-	}
-	return wrap + "/" + project + "/" + slug
+// CoordinatorSession returns the tmux session name for the singleton
+// coordinator in the wt-emoji shape: "<emoji> <project>/coordinator",
+// with no tier tag. ParseSession classifies this as Kind=Coordinator.
+func CoordinatorSession(projectRoot string) string {
+	return wtSessionName(projectNameOrBase(projectRoot), "coordinator", "")
 }
 
 func tierTag(m frontmatter.Meta) (string, error) {
@@ -142,33 +137,26 @@ func modelTier(model, agent string) string {
 
 // ParsedSession is the canonical decomposition of a tmux session
 // name. Name carries the raw input (including any tier-tag suffix).
-// Legacy is true for the spore-prefixed shapes; current wt-emoji
-// names have Legacy false. Kind is one of sessionkind.Worker,
-// sessionkind.Coordinator, or "" (other).
+// Kind is one of sessionkind.Worker, sessionkind.Coordinator, or ""
+// (other).
 type ParsedSession struct {
 	Name    string
 	Project string
 	Slug    string
 	Tag     string
 	Kind    string
-	Legacy  bool
 }
 
 // ParseSession decomposes a tmux session name relative to project.
-// Project is required: the legacy "spore/<slug>" shape collapses to
-// project=="spore"+slug only when the caller's project is "spore",
-// and the current wt-emoji shape needs project to find the
+// Project is required: the wt-emoji shape needs project to find the
 // "<project>/<slug>" anchor.
 //
 // Accepted shapes (all project-scoped):
 //
-//	"<rune> <project>/<slug>"           current worker
-//	"<rune> <project>/<slug> [tag]"     current worker, tagged
-//	"spore/<project>/<slug>"            legacy worker
-//	"spore/<slug>" (project=="spore")   legacy worker, wrap==project
-//	"<project>/coordinator"             current coordinator
-//	"spore/<project>/coordinator"       legacy coordinator
-//	"spore/coordinator" (project=="spore") legacy coordinator
+//	"<rune> <project>/<slug>"           worker
+//	"<rune> <project>/<slug> [tag]"     worker, tagged
+//	"<project>/coordinator"             coordinator (no emoji prefix)
+//	"<rune> <project>/coordinator"      coordinator
 //
 // Returns (zero, false) for anything else.
 func ParseSession(name, project string) (ParsedSession, bool) {
@@ -178,40 +166,18 @@ func ParseSession(name, project string) (ParsedSession, bool) {
 		tag = name[i+2 : len(name)-1]
 		name = name[:i]
 	}
-	mk := func(slug, kind string, legacy bool) (ParsedSession, bool) {
+	mk := func(slug, kind string) (ParsedSession, bool) {
 		return ParsedSession{
 			Name:    raw,
 			Project: project,
 			Slug:    slug,
 			Tag:     tag,
 			Kind:    kind,
-			Legacy:  legacy,
 		}, true
 	}
 
-	if strings.HasPrefix(name, "spore/") {
-		rest := name[len("spore/"):]
-		if strings.HasPrefix(rest, project+"/") {
-			tail := rest[len(project)+1:]
-			if tail == sessionkind.Coordinator {
-				return mk("", sessionkind.Coordinator, true)
-			}
-			if tail != "" && !strings.Contains(tail, "/") {
-				return mk(tail, sessionkind.Worker, true)
-			}
-			return ParsedSession{}, false
-		}
-		if project == "spore" && rest != "" && !strings.Contains(rest, "/") {
-			if rest == sessionkind.Coordinator {
-				return mk("", sessionkind.Coordinator, true)
-			}
-			return mk(rest, sessionkind.Worker, true)
-		}
-		return ParsedSession{}, false
-	}
-
 	if name == project+"/"+sessionkind.Coordinator {
-		return mk("", sessionkind.Coordinator, false)
+		return mk("", sessionkind.Coordinator)
 	}
 
 	needle := " " + project + "/"
@@ -224,9 +190,9 @@ func ParseSession(name, project string) (ParsedSession, bool) {
 		return ParsedSession{}, false
 	}
 	if tail == sessionkind.Coordinator {
-		return mk("", sessionkind.Coordinator, false)
+		return mk("", sessionkind.Coordinator)
 	}
-	return mk(tail, sessionkind.Worker, false)
+	return mk(tail, sessionkind.Worker)
 }
 
 // MatchSlug reports whether name is a worker session for (project,

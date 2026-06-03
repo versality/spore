@@ -123,7 +123,7 @@ func ScanActive(projectRoots []string) ([]TaskRef, error) {
 				Slug:        slug,
 				BaseSlug:    base,
 				ProjectRoot: root,
-				Status:      task.CanonicalStatus(m.Status),
+				Status:      m.Status,
 				Agent:       agent,
 			})
 		}
@@ -152,7 +152,7 @@ func ResolveDisappearance(slug, baseSlug, projectRoot string) FinalStatus {
 	if err != nil {
 		return FinalStatus{Status: "?"}
 	}
-	status := task.CanonicalStatus(m.Status)
+	status := m.Status
 	if status == "" {
 		status = "?"
 	}

@@ -56,8 +56,6 @@ Subcommands:
                                Safety-wrapped drift commit for systemd
                                path units. Holds an flock, refuses when
                                non-tasks/ paths are staged, then runs drift.
-  migrate-priority [--dry-run] Backfill 'priority:' on tasks missing it.
-  migrate-status <from> <to>   Rewrite every tasks/*.md status==<from> to <to>.
 
 Flags for 'new':
   --draft                      Set status=draft (default).
@@ -117,10 +115,6 @@ func runTask(args []string) error {
 		return runTaskDrift(rest)
 	case "auto-commit":
 		return runTaskAutoCommit(rest)
-	case "migrate-priority":
-		return runTaskMigratePriority(rest)
-	case "migrate-status":
-		return runTaskMigrateStatus(rest)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\n%s", sub, taskUsage)
 	}

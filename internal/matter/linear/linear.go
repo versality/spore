@@ -20,8 +20,7 @@
 // Frontmatter convention. Tasks created by this adapter carry the
 // generic matter keys (matter, matter_id, matter_url) plus the
 // adapter-private `linear_done` stamp once the upstream Done push
-// has succeeded. Reads also accept the legacy `linear:` /
-// `linear_url:` keys so tasks created before the rename keep working.
+// has succeeded.
 //
 // All HTTP traffic flows through a single endpoint and a single
 // Authorization header so a test can swap in an httptest server.
@@ -54,10 +53,6 @@ const (
 	// after a successful Done push so future passes skip the issue.
 	linearDoneKey   = "linear_done"
 	linearDoneValue = "yes"
-
-	// legacy frontmatter key, accepted on read for tasks that
-	// pre-date the matter/matter_id rename.
-	legacyIDKey = "linear"
 
 	// matterBlockerPrefix marks a blocker reason owned by the matter
 	// adapter: when a Linear ticket leaves Ready, future projection
@@ -364,9 +359,7 @@ type linearTaskRow struct {
 
 // indexLinearTasks scans tasksDir and returns identifier -> slug for
 // every task that carries a Linear matter id. Used to skip
-// re-adopting issues already present on disk. Reads both the
-// generic matter_id key and the legacy linear: key so a kernel
-// upgrade does not orphan pre-rename tasks.
+// re-adopting issues already present on disk.
 func indexLinearTasks(tasksDir string) (map[string]string, error) {
 	out := map[string]string{}
 	entries, err := os.ReadDir(tasksDir)
@@ -484,9 +477,8 @@ func stampLinearDone(tasksDir, slug string) error {
 }
 
 // linearIDFromMeta returns the upstream issue identifier from the
-// task's frontmatter, preferring the generic matter_id slot but
-// falling back to the legacy `linear:` key. Returns "" when the task
-// has no Linear linkage or names a different matter.
+// task's frontmatter matter_id slot. Returns "" when the task has no
+// Linear linkage or names a different matter.
 func linearIDFromMeta(extra map[string]string) string {
 	if extra == nil {
 		return ""
@@ -494,10 +486,7 @@ func linearIDFromMeta(extra map[string]string) string {
 	if name := extra[matter.MatterKey]; name != "" && name != sourceName {
 		return ""
 	}
-	if id := extra[matter.MatterIDKey]; id != "" {
-		return id
-	}
-	return extra[legacyIDKey]
+	return extra[matter.MatterIDKey]
 }
 
 // transitionIssue maps the issueUpdate mutation. Linear treats the

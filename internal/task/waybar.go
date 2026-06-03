@@ -15,9 +15,7 @@ type WaybarChip struct {
 
 // Waybar scans tasksDir and returns a JSON chip for waybar's custom
 // module. Counts tasks by status, filters to host-local tasks (host
-// matches hostname or is empty), and renders d/a/b counts. Legacy
-// on-disk values (backlog, paused, parked) are folded via
-// CanonicalStatus before counting.
+// matches hostname or is empty), and renders d/a/b counts.
 func Waybar(tasksDir string) ([]byte, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -33,7 +31,7 @@ func Waybar(tasksDir string) ([]byte, error) {
 		if m.Host != "" && m.Host != hostname {
 			continue
 		}
-		switch CanonicalStatus(m.Status) {
+		switch m.Status {
 		case StatusDraft:
 			draft++
 		case StatusActive:

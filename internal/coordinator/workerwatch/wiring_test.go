@@ -162,7 +162,7 @@ func TestResolveDisappearanceMissingFile(t *testing.T) {
 	}
 }
 
-func TestResolveDisappearanceReadsCanonicalStatus(t *testing.T) {
+func TestResolveDisappearanceReadsStatus(t *testing.T) {
 	root := t.TempDir()
 	tasksDir := filepath.Join(root, "tasks")
 	writeTask(t, tasksDir, "foo", "blocked", "")

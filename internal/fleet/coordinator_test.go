@@ -155,16 +155,16 @@ func TestCoordinatorSessionNameUsesMainRepoFromWorktree(t *testing.T) {
 	}
 
 	got := CoordinatorSessionName(worktree)
-	want := "spore/exampleproj/coordinator"
+	want := "\U0001F419 exampleproj/coordinator"
 	if got != want {
 		t.Errorf("CoordinatorSessionName(worktree) = %q, want %q", got, want)
 	}
 }
 
-func TestCoordinatorSessionNameDedupsSporeProject(t *testing.T) {
+func TestCoordinatorSessionNameWtEmojiShape(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "spore")
-	if got := CoordinatorSessionName(dir); got != "spore/coordinator" {
-		t.Errorf("CoordinatorSessionName(spore) = %q, want spore/coordinator", got)
+	if got := CoordinatorSessionName(dir); got != "\U0001F41D spore/coordinator" {
+		t.Errorf("CoordinatorSessionName(spore) = %q, want bee spore/coordinator", got)
 	}
 }
 

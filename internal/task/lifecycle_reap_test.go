@@ -29,19 +29,18 @@ func TestDoneKillsAllMatchingSlugSessions(t *testing.T) {
 	slug := "demo"
 	project := filepath.Base(repo)
 	// Recorded session: matches the wt-style "<icon> <project>/<slug> [tag]"
-	// shape the operator's idle haiku worker hit. Two sister sessions
-	// drift the tier tag (haiku vs opus) and the spore-style prefix;
-	// Done must reap all three even though only one is in frontmatter.
+	// shape the operator's idle haiku worker hit. A sister session
+	// drifts the tier tag (haiku vs opus); Done must reap both even
+	// though only one is in frontmatter.
 	recorded := "X " + project + "/" + slug + " [haiku]"
 	drifted := "X " + project + "/" + slug + " [opus]"
-	sporeStyle := "spore/" + project + "/" + slug
 	body := "---\nstatus: active\nslug: demo\ntitle: Demo\nsession: " + recorded + "\n---\nbody\n"
 	taskPath := filepath.Join(tasksDir, slug+".md")
 	if err := os.WriteFile(taskPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, name := range []string{recorded, drifted, sporeStyle} {
+	for _, name := range []string{recorded, drifted} {
 		if out, err := exec.Command("tmux", "-L", testTmuxSocket, "new-session", "-d", "-s", name, "sleep 30").CombinedOutput(); err != nil {
 			t.Fatalf("tmux new-session %q: %v: %s", name, err, out)
 		}
@@ -52,7 +51,7 @@ func TestDoneKillsAllMatchingSlugSessions(t *testing.T) {
 		t.Fatalf("Done: %v", err)
 	}
 
-	for _, name := range []string{recorded, drifted, sporeStyle} {
+	for _, name := range []string{recorded, drifted} {
 		if err := exec.Command("tmux", "-L", testTmuxSocket, "has-session", "-t", name).Run(); err == nil {
 			t.Errorf("session %q still alive after Done; broad-match reap missed it", name)
 		}

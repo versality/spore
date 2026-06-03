@@ -108,7 +108,7 @@ func TestList(t *testing.T) {
 	}
 }
 
-func TestListMixedLegacyAndBacklogStatuses(t *testing.T) {
+func TestListPreservesRawStatus(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {
 		t.Helper()
@@ -116,8 +116,8 @@ func TestListMixedLegacyAndBacklogStatuses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("legacy.md", "---\nstatus: parked\nslug: legacy\ntitle: Legacy\n---\n")
-	write("new.md", "---\nstatus: backlog\nslug: new\ntitle: New\ngate: waiting\n---\n")
+	write("blocked.md", "---\nstatus: blocked\nslug: blocked\ntitle: Blocked\n---\n")
+	write("draft.md", "---\nstatus: draft\nslug: draft\ntitle: Draft\ngate: waiting\n---\n")
 
 	metas, err := List(dir)
 	if err != nil {
@@ -126,11 +126,11 @@ func TestListMixedLegacyAndBacklogStatuses(t *testing.T) {
 	if len(metas) != 2 {
 		t.Fatalf("expected 2 metas, got %d", len(metas))
 	}
-	if metas[0].Status != "parked" || CanonicalStatus(metas[0].Status) != StatusBlocked {
-		t.Errorf("legacy parked status = %q canonical=%q", metas[0].Status, CanonicalStatus(metas[0].Status))
+	if metas[0].Status != StatusBlocked {
+		t.Errorf("blocked status = %q, want %q", metas[0].Status, StatusBlocked)
 	}
-	if metas[1].Status != "backlog" || CanonicalStatus(metas[1].Status) != StatusDraft || metas[1].Gate != "waiting" {
-		t.Errorf("legacy backlog meta = %+v canonical=%q", metas[1], CanonicalStatus(metas[1].Status))
+	if metas[1].Status != StatusDraft || metas[1].Gate != "waiting" {
+		t.Errorf("draft meta = %+v, want status=draft gate=waiting", metas[1])
 	}
 }
 

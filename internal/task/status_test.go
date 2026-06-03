@@ -6,24 +6,6 @@ import (
 	"github.com/versality/spore/internal/task/frontmatter"
 )
 
-func TestCanonicalStatusAliasesLegacy(t *testing.T) {
-	cases := map[string]string{
-		"backlog":     StatusDraft,
-		"paused":      StatusBlocked,
-		"parked":      StatusBlocked,
-		StatusDraft:   StatusDraft,
-		StatusActive:  StatusActive,
-		StatusBlocked: StatusBlocked,
-		StatusDone:    StatusDone,
-		"custom":      "custom",
-	}
-	for in, want := range cases {
-		if got := CanonicalStatus(in); got != want {
-			t.Errorf("CanonicalStatus(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestPromotableDraftWithEmptyGate(t *testing.T) {
 	cases := []struct {
 		name string
@@ -31,10 +13,7 @@ func TestPromotableDraftWithEmptyGate(t *testing.T) {
 		want bool
 	}{
 		{"draft", frontmatter.Meta{Status: StatusDraft}, true},
-		{"legacy backlog", frontmatter.Meta{Status: "backlog"}, true},
 		{"draft gated", frontmatter.Meta{Status: StatusDraft, Gate: "after x"}, false},
-		{"legacy parked aliases to blocked, not promotable", frontmatter.Meta{Status: "parked"}, false},
-		{"legacy paused aliases to blocked, not promotable", frontmatter.Meta{Status: "paused"}, false},
 		{"blocked", frontmatter.Meta{Status: StatusBlocked}, false},
 		{"active", frontmatter.Meta{Status: StatusActive}, false},
 		{"unknown", frontmatter.Meta{Status: "weird"}, false},

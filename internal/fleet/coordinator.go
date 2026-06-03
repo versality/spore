@@ -44,7 +44,7 @@ const CoordinatorAgentEnv = "SPORE_COORDINATOR_AGENT"
 // coordinator. Resolves the project name via task.ProjectName so
 // invocations from a worktree cwd still target the main repo session.
 func CoordinatorSessionName(projectRoot string) string {
-	return task.LegacySessionName(projectRoot, CoordinatorSlug)
+	return task.CoordinatorSession(projectRoot)
 }
 
 // CoordinatorRolePath returns the override path from

@@ -342,8 +342,7 @@ func runFleetStatus(args []string) error {
 // shell consumers that need worker-vs-coordinator awareness.
 //
 // Default project = task.ProjectName(cwd) with cwd's basename as
-// fallback (mirrors LegacySessionName resolution). Default kind =
-// worker.
+// fallback. Default kind = worker.
 //
 // Exit codes:
 //
@@ -404,11 +403,7 @@ func runFleetListSessions(args []string) error {
 		if kind != "any" && p.Kind != kind {
 			continue
 		}
-		shape := "current"
-		if p.Legacy {
-			shape = "legacy"
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Project, p.Slug, p.Kind, p.Tag, shape)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Project, p.Slug, p.Kind, p.Tag, "wt")
 	}
 	return nil
 }

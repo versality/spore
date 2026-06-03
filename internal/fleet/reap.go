@@ -249,9 +249,9 @@ func reapOne(mainRoot string, forcePublished bool, stdout, stderr io.Writer, e r
 	}
 
 	// Pass 2: orphan tmux sessions whose worktree is gone. Routes
-	// every shape (current wt-emoji, legacy spore/<project>/<slug>)
-	// through ParseSession; only worker kinds are candidates - the
-	// coordinator session has no worktree on purpose.
+	// every wt-emoji session through ParseSession; only worker kinds
+	// are candidates - the coordinator session has no worktree on
+	// purpose.
 	if sessions, lerr := e.tmuxRunner.listSessions(); lerr == nil {
 		for _, line := range strings.Split(strings.TrimRight(sessions, "\n"), "\n") {
 			if line == "" {

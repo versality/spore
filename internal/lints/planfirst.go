@@ -17,8 +17,6 @@ import (
 //
 // Status filter: fires only for active|blocked. draft is the
 // operator's minting window; done is post-work (no backfill).
-// Legacy parked/paused values are aliased to blocked through the
-// canonical map.
 type PlanFirstRequired struct {
 	TasksDir string
 }
@@ -62,7 +60,7 @@ func (l PlanFirstRequired) Run(root string) ([]Issue, error) {
 			continue
 		}
 		switch m.Status {
-		case "active", "blocked", "paused", "parked":
+		case "active", "blocked":
 		default:
 			continue
 		}

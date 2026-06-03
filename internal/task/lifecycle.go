@@ -52,7 +52,7 @@ func Start(tasksDir, slug string, extraEnv []string) (string, error) {
 		return "", fmt.Errorf("parse %s: %w", path, err)
 	}
 	prev := m.Status
-	switch CanonicalStatus(prev) {
+	switch prev {
 	case StatusDraft, StatusBlocked:
 	case StatusActive:
 		return "", fmt.Errorf("task %s: already active", slug)
@@ -109,8 +109,8 @@ func Reap(tasksDir, projectRoot, slug string) error {
 }
 
 // SpawnedSlugs lists slugs of every tmux session that matches the
-// current wt-style pattern plus older spore-prefixed names. Returns an
-// empty slice (and a nil error) when no tmux server is running.
+// wt-style pattern. Returns an empty slice (and a nil error) when no
+// tmux server is running.
 func SpawnedSlugs(projectRoot string) ([]string, error) {
 	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil {

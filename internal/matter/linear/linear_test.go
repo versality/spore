@@ -434,38 +434,6 @@ func TestSyncPushesDoneTasks(t *testing.T) {
 	}
 }
 
-func TestSyncRecognisesLegacyLinearKey(t *testing.T) {
-	stub := newStub(t)
-	iss := stub.addReady("issue-uuid-8", "MAR-30", "Legacy task", "")
-	iss.StateID = stub.states["In Progress"]
-
-	srv := httptest.NewServer(stub.handler())
-	defer srv.Close()
-
-	root := t.TempDir()
-	tasksDir := filepath.Join(root, "tasks")
-	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Pre-rename frontmatter shape: only the legacy `linear:` key.
-	m := frontmatter.Meta{
-		Status: "done", Slug: "legacy-task", Title: "Legacy task",
-		Extra: map[string]string{"linear": "MAR-30"},
-	}
-	if err := os.WriteFile(filepath.Join(tasksDir, "legacy-task.md"),
-		frontmatter.Write(m, []byte("\nbody\n")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	src := newSource(t, srv.URL)
-	if _, _, err := src.Sync(context.Background(), root); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
-	if iss.StateID != stub.states["Done"] {
-		t.Errorf("legacy task should have pushed Done, got state %q", iss.StateID)
-	}
-}
-
 func TestOnDonePushesImmediately(t *testing.T) {
 	stub := newStub(t)
 	iss := stub.addReady("issue-uuid-9", "MAR-42", "Ship matter plugin", "")

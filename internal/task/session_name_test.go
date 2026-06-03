@@ -27,15 +27,6 @@ func TestProjectEmoji(t *testing.T) {
 	}
 }
 
-func TestSessionPathDedupsWrapProject(t *testing.T) {
-	if got := sessionPath("spore", "spore", "demo"); got != "spore/demo" {
-		t.Errorf("dedup path = %q, want spore/demo", got)
-	}
-	if got := sessionPath("spore", "nix-config", "demo"); got != "spore/nix-config/demo" {
-		t.Errorf("kept path = %q, want spore/nix-config/demo", got)
-	}
-}
-
 func TestWtSessionNameTagOptional(t *testing.T) {
 	if got := wtSessionName("spore", "demo", ""); got != "\U0001F41D spore/demo" {
 		t.Errorf("without tag = %q", got)
@@ -58,12 +49,11 @@ func TestTmuxSessionNameUsesTierTag(t *testing.T) {
 	}
 }
 
-func TestParseSessionAcceptsCurrentAndLegacyShapes(t *testing.T) {
+func TestParseSessionAcceptsWtShapes(t *testing.T) {
 	type want struct {
-		slug   string
-		kind   string
-		legacy bool
-		tag    string
+		slug string
+		kind string
+		tag  string
 	}
 	cases := []struct {
 		name    string
@@ -71,24 +61,18 @@ func TestParseSessionAcceptsCurrentAndLegacyShapes(t *testing.T) {
 		want    want
 		ok      bool
 	}{
-		// Current wt-emoji shape.
-		{"\U0001F41D spore/demo [opus_high]", "spore", want{"demo", SessionKindWorker, false, "opus_high"}, true},
-		{"\U0001F41D spore/demo", "spore", want{"demo", SessionKindWorker, false, ""}, true},
-		{"\U0001F428 demo/foo-bar [codex-high]", "demo", want{"foo-bar", SessionKindWorker, false, "codex-high"}, true},
-		// Legacy spore-prefixed worker.
-		{"spore/spore/demo", "spore", want{"demo", SessionKindWorker, true, ""}, true},
-		{"spore/demo/foo", "demo", want{"foo", SessionKindWorker, true, ""}, true},
-		// Legacy wrap==project short form.
-		{"spore/demo", "spore", want{"demo", SessionKindWorker, true, ""}, true},
-		// Coordinator (legacy is the shipped shape).
-		{"spore/demo/coordinator", "demo", want{"", SessionKindCoordinator, true, ""}, true},
-		{"spore/coordinator", "spore", want{"", SessionKindCoordinator, true, ""}, true},
-		{"demo/coordinator", "demo", want{"", SessionKindCoordinator, false, ""}, true},
+		// Worker, wt-emoji shape.
+		{"\U0001F41D spore/demo [opus_high]", "spore", want{"demo", SessionKindWorker, "opus_high"}, true},
+		{"\U0001F41D spore/demo", "spore", want{"demo", SessionKindWorker, ""}, true},
+		{"\U0001F428 demo/foo-bar [codex-high]", "demo", want{"foo-bar", SessionKindWorker, "codex-high"}, true},
+		// Coordinator, bare and emoji-prefixed.
+		{"demo/coordinator", "demo", want{"", SessionKindCoordinator, ""}, true},
+		{"\U0001F41D spore/coordinator", "spore", want{"", SessionKindCoordinator, ""}, true},
 		// Misses.
 		{"unrelated", "spore", want{}, false},
 		{"spore/demo/extra/slug", "demo", want{}, false},
 		// Slug-with-suffix must not match a different slug.
-		{"\U0001F41D spore/demo-extra", "spore", want{"demo-extra", SessionKindWorker, false, ""}, true},
+		{"\U0001F41D spore/demo-extra", "spore", want{"demo-extra", SessionKindWorker, ""}, true},
 	}
 	for _, c := range cases {
 		p, ok := ParseSession(c.name, c.project)
@@ -99,10 +83,20 @@ func TestParseSessionAcceptsCurrentAndLegacyShapes(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if p.Slug != c.want.slug || p.Kind != c.want.kind || p.Legacy != c.want.legacy || p.Tag != c.want.tag {
-			t.Errorf("ParseSession(%q,%q) = %+v; want slug=%q kind=%s legacy=%v tag=%q",
-				c.name, c.project, p, c.want.slug, c.want.kind, c.want.legacy, c.want.tag)
+		if p.Slug != c.want.slug || p.Kind != c.want.kind || p.Tag != c.want.tag {
+			t.Errorf("ParseSession(%q,%q) = %+v; want slug=%q kind=%s tag=%q",
+				c.name, c.project, p, c.want.slug, c.want.kind, c.want.tag)
 		}
+	}
+}
+
+func TestParseSessionClassifiesEmojiCoordinator(t *testing.T) {
+	p, ok := ParseSession(CoordinatorSession("spore"), "spore")
+	if !ok {
+		t.Fatalf("ParseSession(%q) not recognized", CoordinatorSession("spore"))
+	}
+	if p.Kind != SessionKindCoordinator || p.Slug != "" {
+		t.Errorf("ParseSession(%q) = %+v; want Kind=Coordinator slug empty", CoordinatorSession("spore"), p)
 	}
 }
 
@@ -113,7 +107,7 @@ func TestMatchSlugRejectsSuffixCollision(t *testing.T) {
 	if !MatchSlug("\U0001F41D spore/foo-bar", "spore", "foo-bar") {
 		t.Errorf("MatchSlug missed exact-slug match")
 	}
-	if MatchSlug("spore/demo/coordinator", "demo", "coordinator") {
+	if MatchSlug("\U0001F428 demo/coordinator", "demo", "coordinator") {
 		t.Errorf("MatchSlug must not match coordinator sessions as worker slug=coordinator")
 	}
 }

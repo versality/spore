@@ -33,7 +33,6 @@ func TestCodexEffortHighOnly(t *testing.T) {
 		"tasks/ok-codex-noeffort.md":   taskFM("ok-codex-noeffort", "codex", "", "active"),
 		"tasks/ok-claude-medium.md":    taskFM("ok-claude-medium", "claude", "medium", "active"),
 		"tasks/done-codex-medium.md":   taskFM("done-codex-medium", "codex", "medium", "done"),
-		"tasks/parked-codex-medium.md": taskFM("parked-codex-medium", "codex", "medium", "parked"),
 		"tasks/draft-codex-medium.md":  taskFM("draft-codex-medium", "codex", "medium", "draft"),
 	}
 	root := newTestRepo(t, files)
@@ -51,7 +50,6 @@ func TestCodexEffortHighOnly(t *testing.T) {
 		"tasks/bad-codex-veryhigh.md",
 		"tasks/bad-codex-veryhighu.md",
 		"tasks/bad-codex-low.md",
-		"tasks/parked-codex-medium.md",
 		"tasks/draft-codex-medium.md",
 	}
 	wantSkip := []string{
