@@ -1,7 +1,6 @@
 package lints
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,19 +48,4 @@ func (l FileSize) Run(root string) ([]Issue, error) {
 		}
 	}
 	return issues, nil
-}
-
-func countLines(path string) (int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	n := 0
-	for scanner.Scan() {
-		n++
-	}
-	return n, scanner.Err()
 }

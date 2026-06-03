@@ -3,8 +3,6 @@ package lints
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/versality/spore/internal/task"
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -21,42 +19,21 @@ type TaskPriority struct {
 func (TaskPriority) Name() string { return "task-priority" }
 
 func (l TaskPriority) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 	var issues []Issue
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		rel := filepath.ToSlash(filepath.Join(dir, e.Name()))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, _, err := frontmatter.Parse(raw)
 		if err != nil {
-			continue
+			return nil
 		}
 		if task.IsDone(m.Status) {
-			continue
+			return nil
 		}
 		if m.Priority == "" {
 			issues = append(issues, Issue{
 				Path:    rel,
 				Message: "missing 'priority:' (want critical|high|medium|low)",
 			})
-			continue
+			return nil
 		}
 		if !task.IsValidPriority(m.Priority) {
 			issues = append(issues, Issue{
@@ -64,8 +41,9 @@ func (l TaskPriority) Run(root string) ([]Issue, error) {
 				Message: fmt.Sprintf("priority %q: want critical|high|medium|low", m.Priority),
 			})
 		}
-	}
-	return issues, nil
+		return nil
+	})
+	return issues, err
 }
 
 // PriorityWarnOnly reports whether task-priority findings should not

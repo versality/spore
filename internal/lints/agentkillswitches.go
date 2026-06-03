@@ -72,7 +72,7 @@ func (l AgentKillSwitches) Run(root string) ([]Issue, error) {
 		if skipPath(rel, l.SkipPath) {
 			continue
 		}
-		if l.scanDirsConfigured() && !l.inScanDirs(rel) {
+		if scanDirsConfigured(l.ScanDirs) && !inScanDirs(rel, l.ScanDirs) {
 			continue
 		}
 		b, err := os.ReadFile(filepath.Join(root, rel))
@@ -138,28 +138,4 @@ func (l AgentKillSwitches) allowSet() map[string]bool {
 		}
 	}
 	return out
-}
-
-func (l AgentKillSwitches) scanDirsConfigured() bool {
-	for _, d := range l.ScanDirs {
-		if s := strings.TrimSpace(d); s != "" && s != "." {
-			return true
-		}
-	}
-	return false
-}
-
-func (l AgentKillSwitches) inScanDirs(rel string) bool {
-	rel = filepath.ToSlash(rel)
-	for _, d := range l.ScanDirs {
-		d = strings.TrimSpace(filepath.ToSlash(d))
-		if d == "" || d == "." {
-			return true
-		}
-		d = strings.TrimSuffix(d, "/")
-		if rel == d || strings.HasPrefix(rel, d+"/") {
-			return true
-		}
-	}
-	return false
 }

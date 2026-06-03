@@ -1,10 +1,7 @@
 package lints
 
 import (
-	"bytes"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -39,57 +36,38 @@ func (NoCrossRepoTasks) Name() string { return "no-cross-repo-tasks" }
 var filesHeadingRE = regexp.MustCompile(`(?m)^#+[ \t]+Files([ \t]|$)`)
 
 func (l NoCrossRepoTasks) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	ownSlug := detectOwnSlug(root)
+	own := ownSlug(root)
 
 	inScope := func(slug, status string) bool {
 		if status == "active" || status == "draft" {
 			return true
 		}
-		return ownSlug != "" && slug == ownSlug
+		return own != "" && slug == own
 	}
 
 	type taskFile struct {
-		path string
 		rel  string
 		slug string
 		meta frontmatter.Meta
 		body []byte
 	}
 	var tasks []taskFile
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, body, err := frontmatter.Parse(raw)
 		if err != nil {
-			continue
+			return nil
 		}
-		slug := strings.TrimSuffix(e.Name(), ".md")
+		slug := strings.TrimSuffix(filepath.Base(rel), ".md")
 		tasks = append(tasks, taskFile{
-			path: path,
-			rel:  filepath.ToSlash(filepath.Join(dir, e.Name())),
+			rel:  rel,
 			slug: slug,
 			meta: m,
 			body: body,
 		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	var issues []Issue
@@ -172,19 +150,4 @@ func extractFilesSection(body []byte) string {
 		}
 	}
 	return strings.Join(out, "\n")
-}
-
-func detectOwnSlug(root string) string {
-	cmd := exec.Command("git", "-C", root, "symbolic-ref", "--short", "HEAD")
-	var out, errBuf bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		return ""
-	}
-	branch := strings.TrimSpace(out.String())
-	if !strings.HasPrefix(branch, "wt/") {
-		return ""
-	}
-	return strings.TrimPrefix(branch, "wt/")
 }

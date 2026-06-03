@@ -2,8 +2,6 @@ package lints
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -28,19 +26,6 @@ var defaultTaskStatuses = []string{"draft", "active", "blocked", "done"}
 var taskStatusLine = regexp.MustCompile(`(?m)^status[[:space:]]*:`)
 
 func (l TaskStatus) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
 	allowed := l.Allowed
 	if len(allowed) == 0 {
 		allowed = defaultTaskStatuses
@@ -51,34 +36,26 @@ func (l TaskStatus) Run(root string) ([]Issue, error) {
 	}
 
 	var issues []Issue
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		rel := filepath.ToSlash(filepath.Join(dir, e.Name()))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, _, err := frontmatter.Parse(raw)
 		if err != nil {
-			continue
+			return nil
 		}
 		val := strings.TrimSpace(m.Status)
 		if val == "" {
-			continue
+			return nil
 		}
 		if allowSet[val] {
-			continue
+			return nil
 		}
 		issues = append(issues, Issue{
 			Path:    rel,
 			Line:    statusLineNumber(raw),
 			Message: fmt.Sprintf("invalid status %q (valid: %s)", val, strings.Join(allowed, " ")),
 		})
-	}
-	return issues, nil
+		return nil
+	})
+	return issues, err
 }
 
 func statusLineNumber(raw []byte) int {

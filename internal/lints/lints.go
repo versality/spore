@@ -5,8 +5,11 @@
 package lints
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -17,18 +20,13 @@ import (
 // Issue is one finding produced by a Lint. Path is repo-relative.
 // Line is 1-indexed; 0 means the issue is whole-file.
 //
-// Severity and Fingerprint are optional; both are populated by the CLI
-// emitter when blank so existing lints stay terse. Severity is one of
-// "info", "warn", or "error" (default "warn"). Fingerprint is a stable
-// content hash used by `spore scout mint-healers` to dedup findings
-// across runs; format is "v<n>:<16-hex>" where the version is bumped
-// whenever the lint's semantic output changes.
+// The CLI emitter derives severity and a stable fingerprint from the
+// (lint, path, line, message) tuple at output time; lints only fill
+// these three fields.
 type Issue struct {
-	Path        string
-	Line        int
-	Message     string
-	Severity    string
-	Fingerprint string
+	Path    string
+	Line    int
+	Message string
 }
 
 func (i Issue) String() string {
@@ -223,6 +221,82 @@ func extSet(exts []string, defaults map[string]bool) map[string]bool {
 		out[ext] = true
 	}
 	return out
+}
+
+// ownSlug returns the worktree slug for root: the current branch with
+// the `wt/` prefix stripped, or "" when HEAD is not a wt/ branch (or
+// git fails). The git call passes `-c safe.directory=<abs root>` so a
+// repo imported via rsync (preserving a foreign uid) still resolves.
+func ownSlug(root string) string {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return ""
+	}
+	cmd := exec.Command("git", "-c", "safe.directory="+abs, "-C", root, "symbolic-ref", "--short", "HEAD")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	branch := strings.TrimSpace(out.String())
+	if !strings.HasPrefix(branch, "wt/") {
+		return ""
+	}
+	return strings.TrimPrefix(branch, "wt/")
+}
+
+// newLineScanner returns a bufio.Scanner over r sized for the long
+// lines spore lints routinely meet (minified assets, generated code):
+// a 64 KiB initial buffer growing to 4 MiB.
+func newLineScanner(r io.Reader) *bufio.Scanner {
+	s := bufio.NewScanner(r)
+	s.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	return s
+}
+
+// countLines returns the number of newline-delimited lines in the file
+// at path, using the shared large-buffer scanner.
+func countLines(path string) (int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	scanner := newLineScanner(f)
+	n := 0
+	for scanner.Scan() {
+		n++
+	}
+	return n, scanner.Err()
+}
+
+// scanDirsConfigured reports whether dirs names at least one concrete
+// directory to scan (anything other than empty or "."). When false the
+// caller scans the whole tree.
+func scanDirsConfigured(dirs []string) bool {
+	for _, d := range dirs {
+		if s := strings.TrimSpace(d); s != "" && s != "." {
+			return true
+		}
+	}
+	return false
+}
+
+// inScanDirs reports whether the repo-relative path rel falls under any
+// directory in dirs. An empty or "." entry matches everything.
+func inScanDirs(rel string, dirs []string) bool {
+	rel = filepath.ToSlash(rel)
+	for _, d := range dirs {
+		d = strings.TrimSpace(filepath.ToSlash(d))
+		if d == "" || d == "." {
+			return true
+		}
+		d = strings.TrimSuffix(d, "/")
+		if rel == d || strings.HasPrefix(rel, d+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func skipPath(rel string, skips []string) bool {

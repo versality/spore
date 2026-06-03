@@ -3,7 +3,6 @@ package lints
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,38 +30,16 @@ type TaskEvidence struct {
 func (TaskEvidence) Name() string { return "task-evidence" }
 
 func (l TaskEvidence) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
 	var issues []Issue
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		rel := filepath.ToSlash(filepath.Join(dir, e.Name()))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, body, err := frontmatter.Parse(raw)
 		if err != nil {
 			// Not a task file (e.g. README.md). Skip silently.
-			continue
+			return nil
 		}
 		rawReq, hasReq := m.Extra["evidence_required"]
 		if !hasReq || strings.TrimSpace(rawReq) == "" {
-			continue
+			return nil
 		}
 		meta := map[string]any{"evidence_required": rawReq}
 		required := evidence.Required(meta)
@@ -76,18 +53,18 @@ func (l TaskEvidence) Run(root string) ([]Issue, error) {
 			}
 		}
 		if m.Status != "done" {
-			continue
+			return nil
 		}
 		verdict, diags := evidence.Verify(meta, string(body))
 		if !evidence.Blocks(verdict) {
-			continue
+			return nil
 		}
 		if len(diags) == 0 {
 			issues = append(issues, Issue{
 				Path:    rel,
 				Message: fmt.Sprintf("[%s]", verdict),
 			})
-			continue
+			return nil
 		}
 		for _, d := range diags {
 			issues = append(issues, Issue{
@@ -95,8 +72,9 @@ func (l TaskEvidence) Run(root string) ([]Issue, error) {
 				Message: fmt.Sprintf("[%s] %s", verdict, d),
 			})
 		}
-	}
-	return issues, nil
+		return nil
+	})
+	return issues, err
 }
 
 // EvidenceWarnOnly reports whether the task-evidence lint should be

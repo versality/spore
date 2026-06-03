@@ -2,8 +2,6 @@ package lints
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/versality/spore/internal/task/frontmatter"
@@ -20,49 +18,29 @@ type CodexEffortHighOnly struct {
 func (CodexEffortHighOnly) Name() string { return "codex-effort-high-only" }
 
 func (l CodexEffortHighOnly) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 	var issues []Issue
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		rel := filepath.ToSlash(filepath.Join(dir, e.Name()))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, _, err := frontmatter.Parse(raw)
 		if err != nil {
-			continue
+			return nil
 		}
 		if m.Agent != "codex" {
-			continue
+			return nil
 		}
 		effort := strings.TrimSpace(m.Extra["effort"])
 		if effort == "" || effort == "high" {
-			continue
+			return nil
 		}
 		switch m.Status {
 		case "draft", "active", "blocked":
 		default:
-			continue
+			return nil
 		}
 		issues = append(issues, Issue{
 			Path:    rel,
 			Message: fmt.Sprintf("agent=codex effort=%s status=%s (must be exactly 'high')", effort, m.Status),
 		})
-	}
-	return issues, nil
+		return nil
+	})
+	return issues, err
 }

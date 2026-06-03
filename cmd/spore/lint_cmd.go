@@ -154,17 +154,9 @@ func emitJSON(enc *json.Encoder, lintName string, i lints.Issue, warnOnly bool) 
 // warn-only lints) and Fingerprint (computed from the issue tuple) so
 // scout and lint share one row schema.
 func buildFinding(lintName string, i lints.Issue, warnOnly bool) jsonFinding {
-	severity := i.Severity
-	if severity == "" {
-		if warnOnly {
-			severity = "warn"
-		} else {
-			severity = "error"
-		}
-	}
-	fp := i.Fingerprint
-	if fp == "" {
-		fp = lints.Fingerprint(lintName, i.Path, i.Line, i.Message)
+	severity := "error"
+	if warnOnly {
+		severity = "warn"
 	}
 	return jsonFinding{
 		Ts:          time.Now().UTC().Format(time.RFC3339),
@@ -173,7 +165,7 @@ func buildFinding(lintName string, i lints.Issue, warnOnly bool) jsonFinding {
 		Path:        i.Path,
 		Line:        i.Line,
 		Message:     i.Message,
-		Fingerprint: fp,
+		Fingerprint: lints.Fingerprint(lintName, i.Path, i.Line, i.Message),
 	}
 }
 

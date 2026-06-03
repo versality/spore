@@ -3,8 +3,6 @@ package lints
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -38,22 +36,9 @@ var (
 )
 
 func (l TaskSchedulerContext) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	ownSlug := l.OwnSlug
-	if ownSlug == "" {
-		ownSlug = deriveOwnSlug(root)
+	own := l.OwnSlug
+	if own == "" {
+		own = ownSlug(root)
 	}
 	now := l.Now
 	if now.IsZero() {
@@ -62,30 +47,21 @@ func (l TaskSchedulerContext) Run(root string) ([]Issue, error) {
 	today := now.Format("2006-01-02")
 
 	var issues []Issue
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		rel := filepath.ToSlash(filepath.Join(dir, e.Name()))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, body, err := frontmatter.Parse(raw)
 		if err != nil {
-			continue
+			return nil
 		}
 		if m.Status != "parked" && m.Status != "blocked" {
-			continue
+			return nil
 		}
-		if ownSlug != "" {
+		if own != "" {
 			slug := m.Slug
 			if slug == "" {
-				slug = strings.TrimSuffix(e.Name(), ".md")
+				slug = strings.TrimSuffix(filepath.Base(rel), ".md")
 			}
-			if slug != ownSlug {
-				continue
+			if slug != own {
+				return nil
 			}
 		}
 
@@ -106,12 +82,12 @@ func (l TaskSchedulerContext) Run(root string) ([]Issue, error) {
 					Message: "later-only blocked task requires scheduler: <operator trigger/dependency>",
 				})
 			}
-			continue
+			return nil
 		}
 
 		// parked: skip when auto-promotable (no scheduler_key, no later-only).
 		if schedulerKey == "" && !hasLaterOnly {
-			continue
+			return nil
 		}
 
 		line := schedulerLineNumber(raw)
@@ -121,7 +97,7 @@ func (l TaskSchedulerContext) Run(root string) ([]Issue, error) {
 				Line:    line,
 				Message: "status=parked requires frontmatter scheduler: <coordinator-owned trigger/resume condition>",
 			})
-			continue
+			return nil
 		}
 		if !schedulerTriggerWord.MatchString(schedulerVal) {
 			issues = append(issues, Issue{
@@ -137,8 +113,9 @@ func (l TaskSchedulerContext) Run(root string) ([]Issue, error) {
 				Message: fmt.Sprintf("scheduler date %s is stale; update the resume/parking condition", mm[1]),
 			})
 		}
-	}
-	return issues, nil
+		return nil
+	})
+	return issues, err
 }
 
 func bodyHasLaterOnly(body []byte) bool {
@@ -165,22 +142,4 @@ func schedulerLineNumber(raw []byte) int {
 		}
 	}
 	return 0
-}
-
-func deriveOwnSlug(root string) string {
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return ""
-	}
-	cmd := exec.Command("git", "-c", "safe.directory="+abs, "-C", root, "symbolic-ref", "--short", "HEAD")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return ""
-	}
-	br := strings.TrimSpace(out.String())
-	if !strings.HasPrefix(br, "wt/") {
-		return ""
-	}
-	return strings.TrimPrefix(br, "wt/")
 }

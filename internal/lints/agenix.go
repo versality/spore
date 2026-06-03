@@ -62,7 +62,7 @@ func (l Agenix) Run(root string) ([]Issue, error) {
 		if skipPath(rel, skips) {
 			continue
 		}
-		if l.scanDirsConfigured() && !l.inScanDirs(rel) {
+		if scanDirsConfigured(l.ScanDirs) && !inScanDirs(rel, l.ScanDirs) {
 			continue
 		}
 		b, err := os.ReadFile(filepath.Join(root, rel))
@@ -96,30 +96,6 @@ func (l Agenix) Run(root string) ([]Issue, error) {
 		}
 	}
 	return issues, nil
-}
-
-func (l Agenix) scanDirsConfigured() bool {
-	for _, d := range l.ScanDirs {
-		if s := strings.TrimSpace(d); s != "" && s != "." {
-			return true
-		}
-	}
-	return false
-}
-
-func (l Agenix) inScanDirs(rel string) bool {
-	rel = filepath.ToSlash(rel)
-	for _, d := range l.ScanDirs {
-		d = strings.TrimSpace(filepath.ToSlash(d))
-		if d == "" || d == "." {
-			return true
-		}
-		d = strings.TrimSuffix(d, "/")
-		if rel == d || strings.HasPrefix(rel, d+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 func lineOf(src string, byteOffset int) int {

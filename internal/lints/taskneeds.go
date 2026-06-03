@@ -2,7 +2,6 @@ package lints
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -30,14 +29,6 @@ func (l TaskNeeds) Run(root string) ([]Issue, error) {
 	if dir == "" {
 		dir = "tasks"
 	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 
 	type entry struct {
 		slug string
@@ -50,29 +41,14 @@ func (l TaskNeeds) Run(root string) ([]Issue, error) {
 
 	var issues []Issue
 
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		names = append(names, e.Name())
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		path := filepath.Join(abs, name)
-		rel := filepath.ToSlash(filepath.Join(dir, name))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		m, _, err := frontmatter.Parse(raw)
 		if err != nil {
-			continue
+			return nil
 		}
 		slug := m.Slug
 		if slug == "" {
-			slug = strings.TrimSuffix(name, ".md")
+			slug = strings.TrimSuffix(filepath.Base(rel), ".md")
 		}
 		slugs = append(slugs, slug)
 		known[slug] = true
@@ -84,9 +60,13 @@ func (l TaskNeeds) Run(root string) ([]Issue, error) {
 				Path:    rel,
 				Message: fmt.Sprintf("needs: must be a YAML block list (got: %s)", bad),
 			})
-			continue
+			return nil
 		}
 		files[slug].deps = append([]string(nil), m.Needs...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	for _, slug := range slugs {

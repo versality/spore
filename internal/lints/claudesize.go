@@ -1,7 +1,6 @@
 package lints
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,8 +55,7 @@ func scanClaudeSize(path, rel string, limit int) ([]Issue, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	scanner := newLineScanner(f)
 
 	var issues []Issue
 	var sectionName string

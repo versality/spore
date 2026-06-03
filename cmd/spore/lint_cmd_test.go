@@ -71,28 +71,6 @@ func TestEmitJSONWarnOnlySeverity(t *testing.T) {
 	}
 }
 
-func TestEmitJSONPreservesExplicitFields(t *testing.T) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	issue := lints.Issue{
-		Path:        "a",
-		Line:        2,
-		Message:     "b",
-		Severity:    "info",
-		Fingerprint: "v9:deadbeef",
-	}
-	if err := emitJSON(enc, "l", issue, false); err != nil {
-		t.Fatalf("emitJSON: %v", err)
-	}
-	var got jsonFinding
-	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.Severity != "info" || got.Fingerprint != "v9:deadbeef" {
-		t.Fatalf("explicit fields not preserved: %+v", got)
-	}
-}
-
 func TestRunLintJSONEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "rule.md"), "this has an em\u2014dash inside\n")

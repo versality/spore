@@ -74,7 +74,7 @@ func (l FlakeInputShadow) Run(root string) ([]Issue, error) {
 		if skipPath(rel, l.SkipPath) {
 			continue
 		}
-		if l.scanDirsConfigured() && !l.inScanDirs(rel) {
+		if scanDirsConfigured(l.ScanDirs) && !inScanDirs(rel, l.ScanDirs) {
 			continue
 		}
 		b, err := os.ReadFile(filepath.Join(root, rel))
@@ -94,30 +94,6 @@ func (l FlakeInputShadow) Run(root string) ([]Issue, error) {
 		}
 	}
 	return issues, nil
-}
-
-func (l FlakeInputShadow) scanDirsConfigured() bool {
-	for _, d := range l.ScanDirs {
-		if strings.TrimSpace(d) != "" && strings.TrimSpace(d) != "." {
-			return true
-		}
-	}
-	return false
-}
-
-func (l FlakeInputShadow) inScanDirs(rel string) bool {
-	rel = filepath.ToSlash(rel)
-	for _, d := range l.ScanDirs {
-		d = strings.TrimSpace(filepath.ToSlash(d))
-		if d == "" || d == "." {
-			return true
-		}
-		d = strings.TrimSuffix(d, "/")
-		if rel == d || strings.HasPrefix(rel, d+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 // readFlakeInputs returns the top-level input ids declared in the

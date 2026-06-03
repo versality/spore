@@ -1,8 +1,6 @@
 package lints
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -17,29 +15,8 @@ type TaskBrief struct {
 func (TaskBrief) Name() string { return "task-brief" }
 
 func (l TaskBrief) Run(root string) ([]Issue, error) {
-	dir := l.TasksDir
-	if dir == "" {
-		dir = "tasks"
-	}
-	abs := filepath.Join(root, dir)
-	entries, err := os.ReadDir(abs)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 	var issues []Issue
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(abs, e.Name())
-		rel := filepath.ToSlash(filepath.Join(dir, e.Name()))
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
+	err := forEachTask(root, l.TasksDir, func(rel string, raw []byte) error {
 		if lineNo, ok := briefH1Line(raw); ok {
 			issues = append(issues, Issue{
 				Path:    rel,
@@ -47,8 +24,9 @@ func (l TaskBrief) Run(root string) ([]Issue, error) {
 				Message: "'# Brief' heading (drop it; wt-task already prepends 'Brief:')",
 			})
 		}
-	}
-	return issues, nil
+		return nil
+	})
+	return issues, err
 }
 
 // briefH1Line returns the 1-indexed line number of the first body H1
