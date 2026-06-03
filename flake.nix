@@ -20,10 +20,10 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           # CI floor: pin to the 1.25 series for `checks` and the
-          # devShell. nixpkgs.go currently tracks 1.26.x; both
-          # GO-2026-4971 and GO-2026-4918 (stdlib net) are unfixed
-          # there until 1.26.3, which has not landed in this channel
-          # yet. 1.25.10 carries the same fixes.
+          # devShell. nixpkgs.go currently tracks 1.26.3; the latest
+          # stdlib advisories (GO-2026-5037, GO-2026-5039) are still
+          # unfixed there until 1.26.4, which has not landed in this
+          # channel yet. 1.25.11 carries the same fixes.
           ciGo = pkgs.go_1_25;
           # Consumer-facing build uses `pkgs.buildGoModule` (and its
           # default `pkgs.go`) so a downstream toolchain overlay (e.g.

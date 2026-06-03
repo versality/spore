@@ -40,19 +40,15 @@ func TestParseRoundTrip(t *testing.T) {
 		t.Fatal("expected sections")
 	}
 
-	sec := doc.FindSection("Active tasks")
-	if sec == nil {
+	if sec := doc.FindSection("Active tasks"); sec == nil {
 		t.Fatal("expected Active tasks section")
-	}
-	if sec.Level != 2 {
+	} else if sec.Level != 2 {
 		t.Errorf("Active tasks level = %d, want 2", sec.Level)
 	}
 
-	sec = doc.FindSection("Directives")
-	if sec == nil {
+	if sec := doc.FindSection("Directives"); sec == nil {
 		t.Fatal("expected Directives section")
-	}
-	if !strings.Contains(sec.Body, "Stand down") {
+	} else if !strings.Contains(sec.Body, "Stand down") {
 		t.Errorf("Directives body missing expected text")
 	}
 }
@@ -62,6 +58,7 @@ func TestParseTaskTable(t *testing.T) {
 	sec := doc.FindSection("Active tasks")
 	if sec == nil {
 		t.Fatal("expected Active tasks section")
+		return
 	}
 	rows := ParseTaskTable(sec.Body)
 	if len(rows) != 2 {
@@ -105,6 +102,7 @@ func TestFindSectionH3(t *testing.T) {
 	sec := doc.FindSection("CRITICAL LESSON: always check inbox")
 	if sec == nil {
 		t.Fatal("expected to find H3 section")
+		return
 	}
 	if sec.Level != 3 {
 		t.Errorf("expected level 3, got %d", sec.Level)
