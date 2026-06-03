@@ -47,7 +47,7 @@
             pname = "spore";
             inherit version;
             src = ./.;
-            subPackages = [ "cmd/spore" ];
+            subPackages = [ "cmd/spore" "cmd/spore-sandbox" ];
             vendorHash = null;
             nativeBuildInputs = [ pkgs.git ];
             ldflags = [ "-X=github.com/versality/spore.buildCommit=${commit}" ];

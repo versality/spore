@@ -1,0 +1,10 @@
+# spore self-config. spore dogfoods its own sandbox: every worker agent
+# spawned in this repo runs inside spore-sandbox (bwrap). Per-task escape
+# hatch: add `sandbox: false` to a task's frontmatter.
+[sandbox]
+enabled = true
+# HTTPS CONNECT egress allowlist for the sandboxed agent. The worktree,
+# the agent state dirs, and the main repo .git are bound automatically;
+# everything else (other dotfiles, sibling worktrees) is denied. Add a
+# host here to let the agent reach it (typo-loud: unknown keys error).
+allow_hosts = ["api.anthropic.com", "statsig.anthropic.com", "sentry.io"]

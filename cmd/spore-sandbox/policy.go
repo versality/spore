@@ -70,6 +70,18 @@ func (p Policy) bwrapArgs() ([]string, error) {
 		"--chdir", wt,
 		"--setenv", "HOME", home,
 	}
+	// Re-expose the nix user profile read-only over the tmpfs home. The
+	// agent reaches its own toolchain (git, rg, ...) through
+	// $HOME/.nix-profile/bin on nix-user-profile systems; the tmpfs home
+	// would otherwise hide it and break `git commit`. Symlinks into the
+	// already-ro /nix/store, so this exposes no writable or secret state.
+	// On NixOS hosts the toolchain lives in the system profile (outside
+	// $HOME) and is already covered by the ro root, so this is a no-op
+	// when the path is absent.
+	profile := filepath.Join(home, ".nix-profile")
+	if _, err := os.Lstat(profile); err == nil {
+		args = append(args, "--ro-bind", profile, profile)
+	}
 	for _, dir := range p.RW {
 		abs, err := absExisting(dir, false)
 		if err != nil {

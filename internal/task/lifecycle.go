@@ -554,6 +554,15 @@ func ensureSession(tasksDir, slug string, extraEnv []string) (string, error) {
 	if strings.HasPrefix(strings.TrimSpace(agent), "claude") && !strings.Contains(agent, "--dangerously-skip-permissions") {
 		agent = "claude --dangerously-skip-permissions" + strings.TrimPrefix(strings.TrimSpace(agent), "claude")
 	}
+	// Wrap the resolved agent argv in the bwrap sandbox when the project
+	// opts in (spore.toml [sandbox] enabled). Done after the claude
+	// permission-flag fixup so the wrap sees the final agent argv, and
+	// before the brief append so the `-- "$(cat ...)"` tail reaches the
+	// agent through the sandbox's own `--` separator.
+	agent, err = maybeSandboxWrap(projectRoot, worktree, meta, agent)
+	if err != nil {
+		return "", err
+	}
 	shellCmd := agent
 	if os.Getenv(AgentBinaryEnv) == "" {
 		shellCmd += ` ${SPORE_BRIEF_FILE:+-- "$(cat "$SPORE_BRIEF_FILE")"}`

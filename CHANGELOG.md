@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Sandbox wired into the worker spawn path
+
+`spore-sandbox` is no longer a standalone primitive: when a project sets
+`[sandbox] enabled = true`, the fleet wraps every worker agent in the
+bwrap jail automatically (`internal/task/lifecycle.go` ->
+`spore-sandbox --exec`). The binary now ships in the flake package
+(`subPackages` += `cmd/spore-sandbox`) and is resolved next to the
+running `spore`.
+
+- `sandboxcfg` gained an `enabled` bool; default off, so consumers
+  without bwrap are unaffected. Enabled but no bwrap is a hard spawn
+  error, not a silent unsandboxed fallback.
+- Per-task escape hatch: `sandbox: false` in frontmatter. Only
+  registered targets (claude, codex, opencode) are wrapped.
+- The wrapper binds the main repo `.git/` rw so `git commit` works from a
+  linked worktree, and the sandbox re-binds `$HOME/.nix-profile` ro so the
+  agent's toolchain resolves through the tmpfs home.
+- spore dogfoods this: root `spore.toml` enables the sandbox with the
+  Anthropic egress allowlist.
+
 ## 0.9.2 - 2026-06-03
 
 Internal cleanup and dedup pass. No new commands; a few unwired code

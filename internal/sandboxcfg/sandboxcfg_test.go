@@ -64,6 +64,25 @@ func TestMergeDedupesAndPreservesOrder(t *testing.T) {
 	}
 }
 
+func TestEnabledParsesAndMerges(t *testing.T) {
+	got, err := LoadFromString("[sandbox]\nenabled = true\nallow_hosts = [\"api.anthropic.com\"]\n")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !got.Enabled {
+		t.Fatal("enabled should be true")
+	}
+	if _, err := LoadFromString("[sandbox]\nenabled = yes\n"); err == nil {
+		t.Fatal("non-bool enabled should error")
+	}
+	if !Merge(Config{}, Config{Enabled: true}).Enabled {
+		t.Fatal("Merge should OR Enabled on from b")
+	}
+	if !Merge(Config{Enabled: true}, Config{}).Enabled {
+		t.Fatal("Merge should keep Enabled from a")
+	}
+}
+
 func TestQuotedHashIsNotComment(t *testing.T) {
 	in := `[sandbox]
 allow_hosts = ["foo.example#bar"]

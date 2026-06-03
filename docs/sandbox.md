@@ -81,10 +81,11 @@ last:
 Each layer merges with union-dedupe; a stronger layer adds to,
 rather than replaces, the lists.
 
-The schema is three list keys, all optional:
+The schema is one bool plus three list keys, all optional:
 
 ```toml
 [sandbox]
+enabled     = true
 allow_hosts = ["api.anthropic.com", "statsig.anthropic.com", "sentry.io"]
 rw          = ["/home/user/.config/nvim"]
 ro          = ["/home/user/notes"]
@@ -93,6 +94,35 @@ ro          = ["/home/user/notes"]
 To let the sandboxed agent reach a new host, add it to `allow_hosts` and
 re-launch. To grant rw on a new path, add it to `rw`. Unknown keys
 under `[sandbox]` are an error (typo-loud, not silent).
+
+## Worker spawn integration
+
+`enabled` gates whether the fleet wraps worker agents automatically. When
+`[sandbox] enabled = true`, the worker spawn path
+(`internal/task/lifecycle.go`) runs each agent as:
+
+```
+spore-sandbox --exec -worktree <wt> -home $HOME -target <agent> \
+  -rw <projectRoot>/.git -- <agent argv> [-- "<brief>"]
+```
+
+`allow_hosts`/`rw`/`ro` are read from the worktree's `spore.toml` by
+`--exec` itself; the only per-spawn bind on the CLI is the main repo's
+`.git/`, which a linked worktree needs for the shared object store and
+its `worktrees/<slug>/` ref+index (without it `git commit` fails inside
+the jail). The sandbox also re-binds `$HOME/.nix-profile` read-only so
+the agent's own toolchain (git, rg, ...) resolves through the tmpfs home.
+
+Defaults and escape hatches:
+
+- `enabled` defaults off, so consumers without bwrap are unaffected until
+  they opt in. Enabled but no `bwrap` on PATH is a hard spawn error, not
+  a silent unsandboxed fallback.
+- Per-task opt-out: add `sandbox: false` to a task's frontmatter.
+- Only registered targets (claude, codex, opencode) are wrapped; a custom
+  `agent:` binary runs unwrapped (`--exec` rejects unknown targets).
+- `spore-sandbox` is resolved next to the running `spore` binary, so a
+  nix/`infect` deploy that ships both finds it without PATH setup.
 
 A denied host shows up in the per-sandbox `proxy.log` with a hint
 pointing at the config key, e.g.
