@@ -13,5 +13,9 @@
       "Bash(git commit -m ' *)",
       "Bash(wt task *)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "WT_ACCOUNT_TIER=max /run/current-system/sw/bin/wt-task token-status --statusline"
   }
 }

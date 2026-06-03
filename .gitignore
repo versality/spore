@@ -22,6 +22,13 @@
 /bootstrap/flake/local.nix
 /.codex/hooks.json
 
+# Claude Code per-machine runtime state living under <repo>/.claude/.
+# Tracked: settings.json, settings.local.json. Ignored: everything else
+# Claude writes here (sessions, history, plugins, caches, etc.).
+/.claude/*
+!/.claude/settings.json
+!/.claude/settings.local.json
+
 # spore-sandbox redteam scratch
 .spore-sandbox-redteam.transcript
 .spore-sandbox-redteam.verdict.json
