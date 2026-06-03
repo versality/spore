@@ -22,14 +22,13 @@
 /bootstrap/flake/local.nix
 /.codex/hooks.json
 
-# Claude Code per-machine runtime state living under <repo>/.claude/.
-# settings.json is a rendered output (configs/claude/ -> `just
-# hooks-render`), mirroring how .codex/hooks.json renders from
-# configs/codex/; both are gitignored because spawn-time injection
-# rewrites them kind-scoped. Tracked: settings.local.json (operator
-# overrides). Ignored: everything else Claude writes here.
+# Per-agent runtime state under <repo>/.claude and <repo>/.codex is all
+# local and untracked, mirroring each other. settings.json /
+# .codex/hooks.json are rendered outputs (configs/<agent>/ -> `just
+# hooks-render`), rewritten kind-scoped at spawn; settings.local.json is
+# operator-private (machine paths, personal allowlist). Edit the tracked
+# sources under configs/, never these.
 /.claude/*
-!/.claude/settings.local.json
 
 # spore-sandbox redteam scratch
 .spore-sandbox-redteam.transcript
