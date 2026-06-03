@@ -12,7 +12,7 @@ import (
 //
 // Host-wide here means "shared across all projects on this host";
 // per-project paths (state.md, inbox, ledgers) live one segment
-// deeper at <StateDir>/<project>/ via the Project* helpers.
+// deeper at <StateDir>/<project>/ via the Project helpers.
 func StateDir() string {
 	if d := os.Getenv("SPORE_COORDINATOR_STATE_DIR"); d != "" {
 		return d
@@ -24,33 +24,15 @@ func StateDir() string {
 	return filepath.Join(home, ".local", "state", "spore", "coordinator")
 }
 
-// StatePath joins name to StateDir for a host-wide primitive
-// (worker-watch.json, loop-guard trip files). For per-project state
-// use ProjectStateFile / ProjectInbox / ProjectLedger.
-func StatePath(name string) string {
-	return filepath.Join(StateDir(), name)
-}
-
 // ProjectDir is <StateDir>/<project>: the per-project coordinator
 // directory that holds state.md, inbox/, and per-project ledgers.
 func ProjectDir(project string) string {
 	return filepath.Join(StateDir(), project)
 }
 
-// ProjectStateFile is <ProjectDir>/state.md.
-func ProjectStateFile(project string) string {
-	return filepath.Join(ProjectDir(project), "state.md")
-}
-
 // ProjectInbox is <ProjectDir>/inbox.
 func ProjectInbox(project string) string {
 	return filepath.Join(ProjectDir(project), "inbox")
-}
-
-// ProjectLedger is <ProjectDir>/<name>, for per-project jsonl ledgers
-// (respawn-events.jsonl, codex-inbox-watcher.jsonl, token-monitor.jsonl).
-func ProjectLedger(project, name string) string {
-	return filepath.Join(ProjectDir(project), name)
 }
 
 // DefaultStateDir resolves the state directory most coordinator tools

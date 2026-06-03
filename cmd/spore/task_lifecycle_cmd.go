@@ -75,20 +75,6 @@ func parseSlugAndEnv(sub string, args []string) (string, []string, error) {
 	return slug, env, nil
 }
 
-func runTaskPause(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: spore task pause <slug>")
-	}
-	return task.Pause("tasks", args[0])
-}
-
-func runTaskPark(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: spore task park <slug>")
-	}
-	return task.Park("tasks", args[0])
-}
-
 func runTaskBlock(args []string) error {
 	fs := flag.NewFlagSet("task block", flag.ContinueOnError)
 	blocker := fs.String("blocker", "", "named blocker reason (e.g. scheduler:<key>, or operator note)")

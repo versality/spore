@@ -716,14 +716,13 @@ func TestSyncDoesNotStompOperatorBlocker(t *testing.T) {
 }
 
 func TestRegisteredViaInit(t *testing.T) {
-	found := false
-	for _, n := range matter.Registered() {
-		if n == "linear" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("linear should self-register via init(); registered = %v", matter.Registered())
+	// The adapter self-registers under "linear" from init(). Resolve it
+	// through the registry: FromConfig looks the factory up before
+	// invoking it, so a missing registration surfaces as a
+	// "no adapter registered" error. Any other outcome (success, or a
+	// factory-level config error) proves the name was registered.
+	_, err := matter.FromConfig([]matter.Config{{Name: "linear", Enabled: true}})
+	if err != nil && strings.Contains(err.Error(), "no adapter registered") {
+		t.Errorf("linear should self-register via init(): %v", err)
 	}
 }

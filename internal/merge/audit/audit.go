@@ -18,12 +18,6 @@ import (
 	"strings"
 )
 
-// DefaultPathspecs is empty: spore is consumer-agnostic, so callers
-// must pass their own pathspecs (positional args to `spore merge audit`
-// or `merge_audit.pathspecs` in spore.toml). Without args the audit
-// becomes a no-op.
-var DefaultPathspecs = []string{}
-
 // OwnerScanLimit is the per-path commit-log scan budget when
 // resolving a blob's authoring commit. The shell version exposed
 // MERGE_INTEGRITY_OWNER_SCAN; we expose the same knob via Config.
@@ -90,16 +84,13 @@ type LogEntry struct {
 
 // Config tunes the run.
 type Config struct {
-	Pathspecs    []string // empty -> DefaultPathspecs
+	Pathspecs    []string // empty -> audit is a no-op (spore is consumer-agnostic)
 	OwnerScanLim int      // 0 -> OwnerScanLimit
 }
 
 // Run executes the audit and returns the (possibly empty) drift list
 // in path-sorted order.
 func Run(g Git, cfg Config) ([]Drift, error) {
-	if len(cfg.Pathspecs) == 0 {
-		cfg.Pathspecs = DefaultPathspecs
-	}
 	if cfg.OwnerScanLim <= 0 {
 		cfg.OwnerScanLim = OwnerScanLimit
 	}

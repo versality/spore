@@ -23,13 +23,6 @@ type HookBin struct {
 	Kinds       []string // session-kind filter; empty means "all kinds"
 }
 
-// Settings is SettingsForKind with an empty kind, i.e. emits every
-// HookBin regardless of its Kinds field. Use this for the user-level
-// rendering path where no per-session scoping applies.
-func Settings(events map[string][]HookBin) ([]byte, error) {
-	return SettingsForKind(events, "")
-}
-
 // SettingsForKind emits a complete, deterministic settings.json blob
 // for claude-code. The events map keys are hook event names (Stop,
 // Notification, PostToolUse, UserPromptSubmit, PreToolUse, ...).
@@ -39,8 +32,7 @@ func Settings(events map[string][]HookBin) ([]byte, error) {
 //
 // When kind is non-empty, a HookBin is included only if its Kinds
 // is empty (unscoped) or contains kind. When kind is "", every bin
-// is included regardless of Kinds (back-compat for the
-// `hooks.Settings(events)` shape).
+// is included regardless of Kinds.
 func SettingsForKind(events map[string][]HookBin, kind string) ([]byte, error) {
 	hooksMap := make(map[string][]hookGroup)
 

@@ -50,42 +50,6 @@ func TestRunTaskMergeMissingSlug(t *testing.T) {
 	}
 }
 
-func TestRunTaskStatusCommandsRetireParkAndPause(t *testing.T) {
-	cases := []struct {
-		name    string
-		run     func([]string) error
-		wantErr string
-	}{
-		{"pause", runTaskPause, "pause is retired"},
-		{"park", runTaskPark, "park is retired"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			t.Chdir(root)
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
-			if err := os.Mkdir("tasks", 0o755); err != nil {
-				t.Fatal(err)
-			}
-			path := filepath.Join("tasks", "demo.md")
-			if err := os.WriteFile(path, []byte("---\nstatus: active\nslug: demo\ntitle: Demo\n---\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			err := tc.run([]string{"demo"})
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("%s: err = %v, want substring %q", tc.name, err, tc.wantErr)
-			}
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(string(raw), "status: active\n") {
-				t.Errorf("task status should be unchanged after retired verb:\n%s", raw)
-			}
-		})
-	}
-}
-
 func TestRunTaskBlockWritesBlockerAndUnblockClears(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

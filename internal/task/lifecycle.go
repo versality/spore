@@ -134,20 +134,6 @@ func SpawnedSlugs(projectRoot string) ([]string, error) {
 	return slugs, nil
 }
 
-// Pause is retired. drop-parked-status-gate collapsed paused into
-// blocked; callers must name a blocker reason instead. The stub
-// returns a hard error pointing at the new verb.
-func Pause(tasksDir, slug string) error {
-	return fmt.Errorf("task %s: pause is retired; use `spore task block %s --blocker \"<reason>\"`", slug, slug)
-}
-
-// Park is retired. drop-parked-status-gate collapsed parked into
-// blocked; callers must name a blocker reason instead. The stub
-// returns a hard error pointing at the new verb.
-func Park(tasksDir, slug string) error {
-	return fmt.Errorf("task %s: park is retired; use `spore task block %s --blocker \"<reason>\"`", slug, slug)
-}
-
 // Block flips an active task to blocked, persisting the blocker
 // reason. Same idle-gated reap as before: the worktree stays, the
 // session is killed only if idle past IdleReapThreshold. Refuses when

@@ -16,7 +16,6 @@
 package evictor
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -350,7 +349,3 @@ func WriteReport(w io.Writer, rep Report) {
 		fmt.Fprintf(w, "evictor: %s kept (%s)\n", d.Slug, d.Reason)
 	}
 }
-
-// Static check that the package imports compile against the API we
-// rely on. Removed by the linker; safe to leave.
-var _ = errors.New

@@ -82,16 +82,3 @@ func TestUnblockFlipsBlockedToActiveAndClearsBlocker(t *testing.T) {
 		t.Errorf("after Unblock: file still has blocker line:\n%s", raw)
 	}
 }
-
-func TestParkAndPauseAreRetiredErrors(t *testing.T) {
-	tasksDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tasksDir, "x.md"), []byte("---\nstatus: active\nslug: x\n---\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Park(tasksDir, "x"); err == nil || !strings.Contains(err.Error(), "park is retired") {
-		t.Errorf("Park retired error: %v", err)
-	}
-	if err := Pause(tasksDir, "x"); err == nil || !strings.Contains(err.Error(), "pause is retired") {
-		t.Errorf("Pause retired error: %v", err)
-	}
-}

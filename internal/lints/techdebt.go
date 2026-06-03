@@ -66,7 +66,6 @@ type techDebtTask struct {
 	name string
 	hash string
 	slug string
-	path string
 }
 
 func listTechDebtDoneTasks(absDir string) ([]techDebtTask, error) {
@@ -104,7 +103,7 @@ func listTechDebtDoneTasks(absDir string) ([]techDebtTask, error) {
 		if !techDebtHashRE.MatchString(hash) {
 			continue
 		}
-		out = append(out, techDebtTask{name: name, hash: hash, slug: slug, path: path})
+		out = append(out, techDebtTask{name: name, hash: hash, slug: slug})
 	}
 	return out, nil
 }

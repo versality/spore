@@ -76,9 +76,9 @@ func TestMatchesSignal(t *testing.T) {
 		{"warner is a name", false}, // "warn" not on a non-alpha boundary -> "warner" should not match
 	}
 	for _, tc := range tests {
-		got := MatchesSignal(tc.line)
+		got := matchesSignal(tc.line)
 		if got != tc.want {
-			t.Errorf("MatchesSignal(%q) = %v, want %v", tc.line, got, tc.want)
+			t.Errorf("matchesSignal(%q) = %v, want %v", tc.line, got, tc.want)
 		}
 	}
 }

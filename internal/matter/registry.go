@@ -40,19 +40,6 @@ func Register(name string, factory Factory) {
 	registry[name] = factory
 }
 
-// Registered returns the sorted list of registered matter names.
-// Useful for diagnostics and for `spore matter status`-shaped CLIs.
-func Registered() []string {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	out := make([]string, 0, len(registry))
-	for n := range registry {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // ResetForTest clears the registry. Tests in this and downstream
 // packages call it from t.Cleanup to keep adapter registrations
 // scoped to a single test. The package never calls it itself:
@@ -62,9 +49,6 @@ func ResetForTest() {
 	defer registryMu.Unlock()
 	registry = map[string]Factory{}
 }
-
-// reset is the in-package alias used by this package's own tests.
-func reset() { ResetForTest() }
 
 // FromConfig instantiates the enabled subset of configs against the
 // registry. Disabled entries are skipped silently. An entry with no

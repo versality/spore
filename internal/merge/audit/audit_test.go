@@ -245,10 +245,7 @@ func TestFormatReport_EmptyDriftList(t *testing.T) {
 	}
 }
 
-func TestRun_DefaultPathspecsEmpty(t *testing.T) {
-	if len(DefaultPathspecs) != 0 {
-		t.Fatalf("DefaultPathspecs must be empty in spore (consumer-agnostic), got %v", DefaultPathspecs)
-	}
+func TestRun_EmptyPathspecsIsNoOp(t *testing.T) {
 	g := fakeGit{paths: nil}
 	if _, err := Run(g, Config{}); err != nil {
 		t.Fatal(err)

@@ -257,7 +257,7 @@ func reapOne(mainRoot string, forcePublished bool, stdout, stderr io.Writer, e r
 			if line == "" {
 				continue
 			}
-			p, ok := task.MatchProject(line, project)
+			p, ok := task.ParseSession(line, project)
 			if !ok || p.Kind != task.SessionKindWorker || p.Slug == "" {
 				continue
 			}

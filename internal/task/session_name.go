@@ -235,9 +235,3 @@ func MatchSlug(name, project, slug string) bool {
 	p, ok := ParseSession(name, project)
 	return ok && p.Kind == sessionkind.Worker && p.Slug == slug
 }
-
-// MatchProject is an alias for ParseSession kept for caller clarity
-// at sites that iterate all of a project's sessions.
-func MatchProject(name, project string) (ParsedSession, bool) {
-	return ParseSession(name, project)
-}

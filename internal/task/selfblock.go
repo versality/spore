@@ -1,7 +1,6 @@
 package task
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -83,16 +82,5 @@ func isAlreadyBlockedErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, errStatusMismatch) {
-		return true
-	}
 	return strings.Contains(err.Error(), `(want "active")`)
 }
-
-// errStatusMismatch is a sentinel for future use by
-// flipStatusWithBlocker callers that want to distinguish "wrong
-// from-state" from other failures. Today the function returns a
-// formatted string, so SelfBlockOnCoordinatorTell falls back to
-// string matching; the sentinel keeps callers forward-compatible if
-// flipStatusWithBlocker is refactored to use errors.Is.
-var errStatusMismatch = errors.New("task status mismatch")

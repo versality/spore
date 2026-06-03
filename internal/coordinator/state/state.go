@@ -22,12 +22,6 @@ type Section struct {
 	Children []Section
 }
 
-type TaskRow struct {
-	Slug   string
-	Status string
-	Note   string
-}
-
 type Event struct {
 	Time    time.Time
 	Kind    string
@@ -146,74 +140,3 @@ func (d *Doc) FindSection(name string) *Section {
 	return nil
 }
 
-// ParseTaskTable extracts rows from a markdown table in the given
-// section body. Expects columns: slug, status, note (in any order,
-// identified by header names). Returns nil when no table is found.
-func ParseTaskTable(body string) []TaskRow {
-	lines := strings.Split(body, "\n")
-	headerIdx := -1
-	for i, line := range lines {
-		if strings.Contains(line, "|") && strings.Contains(strings.ToLower(line), "slug") {
-			headerIdx = i
-			break
-		}
-	}
-	if headerIdx < 0 || headerIdx+2 >= len(lines) {
-		return nil
-	}
-
-	headers := splitTableRow(lines[headerIdx])
-	colSlug, colStatus, colNote := -1, -1, -1
-	for i, h := range headers {
-		switch strings.ToLower(strings.TrimSpace(h)) {
-		case "slug":
-			colSlug = i
-		case "status":
-			colStatus = i
-		case "note":
-			colNote = i
-		}
-	}
-	if colSlug < 0 || colStatus < 0 {
-		return nil
-	}
-
-	var rows []TaskRow
-	for _, line := range lines[headerIdx+2:] {
-		if !strings.Contains(line, "|") {
-			break
-		}
-		cols := splitTableRow(line)
-		row := TaskRow{}
-		if colSlug < len(cols) {
-			row.Slug = strings.TrimSpace(cols[colSlug])
-		}
-		if colStatus < len(cols) {
-			row.Status = strings.TrimSpace(cols[colStatus])
-		}
-		if colNote >= 0 && colNote < len(cols) {
-			row.Note = strings.TrimSpace(cols[colNote])
-		}
-		if row.Slug != "" {
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
-func splitTableRow(line string) []string {
-	line = strings.TrimSpace(line)
-	line = strings.Trim(line, "|")
-	return strings.Split(line, "|")
-}
-
-// RenderTaskTable produces a markdown table from task rows.
-func RenderTaskTable(rows []TaskRow) string {
-	var buf strings.Builder
-	buf.WriteString("| slug | status | note |\n")
-	buf.WriteString("| ---- | ------ | ---- |\n")
-	for _, r := range rows {
-		fmt.Fprintf(&buf, "| %s | %s | %s |\n", r.Slug, r.Status, r.Note)
-	}
-	return buf.String()
-}

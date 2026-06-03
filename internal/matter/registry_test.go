@@ -3,7 +3,6 @@ package matter
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -31,8 +30,8 @@ func (f *fakeMatter) OnDone(ctx context.Context, slug string, meta map[string]st
 }
 
 func TestRegisterAndFromConfig(t *testing.T) {
-	t.Cleanup(reset)
-	reset()
+	t.Cleanup(ResetForTest)
+	ResetForTest()
 
 	Register("alpha", func(c Config) (Matter, error) {
 		return &fakeMatter{name: c.Name, created: 2, updated: 1}, nil
@@ -55,15 +54,11 @@ func TestRegisterAndFromConfig(t *testing.T) {
 	if got[0].Name() != "alpha" || got[1].Name() != "alpha" {
 		t.Errorf("want both alphas, got %s, %s", got[0].Name(), got[1].Name())
 	}
-	names := Registered()
-	if !reflect.DeepEqual(names, []string{"alpha", "beta"}) {
-		t.Errorf("Registered: %v", names)
-	}
 }
 
 func TestFromConfigUnknownAdapter(t *testing.T) {
-	t.Cleanup(reset)
-	reset()
+	t.Cleanup(ResetForTest)
+	ResetForTest()
 	Register("alpha", func(c Config) (Matter, error) { return &fakeMatter{name: c.Name}, nil })
 
 	_, err := FromConfig([]Config{{Name: "ghost", Enabled: true}})
@@ -76,8 +71,8 @@ func TestFromConfigUnknownAdapter(t *testing.T) {
 }
 
 func TestFromConfigFactoryError(t *testing.T) {
-	t.Cleanup(reset)
-	reset()
+	t.Cleanup(ResetForTest)
+	ResetForTest()
 	boom := errors.New("init failed")
 	Register("alpha", func(c Config) (Matter, error) { return nil, boom })
 
@@ -88,8 +83,8 @@ func TestFromConfigFactoryError(t *testing.T) {
 }
 
 func TestRegisterDuplicatePanics(t *testing.T) {
-	t.Cleanup(reset)
-	reset()
+	t.Cleanup(ResetForTest)
+	ResetForTest()
 	Register("alpha", func(c Config) (Matter, error) { return &fakeMatter{name: c.Name}, nil })
 	defer func() {
 		if r := recover(); r == nil {
@@ -100,8 +95,8 @@ func TestRegisterDuplicatePanics(t *testing.T) {
 }
 
 func TestRegisterEmptyNamePanics(t *testing.T) {
-	t.Cleanup(reset)
-	reset()
+	t.Cleanup(ResetForTest)
+	ResetForTest()
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("want panic on empty name")

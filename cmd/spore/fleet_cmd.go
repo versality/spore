@@ -397,7 +397,7 @@ func runFleetListSessions(args []string) error {
 		if line == "" {
 			continue
 		}
-		p, ok := task.MatchProject(line, project)
+		p, ok := task.ParseSession(line, project)
 		if !ok {
 			continue
 		}

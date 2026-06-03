@@ -93,10 +93,6 @@ func runTask(args []string) error {
 		return runTaskEnsure(rest)
 	case "start":
 		return runTaskStart(rest)
-	case "pause":
-		return runTaskPause(rest)
-	case "park":
-		return runTaskPark(rest)
 	case "block":
 		return runTaskBlock(rest)
 	case "unblock":

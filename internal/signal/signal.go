@@ -618,8 +618,3 @@ func (w *safeMultiWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
-
-// MatchesSignal is exported for use by callers (and tests) that want
-// the same warn/deprecated/error/etc. boundary check applied
-// elsewhere.
-func MatchesSignal(line string) bool { return matchesSignal(line) }

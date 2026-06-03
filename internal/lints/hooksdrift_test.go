@@ -11,11 +11,11 @@ func renderHooksFixture(t *testing.T) ([]byte, []byte, []byte) {
 	t.Helper()
 	hooksConfig := []byte(`{"events":{"Stop":[{"command":"/bin/echo stop"}]}}`)
 	extras := []byte(`{"permissions":{"allow":["Bash(/bin/echo)"]}}` + "\n")
-	rendered, err := hooks.Settings(map[string][]hooks.HookBin{
+	rendered, err := hooks.SettingsForKind(map[string][]hooks.HookBin{
 		"Stop": {{BinPath: "/bin/echo stop"}},
-	})
+	}, "")
 	if err != nil {
-		t.Fatalf("Settings: %v", err)
+		t.Fatalf("SettingsForKind: %v", err)
 	}
 	merged, err := settings.MergeExtras(rendered, extras)
 	if err != nil {

@@ -55,10 +55,9 @@ const (
 	linearDoneKey   = "linear_done"
 	linearDoneValue = "yes"
 
-	// legacy frontmatter keys, accepted on read for tasks that
+	// legacy frontmatter key, accepted on read for tasks that
 	// pre-date the matter/matter_id rename.
-	legacyIDKey  = "linear"
-	legacyURLKey = "linear_url"
+	legacyIDKey = "linear"
 
 	// matterBlockerPrefix marks a blocker reason owned by the matter
 	// adapter: when a Linear ticket leaves Ready, future projection
@@ -232,7 +231,7 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 // outside spore task done). The push is idempotent on Linear's side,
 // so the next Sync re-pushing as a no-op is harmless.
 func (s *Source) OnDone(ctx context.Context, slug string, meta map[string]string) error {
-	id := issueIDFromMeta(meta)
+	id := linearIDFromMeta(meta)
 	if id == "" {
 		return nil
 	}
@@ -499,14 +498,6 @@ func linearIDFromMeta(extra map[string]string) string {
 		return id
 	}
 	return extra[legacyIDKey]
-}
-
-// issueIDFromMeta is the OnDone counterpart of linearIDFromMeta. It
-// is identical today but kept separate so future divergences (e.g.
-// preferring matter_url over matter_id for upstreams that key on
-// URL) stay scoped to one call site.
-func issueIDFromMeta(extra map[string]string) string {
-	return linearIDFromMeta(extra)
 }
 
 // transitionIssue maps the issueUpdate mutation. Linear treats the
