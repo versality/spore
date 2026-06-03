@@ -139,4 +139,3 @@ func (d *Doc) FindSection(name string) *Section {
 	}
 	return nil
 }
-

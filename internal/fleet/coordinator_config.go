@@ -93,4 +93,3 @@ func parseCoordinatorTOML(content string) (CoordinatorConfig, error) {
 	}
 	return cfg, nil
 }
-
