@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.9.2 - 2026-06-03
+
+Internal cleanup and dedup pass. No new commands; a few unwired code
+paths were removed.
+
+### Cleanup
+
+- One shared `spore.toml` scanner replaces the duplicated parsers.
+- Shared gates, tell-io, and path resolvers extracted across hooks and
+  fleet; lint task-walk preamble and worktree git probes deduped.
+- All backward-compat read paths stripped; dead code swept across
+  coordinator, task, signal, matter, and lints.
+
+### Removed
+
+- Budget: dropped the unwired api-header mode and multi-account
+  aggregation.
+- Fleet: dropped auto-mint-cutover and consumer-specific nix-config
+  glue.
+
+### Docs
+
+- README slimmed to essentials; worker mix, matter, fleet module, and
+  development notes moved into `docs/`.
+
+## 0.9.1 - 2026-06-03
+
+### Highlights
+
+Nix is now a hard bootstrap requirement: projects without a `flake.nix`
+are rejected, and the non-Nix build path is gone from the install docs.
+
+### Matter / Linear
+
+- Optional `claim_label` filter for multi-seat hosts (#26).
+- Skip projecting tickets blocked by open upstream issues (#25).
+- Resume a matter-blocked task when its ticket returns to Ready (#24).
+
+### Fleet / worker
+
+- tokenmonitor kills the driver on wrap but keeps the tmux session
+  alive (#23).
+- Warn when `--max-workers` and `SPORE_FLEET_MAX_WORKERS` disagree
+  (#22).
+
+### Other
+
+- Isolate per-project Claude config via `CLAUDE_CONFIG_DIR`.
+- Skip the close commit when the tasks dir is gitignored (#27).
+- Renamed the per-task inbox env var to `SPORE_TASK_INBOX`; no
+  backward-compat alias.
+- Bumped Go to 1.25.11 to clear GO-2026-5037 / GO-2026-5039.
+
 ## 0.9.0 - 2026-05-22
 
 ### Highlights
@@ -81,45 +134,6 @@ The kernel source map (`rules/core/source-map.md`, rendered into `CLAUDE.md` and
 ### In progress
 
 The worker spawn path in `internal/task/lifecycle.go` is not yet wrapping its agent command through `spore-sandbox --exec`. The remaining bucket-4 work (tracked in `docs/todo/sandbox-followups.md`): add a default rw bind for the main repo's `.git/worktrees/<slug>/` so `git commit` from inside the sandbox works, plus the `sandbox: false` per-task opt-out via frontmatter.
-
-## Unreleased
-
-- New `spore search nix {packages|options} QUERY` subcommand. Queries
-  the same Elasticsearch backend behind https://search.nixos.org so
-  agents get fast, scriptable nixpkgs / NixOS-option lookup without
-  evaluating the registry. Default output is TSV (attr/version/description
-  for packages, name/type/description for options); `--json` swaps in a
-  structured array. Flags: `-c CHANNEL` (default `unstable`), `-n SIZE`
-  (default 10). Env overrides: `NIXOS_SEARCH_VERSION`,
-  `NIXOS_SEARCH_USER`, `NIXOS_SEARCH_PASS`. Lifted from
-  `nix-config:harness/search-nix.sh`; nix-config keeps a thin shim so
-  the script keeps working.
-
-- `spore install` now also drops the bundled harness shell scripts
-  (`auto-commit-tasks.sh`, `hooks-render.sh`, `quiet-run.sh`,
-  `report-main-worktree-dirty.sh`) into `<root>/harness/`. These
-  generic-core wrappers were lifted out of nix-config so consumers
-  pick them up via the spore binary instead of vendoring per-project.
-  `internal/install.Install` gained a `destSubpath` parameter so the
-  same walker handles both skill and script asset trees. `quiet-run`'s
-  build-lock file/env renamed from `nix-config-build.lock` /
-  `NIX_CONFIG_BUILD_LOCK_HELD` to `spore-build.lock` /
-  `SPORE_BUILD_LOCK_HELD`; `hooks-render` reads the claude config dir
-  from `$SPORE_HOOKS_CLAUDE_DIR` (default `<repo>/configs/claude`).
-  Coordinator/operator binaries, the four scripts flagged for Go
-  ports (`capture-command-signal`, `opencode-fleet-stop`,
-  `opencode-worker-liveness`, `merge-integrity-audit`), and the
-  consumer-coupled bundle (`sweep-tech-debt`, `archive-aged-maybes`,
-  `self-care`, `notify-attention`, `block-sources-inference`,
-  `look-desk`, `look-web.mjs`, `plan-first-enforcement`,
-  `no-ask-via-tool`, `wt-merge-unblock`) are out of scope for this
-  cut and tracked as separate lift drafts.
-
-- Renamed the per-task inbox env var to `SPORE_TASK_INBOX` to drop a
-  foreign prefix that had leaked in from a consumer harness. Spore
-  sets and reads the new name only; consumers exporting the previous
-  name for their own hooks must rename on their side. No
-  backward-compat alias.
 
 ## 0.4.2 - 2026-05-06
 

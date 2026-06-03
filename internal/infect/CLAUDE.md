@@ -97,7 +97,7 @@ Only when an action is operator-bound or genuinely ambiguous:
 2. Launch infect in a tmux window so the operator can watch:
    `tmux new-window -d -n infect "go run ./cmd/spore infect <ip>
    --ssh-key ~/.ssh/id_ed25519 --repo <src> --coordinator-agent
-   claude --coordinator-model sonnet | tee /tmp/spore-infect.log"`.
+   claude --coordinator-model opus | tee /tmp/spore-infect.log"`.
    Wait via `Monitor` until `=== EXIT ===` lands.
 3. `spore infect --repo` copies the current binary to
    `/usr/local/bin/spore`, rsyncs `<src>` to `/home/spore/<basename>`

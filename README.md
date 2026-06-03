@@ -79,22 +79,17 @@ Each worker and the coordinator run in their own tmux session. Run
 
 ## Fresh server
 
-`spore infect` installs NixOS over SSH and starts the coordinator on a
-freshly provisioned, root-reachable VM:
+`spore infect` installs NixOS over SSH onto a fresh, root-reachable VM,
+copies your repo over, and starts an Opus coordinator:
 
 ```sh
-spore infect 203.0.113.7 \
-  --ssh-key ~/.ssh/id_ed25519 \
-  --repo /path/to/project \
-  --coordinator-agent claude \
-  --coordinator-model sonnet
-
+spore infect 203.0.113.7 --ssh-key ~/.ssh/id_ed25519 --repo . --coordinator-model opus
 ssh -t spore@203.0.113.7
 ```
 
-It is destructive: it wipes the target host. See
-[docs/infect.md](docs/infect.md) for full flag behavior, the Codex
-coordinator variant, custom flakes, and failure hints.
+It wipes the target host, so point it only at a throwaway VM. See
+[docs/infect.md](docs/infect.md) for all flags, the Codex coordinator,
+and custom flakes.
 
 ## Configuration
 
