@@ -12,6 +12,13 @@
 //     issue to done_state and stamp `linear_done: yes`. This is the
 //     safety-net path; the synchronous push happens via OnDone the
 //     moment the task flips to done.
+//  4. Drift-correct In Progress. For every status=active task carrying
+//     `matter_id: <id>` whose ticket is not already in in_progress_state,
+//     push it there. Step 2's push is edge-triggered (fires once on
+//     adoption) so it misses tickets adopted before that push existed, a
+//     push that failed once, and human drag-backs to Ready; this pass
+//     re-projects task status -> Linear state every run. Idempotent and
+//     claim-bound; it never unclaims.
 //
 // The adapter registers itself under the name "linear" via init(),
 // so importing this package is enough to make `[matter.linear]` (or
@@ -216,6 +223,35 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 			return created, updated, fmt.Errorf("matter.linear: stamp %s linear_done: %w", p.slug, err)
 		}
 		updated++
+	}
+
+	// Drift-correct In Progress. The adoption push above is edge-triggered:
+	// it fires once, the moment an issue is first pulled out of Ready. It
+	// misses tickets adopted before that push existed, a push that failed
+	// once, and human drag-backs to Ready. Re-project every pass from task
+	// status (the local truth) to Linear: any active, matter-linked task
+	// whose ticket is not already In Progress is pushed there. Claim-bound
+	// (status=active only) and idempotent; we never unclaim, since a task
+	// blocked on PR review must keep its ticket In Progress rather than
+	// bounce back to Ready.
+	activeRows, err := activeAdoptedTasks(tasksDir)
+	if err != nil {
+		return created, updated, err
+	}
+	if len(activeRows) > 0 {
+		inProgress, err := s.identifiersInState(inProgressID)
+		if err != nil {
+			return created, updated, err
+		}
+		for _, r := range activeRows {
+			if inProgress[r.identifier] {
+				continue
+			}
+			if err := s.transitionIssue(r.identifier, inProgressID); err != nil {
+				return created, updated, fmt.Errorf("matter.linear: reproject %s -> in_progress: %w", r.identifier, err)
+			}
+			updated++
+		}
 	}
 	return created, updated, nil
 }
@@ -427,6 +463,75 @@ func pendingDonePushes(tasksDir string) ([]linearTaskRow, error) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].slug < rows[j].slug })
 	return rows, nil
+}
+
+// activeAdoptedTasks returns rows for tasks with status=active that
+// carry a Linear matter id. The drift-correction pass re-projects any
+// whose upstream ticket is not already In Progress. Blocked tasks are
+// excluded on purpose: a matter-set blocker means the ticket left Ready
+// (re-flipping it would stomp that), and a PR-review block already left
+// the ticket In Progress at adoption.
+func activeAdoptedTasks(tasksDir string) ([]linearTaskRow, error) {
+	var rows []linearTaskRow
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(tasksDir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		m, _, err := frontmatter.Parse(raw)
+		if err != nil {
+			continue
+		}
+		if !task.IsActive(m.Status) {
+			continue
+		}
+		id := linearIDFromMeta(m.Extra)
+		if id == "" {
+			continue
+		}
+		rows = append(rows, linearTaskRow{slug: m.Slug, identifier: id})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].slug < rows[j].slug })
+	return rows, nil
+}
+
+// identifiersInState returns the set of issue identifiers currently in
+// stateID. Unlike listIssuesByState it never applies the claim label:
+// the drift-correction pass needs the true In Progress membership, and
+// an In Progress ticket is not required to still carry the Ready claim
+// label.
+func (s *Source) identifiersInState(stateID string) (map[string]bool, error) {
+	const q = `query StateIssues($stateId: ID!) {
+  issues(filter: {state: {id: {eq: $stateId}}}) { nodes { id identifier } }
+}`
+	var resp struct {
+		Data struct {
+			Issues struct {
+				Nodes []struct {
+					ID         string `json:"id"`
+					Identifier string `json:"identifier"`
+				} `json:"nodes"`
+			} `json:"issues"`
+		} `json:"data"`
+	}
+	if err := s.graphQL(q, map[string]any{"stateId": stateID}, &resp); err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(resp.Data.Issues.Nodes))
+	for _, n := range resp.Data.Issues.Nodes {
+		out[n.Identifier] = true
+	}
+	return out, nil
 }
 
 // resumeIfMatterBlocked flips slug back to active when the local task

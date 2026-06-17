@@ -120,7 +120,12 @@ func (s *stubLinear) handler() http.HandlerFunc {
 		case strings.Contains(body.Query, "issueUpdate"):
 			s.respondIssueUpdate(w, body.Variables)
 		case strings.Contains(body.Query, "issues("):
-			s.lastIssuesQuery = body.Query
+			// Record only the Ready-projection query (it selects sortOrder)
+			// so claim-label assertions ignore the lighter In Progress
+			// drift-correction membership query, which carries no label.
+			if strings.Contains(body.Query, "sortOrder") {
+				s.lastIssuesQuery = body.Query
+			}
 			s.respondIssues(w, body.Variables)
 		default:
 			http.Error(w, "unrecognised query: "+body.Query, http.StatusBadRequest)
@@ -611,8 +616,11 @@ func TestSyncResumesMatterBlockedTaskOnReady(t *testing.T) {
 	if created != 0 {
 		t.Errorf("created = %d, want 0 (task already exists)", created)
 	}
-	if updated != 1 {
-		t.Errorf("updated = %d, want 1 (one resume)", updated)
+	if updated != 2 {
+		t.Errorf("updated = %d, want 2 (resume + drift-correct to In Progress)", updated)
+	}
+	if got := stub.findByIdentifier("MAR-77").StateID; got != stub.states["In Progress"] {
+		t.Errorf("MAR-77 state = %q, want In Progress (resumed task drift-corrected)", got)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(tasksDir, "resume-me.md"))
@@ -692,5 +700,64 @@ func TestRegisteredViaInit(t *testing.T) {
 	_, err := matter.FromConfig([]matter.Config{{Name: "linear", Enabled: true}})
 	if err != nil && strings.Contains(err.Error(), "no adapter registered") {
 		t.Errorf("linear should self-register via init(): %v", err)
+	}
+}
+
+// TestSyncDriftCorrectsAdoptedActiveTask is the MCOM-85 reliability
+// guarantee: an already-adopted, status=active task whose ticket is
+// stuck in Ready (adopted before the adoption push existed, a push that
+// failed once, or a human drag-back) is re-projected to In Progress on
+// the next pass, without re-adopting it. A second pass is a no-op.
+func TestSyncDriftCorrectsAdoptedActiveTask(t *testing.T) {
+	stub := newStub(t)
+	stub.addReady("issue-uuid-90", "MAR-90", "Stuck in Ready", "")
+
+	srv := httptest.NewServer(stub.handler())
+	defer srv.Close()
+
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Already on disk and active: a worker is driving it, but the ticket
+	// never left Ready.
+	m := frontmatter.Meta{
+		Status: "active", Slug: "stuck-in-ready", Title: "Stuck in Ready",
+		Extra: map[string]string{
+			matter.MatterKey:   "linear",
+			matter.MatterIDKey: "MAR-90",
+		},
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "stuck-in-ready.md"),
+		frontmatter.Write(m, []byte("\nbody\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	src := newSource(t, srv.URL)
+	created, updated, err := src.Sync(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if created != 0 {
+		t.Errorf("created = %d, want 0 (task already adopted)", created)
+	}
+	if updated != 1 {
+		t.Errorf("updated = %d, want 1 (drift-correct to In Progress)", updated)
+	}
+	if got := stub.findByIdentifier("MAR-90").StateID; got != stub.states["In Progress"] {
+		t.Errorf("MAR-90 state = %q, want In Progress", got)
+	}
+
+	// Idempotent: a second pass leaves it In Progress and reports no change.
+	_, updated2, err := src.Sync(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Sync (2nd): %v", err)
+	}
+	if updated2 != 0 {
+		t.Errorf("second pass updated = %d, want 0 (idempotent)", updated2)
+	}
+	if got := stub.findByIdentifier("MAR-90").StateID; got != stub.states["In Progress"] {
+		t.Errorf("MAR-90 state after 2nd pass = %q, want In Progress", got)
 	}
 }
