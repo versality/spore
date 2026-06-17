@@ -393,6 +393,69 @@ func TestRefreshThrottlesUsageHits(t *testing.T) {
 	}
 }
 
+func TestRefreshThrottlesStaleSnapshotAfterFailure(t *testing.T) {
+	dir := t.TempDir()
+	stateD := filepath.Join(dir, "state")
+	if err := os.MkdirAll(stateD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "projects"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	initial := &state{
+		Cache: map[string]*fileEntry{},
+		UsageSnapshot: &usageSnapshot{
+			FetchedAt: time.Now().UTC().Add(-2 * time.Hour),
+			Short:     usageWindow{Utilization: 40.0},
+			Long:      usageWindow{Utilization: 20.0},
+		},
+	}
+	b, err := json.MarshalIndent(initial, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateD, "state.json"), append(b, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		http.Error(w, `{"error":{"type":"rate_limit_error"}}`, http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	swapURLs(t, srv.URL, srv.URL+"/token-unused")
+
+	creds := filepath.Join(dir, ".credentials.json")
+	writeCredentials(t, creds, "at-fresh", "rt-fresh", time.Now().Add(2*time.Hour).UnixMilli())
+
+	t.Setenv("AGENT_BUDGET_PROJECTS", filepath.Join(dir, "projects"))
+	t.Setenv("AGENT_BUDGET_STATE_DIR", stateD)
+	t.Setenv("AGENT_BUDGET_CREDS", creds)
+
+	if err := Refresh(); err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+	if err := Refresh(); err != nil {
+		t.Fatalf("second refresh: %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("stale snapshot hammered /usage: got %d hits want 1 (back-off must hold)", got)
+	}
+
+	s, err := loadState()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if s.UsageSnapshot == nil || !s.UsageSnapshot.Stale {
+		t.Fatalf("expected stale snapshot retained: %+v", s.UsageSnapshot)
+	}
+	if s.UsageSnapshot.LastAttempt.IsZero() {
+		t.Error("last_attempt not recorded on failed fetch")
+	}
+}
+
 func TestNormalizeTier(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

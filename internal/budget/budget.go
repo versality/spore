@@ -239,30 +239,42 @@ func Refresh() error {
 // for test or operator override.
 const usageMinInterval = 60 * time.Second
 
+// usageStaleRetryInterval is the back-off after a failed /usage hit. The
+// throttle keys on the last attempt, not the last success, so a snapshot
+// stuck stale (Anthropic 429ing) does not let every consumer hammer
+// /usage unthrottled - that hammering is itself what keeps the account
+// rate-limited and stops the snapshot ever recovering. The interval sits
+// above the observed ~280s retry-after so the limit can clear.
+const usageStaleRetryInterval = 5 * time.Minute
+
 func refreshUsageSnapshot(s *state, now time.Time) {
-	if s.UsageSnapshot != nil && !s.UsageSnapshot.Stale {
-		minInterval := usageMinInterval
-		if v := os.Getenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-				minInterval = time.Duration(n) * time.Second
-			}
+	interval := usageMinInterval
+	if s.UsageSnapshot != nil && s.UsageSnapshot.Stale {
+		interval = usageStaleRetryInterval
+	}
+	if v := os.Getenv("AGENT_BUDGET_USAGE_MIN_INTERVAL_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			interval = time.Duration(n) * time.Second
 		}
-		if now.Sub(s.UsageSnapshot.FetchedAt) < minInterval {
-			return
-		}
+	}
+	if s.UsageSnapshot != nil && !s.UsageSnapshot.LastAttempt.IsZero() &&
+		now.Sub(s.UsageSnapshot.LastAttempt) < interval {
+		return
 	}
 	ur, ferr := fetchUsage(context.Background(), now)
 	if ferr != nil {
 		fmt.Fprintf(os.Stderr, "spore budget: /usage unavailable (%v); transcript fallback in effect\n", ferr)
 		if s.UsageSnapshot != nil {
 			s.UsageSnapshot.Stale = true
+			s.UsageSnapshot.LastAttempt = now
 		}
 		return
 	}
 	s.UsageSnapshot = &usageSnapshot{
-		FetchedAt: now,
-		Short:     ur.FiveHour,
-		Long:      ur.SevenDay,
+		FetchedAt:   now,
+		LastAttempt: now,
+		Short:       ur.FiveHour,
+		Long:        ur.SevenDay,
 	}
 }
 

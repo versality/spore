@@ -148,11 +148,12 @@ type usageResponse struct {
 }
 
 type usageSnapshot struct {
-	FetchedAt time.Time   `json:"fetched_at"`
-	Short     usageWindow `json:"short"`
-	Long      usageWindow `json:"long"`
-	Stale     bool        `json:"stale,omitempty"`
-	Tier      string      `json:"tier,omitempty"`
+	FetchedAt   time.Time   `json:"fetched_at"`
+	LastAttempt time.Time   `json:"last_attempt,omitempty"`
+	Short       usageWindow `json:"short"`
+	Long        usageWindow `json:"long"`
+	Stale       bool        `json:"stale,omitempty"`
+	Tier        string      `json:"tier,omitempty"`
 }
 
 // normalizeTier maps a subscriptionType string to a routing tier.
