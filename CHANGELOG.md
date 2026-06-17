@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### matter/linear: assignee filter + capacity-bounded adoption
+
+`[matter.linear]` gained two opt-in knobs so a single-operator fleet can
+auto-pick-up its own Ready queue without a per-ticket claim label:
+
+- `assignee = "<email>"` narrows the Ready-state projection to issues
+  assigned to that user (composes with `claim_label`; both filters
+  apply). Unset preserves the original team-wide query byte-for-byte.
+- `max_concurrent = N` caps how many NEW issues a single Sync adopts to
+  `max(0, N - currently-active tasks)`, in board order, so the Ready ->
+  In Progress flip never outruns the fleet's spawn capacity. Set it to
+  `[fleet] max_workers`. 0 (the default) keeps unbounded adoption.
+
+Both default off, so existing consumers are unaffected.
+
 ### Sandbox wired into the worker spawn path
 
 `spore-sandbox` is no longer a standalone primitive: when a project sets

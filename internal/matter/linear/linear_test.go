@@ -38,6 +38,7 @@ type stubIssue struct {
 	StateID     string
 	SortOrder   float64
 	Labels      []string
+	Assignee    string // email; matched against the assignee filter
 	Relations   []stubRelation
 }
 
@@ -154,6 +155,7 @@ func (s *stubLinear) respondStates(w http.ResponseWriter) {
 func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 	stateID, _ := vars["stateId"].(string)
 	label, _ := vars["label"].(string)
+	assignee, _ := vars["assignee"].(string)
 	type stateNode struct {
 		Type string `json:"type"`
 	}
@@ -183,6 +185,9 @@ func (s *stubLinear) respondIssues(w http.ResponseWriter, vars map[string]any) {
 			continue
 		}
 		if label != "" && !slices.Contains(iss.Labels, label) {
+			continue
+		}
+		if assignee != "" && iss.Assignee != assignee {
 			continue
 		}
 		rels := make([]relation, 0, len(iss.Relations))

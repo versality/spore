@@ -4,9 +4,14 @@
 //  1. Resolve the workflow state IDs for the configured team (one
 //     GraphQL call, cached in the Source between passes since state
 //     IDs are stable).
-//  2. List issues in ready_state for team. For each issue not yet
-//     present on disk (no tasks/<slug>.md carries `matter_id: <id>`),
-//     create a tasks/<slug>.md and push the issue ready->in-progress.
+//  2. List issues in ready_state for team (optionally narrowed to a
+//     claim_label and/or an assignee). For each issue not yet present
+//     on disk (no tasks/<slug>.md carries `matter_id: <id>`), create a
+//     tasks/<slug>.md and push the issue ready->in-progress. When
+//     max_concurrent is set, only enough issues to fill the free slots
+//     (max_concurrent - currently active tasks) are adopted per pass,
+//     in board order, so the In Progress flip never outruns the fleet's
+//     spawn capacity.
 //  3. Walk tasks/. For every status=done task that carries
 //     `matter_id: <id>` and is missing `linear_done: yes`, push the
 //     issue to done_state and stamp `linear_done: yes`. This is the
@@ -98,6 +103,22 @@ type Config struct {
 	// the label. Matter only reads the label; it never creates or
 	// modifies labels.
 	ClaimLabel string
+	// AssigneeEmail, when non-empty, restricts the Ready-state
+	// projection to issues assigned to this user (by email). It scopes
+	// auto-pickup to one operator's queue without a per-ticket claim
+	// label: the reconciler adopts only this assignee's Ready tickets
+	// and leaves everyone else's alone. Composes with ClaimLabel (both
+	// clauses apply). Matter only reads the assignment.
+	AssigneeEmail string
+	// MaxConcurrent, when > 0, caps how many NEW issues a single Sync
+	// adopts so the In Progress flip tracks the fleet's spawn capacity
+	// rather than running ahead of it. At most max(0, MaxConcurrent -
+	// <currently active adopted tasks>) issues are adopted per pass, in
+	// board order (lowest sortOrder first); the rest stay in Ready for a
+	// later pass as slots free. 0 (the default) keeps the original
+	// unbounded behaviour. Set it to the fleet's max_workers so the
+	// queue never flips more tickets to In Progress than it can run.
+	MaxConcurrent int
 }
 
 // Source is the Linear adapter. Construct via New (with a parsed
@@ -186,6 +207,23 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 	if err != nil {
 		return 0, 0, err
 	}
+
+	// Capacity-bound new adoptions so the In Progress flip never runs
+	// ahead of the fleet's spawn capacity. adoptBudget < 0 means
+	// unbounded (MaxConcurrent unset); otherwise it is the number of
+	// free slots = max(0, MaxConcurrent - currently-active adopted
+	// tasks). ready is board-sorted, so the lowest-sortOrder issues fill
+	// the slots first and the rest stay in Ready for a later pass.
+	adoptBudget := -1
+	if s.cfg.MaxConcurrent > 0 {
+		activeRows, err := activeAdoptedTasks(tasksDir)
+		if err != nil {
+			return 0, 0, err
+		}
+		if adoptBudget = s.cfg.MaxConcurrent - len(activeRows); adoptBudget < 0 {
+			adoptBudget = 0
+		}
+	}
 	for _, issue := range ready {
 		if slug, dup := known[issue.Identifier]; dup {
 			resumed, err := resumeIfMatterBlocked(tasksDir, slug)
@@ -200,6 +238,9 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		if isBlockedByOpenUpstream(issue) {
 			continue
 		}
+		if adoptBudget == 0 {
+			continue
+		}
 		slug, err := s.adoptIssue(tasksDir, issue)
 		if err != nil {
 			return created, updated, fmt.Errorf("matter.linear: adopt %s: %w", issue.Identifier, err)
@@ -209,6 +250,9 @@ func (s *Source) Sync(ctx context.Context, projectRoot string) (created, updated
 		}
 		created++
 		known[issue.Identifier] = slug
+		if adoptBudget > 0 {
+			adoptBudget--
+		}
 	}
 
 	donePending, err := pendingDonePushes(tasksDir)
@@ -291,7 +335,13 @@ func parseConfig(c matter.Config) (Config, error) {
 		APIKeyFile:      c.Option("api_key_file", ""),
 		Endpoint:        c.Option("endpoint", "https://api.linear.app/graphql"),
 		ClaimLabel:      c.Option("claim_label", ""),
+		AssigneeEmail:   c.Option("assignee", ""),
 	}
+	maxConc, err := parseNonNegativeInt(c.Option("max_concurrent", ""), "max_concurrent")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.MaxConcurrent = maxConc
 	if cfg.APIKeyFile == "" {
 		cfg.APIKeyFile = c.Option("credential_api_key", "")
 	}
@@ -302,6 +352,24 @@ func parseConfig(c matter.Config) (Config, error) {
 		return cfg, fmt.Errorf("matter.linear: api_key_env, api_key_file, or credential_api_key is required")
 	}
 	return cfg, nil
+}
+
+// parseNonNegativeInt parses an optional integer config value. An empty
+// string yields 0 (the "unset" default); a non-numeric or negative
+// value is a configuration error surfaced loudly at construction.
+func parseNonNegativeInt(raw, key string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("matter.linear: %s must be an integer, got %q", key, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("matter.linear: %s must be >= 0, got %d", key, n)
+	}
+	return n, nil
 }
 
 // resolveAPIKey reads the Linear API key from APIKeyFile when set
@@ -708,23 +776,25 @@ func isBlockedByOpenUpstream(issue linearIssue) bool {
 // Ready, get it picked next"; relying on default ordering would honour
 // createdAt instead.
 func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
-	q := `query StateIssues($stateId: ID!) {
-  issues(filter: {state: {id: {eq: $stateId}}}) {
-    nodes {
-      id identifier title description url sortOrder
-      relations {
-        nodes {
-          type
-          relatedIssue { id state { type } }
-        }
-      }
-    }
-  }
-}`
+	// Build the filter from optional clauses so claim_label and assignee
+	// compose: each adds its own variable declaration and filter
+	// fragment, and an unset filter leaves no trace in the query (the
+	// back-compat path is byte-for-byte the bare state filter).
+	decls := []string{"$stateId: ID!"}
+	filters := []string{"state: {id: {eq: $stateId}}"}
 	vars := map[string]any{"stateId": stateID}
 	if s.cfg.ClaimLabel != "" {
-		q = `query StateIssues($stateId: ID!, $label: String!) {
-  issues(filter: {state: {id: {eq: $stateId}}, labels: {some: {name: {eq: $label}}}}) {
+		decls = append(decls, "$label: String!")
+		filters = append(filters, "labels: {some: {name: {eq: $label}}}")
+		vars["label"] = s.cfg.ClaimLabel
+	}
+	if s.cfg.AssigneeEmail != "" {
+		decls = append(decls, "$assignee: String!")
+		filters = append(filters, "assignee: {email: {eq: $assignee}}")
+		vars["assignee"] = s.cfg.AssigneeEmail
+	}
+	q := fmt.Sprintf(`query StateIssues(%s) {
+  issues(filter: {%s}) {
     nodes {
       id identifier title description url sortOrder
       relations {
@@ -735,9 +805,7 @@ func (s *Source) listIssuesByState(stateID string) ([]linearIssue, error) {
       }
     }
   }
-}`
-		vars["label"] = s.cfg.ClaimLabel
-	}
+}`, strings.Join(decls, ", "), strings.Join(filters, ", "))
 	var resp struct {
 		Data struct {
 			Issues struct {
