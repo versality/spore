@@ -74,11 +74,32 @@ func oauthCredsPath() string {
 	if p := os.Getenv("AGENT_BUDGET_CREDS"); p != "" {
 		return p
 	}
+	// Resolve like claude-code itself: an explicit CLAUDE_CONFIG_DIR wins,
+	// then the XDG location claude-code migrated to, then the legacy
+	// ~/.claude path. claude-code stopped refreshing the legacy file after
+	// migrating to ~/.config/claude, so defaulting to it fed /usage an
+	// expired token - which the endpoint answers with a 429, not a 401, so
+	// the token-refresh path never fired and the snapshot stuck stale.
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, ".credentials.json")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(home, ".config")
+	}
+	if xdg := filepath.Join(configHome, "claude", ".credentials.json"); fileExists(xdg) {
+		return xdg
+	}
 	return filepath.Join(home, ".claude", ".credentials.json")
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 func loadCredentials(path string) (*credentialsFile, error) {

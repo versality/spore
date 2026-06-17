@@ -456,6 +456,42 @@ func TestRefreshThrottlesStaleSnapshotAfterFailure(t *testing.T) {
 	}
 }
 
+func TestOAuthCredsPathResolution(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("AGENT_BUDGET_CREDS", "")
+
+	legacy := filepath.Join(home, ".claude", ".credentials.json")
+	xdg := filepath.Join(home, ".config", "claude", ".credentials.json")
+
+	if got := oauthCredsPath(); got != legacy {
+		t.Errorf("no files present: got %q want legacy %q", got, legacy)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(xdg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(xdg, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := oauthCredsPath(); got != xdg {
+		t.Errorf("xdg present: got %q want %q (must not prefer stale legacy)", got, xdg)
+	}
+
+	ccd := filepath.Join(home, "proj", ".claude")
+	t.Setenv("CLAUDE_CONFIG_DIR", ccd)
+	if got, want := oauthCredsPath(), filepath.Join(ccd, ".credentials.json"); got != want {
+		t.Errorf("CLAUDE_CONFIG_DIR: got %q want %q", got, want)
+	}
+
+	t.Setenv("AGENT_BUDGET_CREDS", "/tmp/explicit.json")
+	if got := oauthCredsPath(); got != "/tmp/explicit.json" {
+		t.Errorf("AGENT_BUDGET_CREDS override: got %q want /tmp/explicit.json", got)
+	}
+}
+
 func TestNormalizeTier(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
