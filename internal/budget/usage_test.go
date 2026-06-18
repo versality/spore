@@ -115,8 +115,11 @@ func TestFetchUsageHappyPath(t *testing.T) {
 func TestFetchUsageRefreshOn401(t *testing.T) {
 	dir := t.TempDir()
 	creds := filepath.Join(dir, ".credentials.json")
-	expired := time.Now().Add(-1 * time.Hour).UnixMilli()
-	writeCredentials(t, creds, "at-stale", "rt-good", expired)
+	// Not yet expired per expiresAt, so the proactive-refresh path stays
+	// quiet and this exercises the 401-retry path for a server-side
+	// rejection (revocation, clock skew) of an otherwise-current token.
+	notExpired := time.Now().Add(2 * time.Hour).UnixMilli()
+	writeCredentials(t, creds, "at-stale", "rt-good", notExpired)
 
 	var usageCalls int32
 	usage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,6 +188,89 @@ func TestFetchUsageRefreshOn401(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o600 {
 		t.Errorf("creds mode: got %o want 600", fi.Mode().Perm())
+	}
+}
+
+func TestFetchUsageProactiveRefreshOnExpiry(t *testing.T) {
+	dir := t.TempDir()
+	creds := filepath.Join(dir, ".credentials.json")
+	// Expired access token: /usage would answer this with 429 (not 401),
+	// so the only way the request succeeds is a refresh driven off expiresAt
+	// before the first call.
+	expired := time.Now().Add(-1 * time.Hour).UnixMilli()
+	writeCredentials(t, creds, "at-expired", "rt-good", expired)
+
+	var usageCalls int32
+	usage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&usageCalls, 1)
+		if auth := r.Header.Get("Authorization"); auth != "Bearer at-refreshed" {
+			// The expired token must never reach /usage: proving the refresh
+			// happens proactively, not via a 429/401 round-trip.
+			t.Errorf("usage called with non-refreshed token: %q", auth)
+			http.Error(w, "stale", http.StatusTooManyRequests)
+			return
+		}
+		_, _ = fmt.Fprintln(w, `{"five_hour":{"utilization":9,"resets_at":"2026-04-26T17:00:00.000000+00:00"},"seven_day":{"utilization":21,"resets_at":"2026-04-26T20:00:00.000000+00:00"}}`)
+	}))
+	defer usage.Close()
+
+	var tokenCalls int32
+	token := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&tokenCalls, 1)
+		var req map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req["grant_type"] != "refresh_token" || req["refresh_token"] != "rt-good" {
+			t.Errorf("unexpected refresh body: %v", req)
+		}
+		_, _ = fmt.Fprintln(w, `{"access_token":"at-refreshed","refresh_token":"rt-rolled","expires_in":3600,"scope":"user:profile"}`)
+	}))
+	defer token.Close()
+
+	swapURLs(t, usage.URL, token.URL)
+	t.Setenv("AGENT_BUDGET_CREDS", creds)
+
+	ur, err := fetchUsage(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("fetchUsage: %v", err)
+	}
+	if math.Abs(ur.FiveHour.Utilization-9) > 1e-9 {
+		t.Errorf("five_hour.utilization: %v", ur.FiveHour.Utilization)
+	}
+	if got := atomic.LoadInt32(&tokenCalls); got != 1 {
+		t.Errorf("token call count: got %d want 1 (proactive refresh)", got)
+	}
+	if got := atomic.LoadInt32(&usageCalls); got != 1 {
+		t.Errorf("usage call count: got %d want 1 (no 429 round-trip)", got)
+	}
+
+	cf, err := loadCredentials(creds)
+	if err != nil {
+		t.Fatalf("reload creds: %v", err)
+	}
+	if cf.oauth.AccessToken != "at-refreshed" {
+		t.Errorf("refreshed token not persisted: %q", cf.oauth.AccessToken)
+	}
+}
+
+func TestTokenExpired(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		exp  int64
+		want bool
+	}{
+		{"absent", 0, false},
+		{"negative", -1, false},
+		{"well in future", now.Add(2 * time.Hour).UnixMilli(), false},
+		{"just past expiry", now.Add(-time.Second).UnixMilli(), true},
+		{"inside skew window", now.Add(30 * time.Second).UnixMilli(), true},
+		{"just outside skew", now.Add(2 * tokenRefreshSkew).UnixMilli(), false},
+	}
+	for _, c := range cases {
+		if got := tokenExpired(c.exp, now); got != c.want {
+			t.Errorf("%s: tokenExpired = %v want %v", c.name, got, c.want)
+		}
 	}
 }
 

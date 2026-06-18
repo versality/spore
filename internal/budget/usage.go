@@ -224,10 +224,11 @@ func ActiveTierString() (string, error) {
 	return tier, nil
 }
 
-// fetchUsage hits /usage, refreshing the access token once on a 401 if
-// a refresh token is available. Returns (nil, err) for any non-2xx
-// outcome the caller cannot recover from; that's the signal to fall
-// back to transcripts.
+// fetchUsage hits /usage, refreshing the access token proactively when
+// its recorded expiry has passed and once more on a 401, in each case
+// only when a refresh token is available. Returns (nil, err) for any
+// non-2xx outcome the caller cannot recover from; that's the signal to
+// fall back to transcripts.
 func fetchUsage(ctx context.Context, now time.Time) (*usageResponse, error) {
 	path := oauthCredsPath()
 	if path == "" {
@@ -239,6 +240,20 @@ func fetchUsage(ctx context.Context, now time.Time) (*usageResponse, error) {
 	}
 	if cf.oauth.AccessToken == "" {
 		return nil, errors.New("no oauth access token in credentials")
+	}
+
+	// Refresh proactively when the recorded expiry has passed (or is about
+	// to). An expired token answers /usage with HTTP 429, not 401, so the
+	// 401-retry path below never fires for it; without this a consumer that
+	// is not itself a claude-code session (the waybar chip, a token monitor)
+	// stays stuck on the transcript fallback until some other session happens
+	// to refresh this exact credentials file. Refreshing off expiresAt is the
+	// same trigger claude-code uses, and keeps every budget consumer
+	// self-sufficient across reboots and config-dir drift.
+	if cf.oauth.RefreshToken != "" && tokenExpired(cf.oauth.ExpiresAt, now) {
+		if rerr := refreshOAuthToken(ctx, cf, now); rerr != nil {
+			return nil, fmt.Errorf("oauth proactive refresh: %w", rerr)
+		}
 	}
 
 	body, code, err := callUsage(ctx, cf.oauth.AccessToken)
@@ -327,6 +342,22 @@ func callTokenRefresh(ctx context.Context, refreshToken string) (*tokenRefreshRe
 		return nil, errors.New("oauth refresh: empty access_token or expires_in")
 	}
 	return &out, nil
+}
+
+// tokenRefreshSkew refreshes the access token slightly before its
+// recorded expiry, so a /usage request in flight near the boundary still
+// carries a valid token.
+const tokenRefreshSkew = 60 * time.Second
+
+// tokenExpired reports whether an access token with the given expiresAt
+// (epoch millis) is at or past expiry, accounting for skew. A zero or
+// absent expiresAt is treated as not-expired so callers fall through to
+// the call-and-401-retry path rather than refreshing blindly.
+func tokenExpired(expiresAtMillis int64, now time.Time) bool {
+	if expiresAtMillis <= 0 {
+		return false
+	}
+	return !now.Before(time.UnixMilli(expiresAtMillis).Add(-tokenRefreshSkew))
 }
 
 func refreshOAuthToken(ctx context.Context, cf *credentialsFile, now time.Time) error {
